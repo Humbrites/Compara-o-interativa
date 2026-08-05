@@ -81,8 +81,12 @@ interface Props {
   /** Pré-preenche o valor do imóvel (valor da unidade, quando houver). */
   valorSugerido?: number | null
   onFechar: () => void
-  /** Cria o fluxo de pagamento com o resultado da simulação. */
-  onGerarFluxo: (dados: FluxoInput) => Promise<void>
+  /**
+   * Cria o fluxo de pagamento com o resultado. Ausente quando ainda não há
+   * onde pendurar o fluxo (cadastro novo, sem salvar) — aí a calculadora vale
+   * só como simulação.
+   */
+  onGerarFluxo?: (dados: FluxoInput) => Promise<void>
   avisar: (texto: string, tipo?: 'sucesso' | 'erro') => void
 }
 
@@ -149,7 +153,7 @@ export function CalculadoraCub({ titulo, valorSugerido, onFechar, onGerarFluxo, 
   }
 
   async function gerarFluxo() {
-    if (!simulacao) return
+    if (!simulacao || !onGerarFluxo) return
     const { resumo } = simulacao
 
     const percentualInformado = lerNumero(form.percentual) ?? 0
@@ -195,7 +199,7 @@ export function CalculadoraCub({ titulo, valorSugerido, onFechar, onGerarFluxo, 
             Limpar
           </button>
           <div className="direita">
-            {simulacao && (
+            {simulacao && onGerarFluxo && (
               <button type="button" className="btn btn--secundario" onClick={() => void gerarFluxo()} disabled={gerando}>
                 {gerando ? (
                   <>
@@ -287,6 +291,13 @@ export function CalculadoraCub({ titulo, valorSugerido, onFechar, onGerarFluxo, 
           cálculo.
         </p>
       </section>
+
+      {resumo && simulacao && !onGerarFluxo && (
+        <p className="campo__dica" style={{ marginBottom: 'var(--e4)' }}>
+          <Icone nome="info" tamanho={12} /> Salve o empreendimento para transformar esta simulação em um fluxo de
+          pagamento.
+        </p>
+      )}
 
       {resumo && simulacao && (
         <>

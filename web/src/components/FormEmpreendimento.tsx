@@ -7,6 +7,7 @@ import { Icone } from './Icones'
 import { FluxosDoEmpreendimento } from './FormFluxos'
 import { UnidadesDoEmpreendimento } from './FormUnidades'
 import { GaleriaUpload } from './GaleriaUpload'
+import { CalculadoraCub } from './CalculadoraCub'
 
 /** O formulario trabalha com texto puro; a conversao acontece no envio. */
 type Formulario = Record<string, string>
@@ -92,6 +93,25 @@ export function FormEmpreendimento({
   const [pendentes, setPendentes] = useState<File[]>([])
   // O campo de link so aparece a pedido, ou quando ja veio preenchido.
   const [verLink, setVerLink] = useState(() => Boolean(empreendimento?.imagem_url))
+  const [calculadoraAberta, setCalculadoraAberta] = useState(false)
+
+  /** A simulacao do CUB vira um fluxo geral do empreendimento. */
+  async function gerarFluxoDoCub(dados: Parameters<typeof api.criarFluxo>[0]) {
+    if (!salvo) return
+    const criado = await api.criarFluxo({ ...dados, empreendimento_id: salvo.id })
+    setSalvo({ ...salvo, fluxos: [...salvo.fluxos, criado] })
+    onMudouFluxos()
+    avisar('Fluxo gerado pela calculadora do CUB')
+  }
+
+  const calculadora = calculadoraAberta && (
+    <CalculadoraCub
+      titulo={salvo?.nome || form.nome.trim() || 'Empreendimento'}
+      onFechar={() => setCalculadoraAberta(false)}
+      onGerarFluxo={salvo ? gerarFluxoDoCub : undefined}
+      avisar={avisar}
+    />
+  )
 
   /** Guarda a galeria no estado local e avisa a tela de fora. */
   function aplicarImagens(id: number, imagens: ImagemEmpreendimento[]) {
@@ -304,6 +324,18 @@ export function FormEmpreendimento({
               <Campo rotulo="Banheiros">{entrada('banheiros', { placeholder: '2', inputMode: 'numeric' })}</Campo>
               <Campo rotulo="Vagas">{entrada('vagas', { placeholder: '2', inputMode: 'numeric' })}</Campo>
             </div>
+
+            {/* Atalho para a calculadora ja na primeira etapa: e onde o
+                corretor esta olhando o preco. */}
+            <div className="acoes-fluxo" style={{ marginTop: 'var(--e3)' }}>
+              <button type="button" className="btn btn--secundario" onClick={() => setCalculadoraAberta(true)}>
+                <Icone nome="grafico" tamanho={15} />
+                Calcular valor com CUB
+              </button>
+              <span className="campo__dica">
+                Simula o reajuste das parcelas até o fim da obra e vira um fluxo de pagamento.
+              </span>
+            </div>
           </section>
 
           <section className="form-secao">
@@ -402,6 +434,8 @@ export function FormEmpreendimento({
             </div>
           </section>
         </form>
+
+        {calculadora}
       </Modal>
     )
   }
@@ -430,6 +464,8 @@ export function FormEmpreendimento({
           </>
         }
       >
+        {calculadora}
+
         {salvo && (
           <UnidadesDoEmpreendimento
             empreendimentoId={salvo.id}
@@ -465,6 +501,8 @@ export function FormEmpreendimento({
         </>
       }
     >
+      {calculadora}
+
       {salvo && (
         <FluxosDoEmpreendimento
           empreendimentoId={salvo.id}

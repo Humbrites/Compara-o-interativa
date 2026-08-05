@@ -40,6 +40,7 @@ interface Props {
   onExcluir: () => void
   onAdicionarFluxo: () => void
   onAdicionarUnidade: () => void
+  onCalcularCub: () => void
   onCompararCom: () => void
   onFechar: () => void
 }
@@ -51,6 +52,7 @@ export function PainelDetalhe({
   onExcluir,
   onAdicionarFluxo,
   onAdicionarUnidade,
+  onCalcularCub,
   onCompararCom,
   onFechar,
 }: Props) {
@@ -227,6 +229,11 @@ export function PainelDetalhe({
                 Adicionar
               </button>
             </h3>
+
+            <button type="button" className="btn btn--secundario btn--bloco" onClick={onCalcularCub}>
+              <Icone nome="grafico" tamanho={15} />
+              Calcular valor com CUB
+            </button>
 
             {e.fluxos.length === 0 ? (
               <div className="observacao">

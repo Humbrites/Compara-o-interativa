@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { Empreendimento, EmpreendimentoInput, Filtros, ImagemEmpreendimento, Unidade } from './types'
+import type { Empreendimento, EmpreendimentoInput, Filtros, FluxoInput, ImagemEmpreendimento, Unidade } from './types'
 import { FILTROS_VAZIOS } from './types'
 import { api } from './lib/api'
 import { aplicarFiltros, calcularIndicadores } from './lib/dashboard'
@@ -10,6 +10,7 @@ import { PainelDetalhe } from './components/PainelDetalhe'
 import { FormEmpreendimento } from './components/FormEmpreendimento'
 import { Comparativo } from './components/Comparativo'
 import { ListaEmpreendimentos } from './components/ListaEmpreendimentos'
+import { CalculadoraCub } from './components/CalculadoraCub'
 import { Icone } from './components/Icones'
 import { Carregando, Estado, Toasts, type Aviso } from './components/ui'
 
@@ -31,6 +32,7 @@ export default function App() {
   const [form, setForm] = useState<EstadoForm | null>(null)
   const [comparando, setComparando] = useState(false)
   const [vendoLista, setVendoLista] = useState(false)
+  const [calculandoCub, setCalculandoCub] = useState<Empreendimento | null>(null)
 
   const [avisos, setAvisos] = useState<Aviso[]>([])
   const proximoAviso = useRef(1)
@@ -121,6 +123,15 @@ export default function App() {
   /** Mesma coisa para as unidades (e os fluxos que moram dentro delas). */
   function atualizarUnidades(id: number, unidades: Unidade[]) {
     setLista((atual) => atual.map((e) => (e.id === id ? { ...e, unidades } : e)))
+  }
+
+  /** Fluxo criado pela calculadora do CUB aberta direto no painel. */
+  async function gerarFluxoDoCub(alvo: Empreendimento, dados: FluxoInput) {
+    const criado = await api.criarFluxo({ ...dados, empreendimento_id: alvo.id })
+    setLista((atual) =>
+      atual.map((e) => (e.id === alvo.id ? { ...e, fluxos: [...e.fluxos, criado] } : e)),
+    )
+    avisar('Fluxo gerado pela calculadora do CUB')
   }
 
   /* --- Render ------------------------------------------------------------ */
@@ -228,6 +239,7 @@ export default function App() {
               onExcluir={() => void excluirEmpreendimento(empreendimentoA)}
               onAdicionarFluxo={() => setForm({ empreendimento: empreendimentoA, iniciarEmFluxos: true })}
               onAdicionarUnidade={() => setForm({ empreendimento: empreendimentoA, iniciarEmUnidades: true })}
+              onCalcularCub={() => setCalculandoCub(empreendimentoA)}
               onCompararCom={() => setComparando(true)}
               onFechar={() => {
                 setSelecionadoA(null)
@@ -287,6 +299,15 @@ export default function App() {
             setSelecionadoB(selecionadoA)
           }}
           onFechar={() => setComparando(false)}
+        />
+      )}
+
+      {calculandoCub && (
+        <CalculadoraCub
+          titulo={calculandoCub.nome}
+          onFechar={() => setCalculandoCub(null)}
+          onGerarFluxo={(dados) => gerarFluxoDoCub(calculandoCub, dados)}
+          avisar={avisar}
         />
       )}
 
