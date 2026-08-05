@@ -63,6 +63,9 @@ metragem, mais barato e mais caro (esses dois são clicáveis e levam ao empreen
 **Calculadora do CUB** — dentro do cadastro, o botão **Calcular valor com CUB** simula
 a evolução das parcelas até o fim da obra e vira um fluxo de pagamento pronto.
 
+**Simulador de investimento** — no topo, o botão **Investimento** projeta quanto o imóvel
+pode render até a entrega. É um módulo à parte: todos os dados são digitados ali.
+
 ---
 
 ## Cadastro em três etapas
@@ -168,6 +171,40 @@ não zera o resto da simulação.
 
 ---
 
+## Simulador de investimento
+
+O botão **Investimento**, no topo, abre um módulo **independente**: ele não lê o cadastro
+nem depende da calculadora do CUB, então serve para qualquer imóvel — inclusive um que
+nem está aqui.
+
+**O que você informa:** valor de compra (obrigatório), entrada, **valor já pago** (entrada
++ parcelas + reforços + balões — é o que define a rentabilidade), saldo devedor (0 se
+quitado), tempo até a entrega (em **meses ou anos**) e a valorização anual esperada, com
+atalhos de 5% a 20%.
+
+**A conta:** valorização composta sobre o valor de compra —
+`valor na entrega = compra × (1 + valorização)^anos`, com o prazo convertido para anos
+(18 meses = 1,5 ano).
+
+| Indicador | Como sai |
+|---|---|
+| Valor estimado na entrega | compra corrigida pela valorização |
+| Ganho patrimonial | entrega − compra |
+| Patrimônio líquido | entrega − saldo devedor |
+| Lucro potencial | entrega − valor já pago (**não** desconta a dívida) |
+| Rentabilidade | lucro ÷ investido × 100 |
+| ROI | patrimônio líquido ÷ investido — "R$ X,XX para cada R$ 1,00 investido" |
+
+> **ROI e rentabilidade seriam o mesmo número** se ambos fossem lucro ÷ investido. Aqui a
+> rentabilidade carrega o percentual e o ROI carrega o multiplicador patrimonial, que é a
+> leitura que o investidor faz na conversa. O **lucro potencial** avisa no próprio card
+> que não desconta o saldo devedor — para o número "no bolso", olhe o patrimônio líquido.
+
+Sem informar o valor já pago, rentabilidade e ROI aparecem como "—" em vez de inventar
+divisão por zero. O gráfico mostra a curva de valorização até a entrega.
+
+---
+
 ## Como o "melhor indicador" é decidido
 
 O destaque verde só aparece quando **os dois lados têm o dado preenchido** — se um
@@ -218,6 +255,7 @@ compara-interativa/
         │   ├── dashboard.ts filtros, busca e cálculo dos indicadores
         │   ├── format.ts    formatação em pt-BR (R$, m², datas)
         │   ├── imagens.ts   capa e galeria de cada empreendimento
+        │   ├── investimento.ts  simulador de investimento (módulo à parte)
         │   ├── unidades.ts  rótulo, posição, valor do m² e faixas das unidades
         │   └── opcoes.ts    status da obra, tipos e suas ordens
         └── styles/          design system (tokens.css) e estilos

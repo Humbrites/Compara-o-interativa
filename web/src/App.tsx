@@ -11,6 +11,7 @@ import { FormEmpreendimento } from './components/FormEmpreendimento'
 import { Comparativo } from './components/Comparativo'
 import { ListaEmpreendimentos } from './components/ListaEmpreendimentos'
 import { CalculadoraCub } from './components/CalculadoraCub'
+import { SimuladorInvestimento } from './components/SimuladorInvestimento'
 import { Icone } from './components/Icones'
 import { Carregando, Estado, Toasts, type Aviso } from './components/ui'
 
@@ -33,6 +34,7 @@ export default function App() {
   const [comparando, setComparando] = useState(false)
   const [vendoLista, setVendoLista] = useState(false)
   const [calculandoCub, setCalculandoCub] = useState<Empreendimento | null>(null)
+  const [simulandoInvestimento, setSimulandoInvestimento] = useState(false)
 
   const [avisos, setAvisos] = useState<Aviso[]>([])
   const proximoAviso = useRef(1)
@@ -149,6 +151,16 @@ export default function App() {
         </div>
 
         <div className="topo__acoes">
+          <button
+            type="button"
+            className="btn btn--secundario"
+            onClick={() => setSimulandoInvestimento(true)}
+            title="Simular o retorno de um investimento imobiliário"
+          >
+            <Icone nome="grafico" tamanho={15} />
+            <span>Investimento</span>
+          </button>
+
           {empreendimentoA && lista.length > 1 && (
             <button
               type="button"
@@ -300,6 +312,10 @@ export default function App() {
           }}
           onFechar={() => setComparando(false)}
         />
+      )}
+
+      {simulandoInvestimento && (
+        <SimuladorInvestimento onFechar={() => setSimulandoInvestimento(false)} avisar={avisar} />
       )}
 
       {calculandoCub && (

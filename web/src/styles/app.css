@@ -793,6 +793,9 @@ select.entrada {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: var(--e4);
+  /* Rotulo de duas linhas nao pode empurrar o campo para baixo da fileira:
+     o alinhamento e pela base, entao os inputs ficam sempre na mesma linha. */
+  align-items: end;
 }
 
 .grade--2 {

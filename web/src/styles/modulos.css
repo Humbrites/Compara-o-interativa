@@ -1566,6 +1566,139 @@
 }
 
 /* ==========================================================================
+   Simulador de investimento
+   ========================================================================== */
+
+/* Prazo + unidade no mesmo campo. */
+.entrada-com-unidade {
+  display: flex;
+  gap: var(--e2);
+}
+
+.entrada-com-unidade select {
+  width: auto;
+  min-width: 92px;
+  flex-shrink: 0;
+  background-color: var(--superficie-2);
+}
+
+/* O numero que responde a pergunta vem primeiro e maior. */
+.inv-hero {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--e3);
+  margin-bottom: var(--e4);
+}
+
+.inv-hero__principal,
+.inv-hero__lado {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--e4) var(--e5);
+  border-radius: var(--raio-lg);
+  min-width: 0;
+}
+
+.inv-hero__principal {
+  background: linear-gradient(135deg, var(--marca-700), var(--marca-500));
+  color: #fff;
+  box-shadow: var(--sombra);
+}
+
+.inv-hero__lado {
+  border: 1px solid var(--vitoria-borda);
+  background: var(--vitoria-fundo);
+  color: var(--vitoria);
+}
+
+.inv-hero__rotulo {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.85;
+}
+
+/* Figura de destaque: proporcional, nunca tabular. */
+.inv-hero__valor {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.inv-hero__valor--menor {
+  font-size: 26px;
+}
+
+.inv-hero__dica {
+  font-size: 12px;
+  opacity: 0.9;
+  line-height: 1.5;
+}
+
+.inv-cartoes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: var(--e2);
+}
+
+.inv-cartao {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--e3);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  background: var(--superficie);
+  min-width: 0;
+  animation: surgir var(--transicao) both;
+}
+
+.inv-cartao--marca {
+  border-color: var(--marca-300);
+  background: var(--marca-50);
+}
+
+.inv-cartao--ganho {
+  border-color: var(--vitoria-borda);
+  background: var(--vitoria-fundo);
+}
+
+.inv-cartao__rotulo {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--texto-3);
+}
+
+.inv-cartao__valor {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--texto);
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+.inv-cartao--marca .inv-cartao__valor {
+  color: var(--marca-700);
+}
+
+.inv-cartao--ganho .inv-cartao__valor {
+  color: var(--vitoria);
+}
+
+.inv-cartao__dica {
+  font-size: 11px;
+  color: var(--texto-3);
+}
+
+/* ==========================================================================
    Unidades
    ========================================================================== */
 
