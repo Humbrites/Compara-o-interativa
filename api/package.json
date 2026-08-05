@@ -1,0 +1,19 @@
+{
+  "name": "api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "API local (Fastify + SQLite) do Compara Interativa",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "seed": "node src/seed.js",
+    "seed:limpar": "node src/seed.js --limpar"
+  },
+  "dependencies": {
+    "@fastify/cors": "^10.0.2",
+    "better-sqlite3": "^11.8.1",
+    "fastify": "^5.2.1"
+  }
+}

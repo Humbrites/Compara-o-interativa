@@ -1,0 +1,353 @@
+import { useState } from 'react'
+import type { Empreendimento, EmpreendimentoInput } from '../types'
+import { STATUS_OBRA, TIPOS } from '../lib/opcoes'
+import { Campo, Modal } from './ui'
+import { Icone } from './Icones'
+import { FluxosDoEmpreendimento } from './FormFluxos'
+
+/** O formulario trabalha com texto puro; a conversao acontece no envio. */
+type Formulario = Record<string, string>
+
+const CAMPOS: string[] = [
+  'nome', 'construtora', 'cidade', 'bairro', 'endereco',
+  'latitude', 'longitude', 'valor_m2', 'metragem_min', 'metragem_max',
+  'dormitorios', 'suites', 'banheiros', 'vagas',
+  'status_obra', 'entrega', 'tipo', 'imagem_url', 'observacoes',
+]
+
+function paraFormulario(e: Empreendimento | null): Formulario {
+  const inicial: Formulario = {}
+  for (const campo of CAMPOS) {
+    const valor = e ? (e as unknown as Record<string, unknown>)[campo] : null
+    inicial[campo] = valor === null || valor === undefined ? '' : String(valor)
+  }
+  return inicial
+}
+
+function validar(form: Formulario): Record<string, string> {
+  const erros: Record<string, string> = {}
+
+  if (!form.nome.trim()) erros.nome = 'Informe o nome do empreendimento'
+
+  const lat = Number(form.latitude.replace(',', '.'))
+  if (form.latitude.trim() && (!Number.isFinite(lat) || lat < -90 || lat > 90)) {
+    erros.latitude = 'Latitude deve ficar entre -90 e 90'
+  }
+
+  const lng = Number(form.longitude.replace(',', '.'))
+  if (form.longitude.trim() && (!Number.isFinite(lng) || lng < -180 || lng > 180)) {
+    erros.longitude = 'Longitude deve ficar entre -180 e 180'
+  }
+
+  const min = Number(form.metragem_min.replace(',', '.'))
+  const max = Number(form.metragem_max.replace(',', '.'))
+  if (form.metragem_min.trim() && form.metragem_max.trim() && Number.isFinite(min) && Number.isFinite(max) && min > max) {
+    erros.metragem_max = 'A metragem máxima não pode ser menor que a mínima'
+  }
+
+  return erros
+}
+
+interface Props {
+  /** null = cadastro novo. */
+  empreendimento: Empreendimento | null
+  /** Abre direto na etapa dos fluxos (usado pelo botao "adicionar fluxo"). */
+  iniciarEmFluxos?: boolean
+  onFechar: () => void
+  onSalvar: (dados: EmpreendimentoInput) => Promise<Empreendimento>
+  onMudouFluxos: () => void
+  avisar: (texto: string, tipo?: 'sucesso' | 'erro') => void
+}
+
+export function FormEmpreendimento({
+  empreendimento,
+  iniciarEmFluxos,
+  onFechar,
+  onSalvar,
+  onMudouFluxos,
+  avisar,
+}: Props) {
+  const [form, setForm] = useState<Formulario>(() => paraFormulario(empreendimento))
+  const [erros, setErros] = useState<Record<string, string>>({})
+  const [passo, setPasso] = useState<1 | 2>(iniciarEmFluxos && empreendimento ? 2 : 1)
+  const [salvando, setSalvando] = useState(false)
+  // Depois de salvar a etapa 1 passamos a trabalhar sobre o registro criado.
+  const [salvo, setSalvo] = useState<Empreendimento | null>(empreendimento)
+
+  const editando = empreendimento !== null
+
+  function mudar(campo: string, valor: string) {
+    setForm((atual) => ({ ...atual, [campo]: valor }))
+    if (erros[campo]) setErros((atual) => ({ ...atual, [campo]: '' }))
+  }
+
+  function entrada(campo: string, extra?: React.InputHTMLAttributes<HTMLInputElement>) {
+    return (
+      <input
+        className={`entrada${erros[campo] ? ' entrada--erro' : ''}`}
+        value={form[campo]}
+        onChange={(e) => mudar(campo, e.target.value)}
+        {...extra}
+      />
+    )
+  }
+
+  async function salvarEtapa1() {
+    const novosErros = validar(form)
+    setErros(novosErros)
+    if (Object.keys(novosErros).length > 0) {
+      avisar('Revise os campos destacados', 'erro')
+      return
+    }
+
+    setSalvando(true)
+    try {
+      // Campo em branco vai como null para a API nao gravar string vazia.
+      const dados: Record<string, string | null> = { nome: form.nome.trim() }
+      for (const campo of CAMPOS) {
+        if (campo === 'nome') continue
+        dados[campo] = form[campo].trim() || null
+      }
+
+      const resultado = await onSalvar(dados as EmpreendimentoInput)
+      setSalvo(resultado)
+      setPasso(2)
+      avisar(editando ? 'Empreendimento atualizado' : 'Empreendimento cadastrado')
+    } catch (erro) {
+      avisar(erro instanceof Error ? erro.message : 'Falha ao salvar', 'erro')
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  /* --- Cabecalho com os dois passos ------------------------------------- */
+  const cabecalho = (
+    <div className="passos">
+      <div className={`passo${passo === 1 ? ' passo--ativo' : ''}${passo > 1 ? ' passo--feito' : ''}`}>
+        <span className="passo__bolha">{passo > 1 ? <Icone nome="check" tamanho={12} espessura={3} /> : '1'}</span>
+        Dados do empreendimento
+      </div>
+      <span className="passo__traco" />
+      <div className={`passo${passo === 2 ? ' passo--ativo' : ''}`}>
+        <span className="passo__bolha">2</span>
+        Fluxos de pagamento
+      </div>
+    </div>
+  )
+
+  /* --- Etapa 1 ----------------------------------------------------------- */
+  if (passo === 1) {
+    return (
+      <Modal
+        titulo={editando ? 'Editar empreendimento' : 'Adicionar empreendimento'}
+        subtitulo="Só o nome é obrigatório — o resto pode ser preenchido depois."
+        onFechar={onFechar}
+        cabecalhoExtra={cabecalho}
+        largo
+        rodape={
+          <>
+            <button type="button" className="btn btn--fantasma" onClick={onFechar}>
+              Cancelar
+            </button>
+            <div className="direita">
+              <button type="button" className="btn btn--primario" onClick={salvarEtapa1} disabled={salvando}>
+                {salvando ? (
+                  <>
+                    <Icone nome="spinner" tamanho={15} className="girando" />
+                    Salvando…
+                  </>
+                ) : (
+                  <>
+                    Salvar e avançar
+                    <Icone nome="seta_direita" tamanho={15} />
+                  </>
+                )}
+              </button>
+            </div>
+          </>
+        }
+      >
+        <form onSubmit={(e) => e.preventDefault()}>
+          <section className="form-secao">
+            <h3 className="form-secao__titulo">
+              <Icone nome="predio" tamanho={13} />
+              Identificação
+            </h3>
+            <div className="grade">
+              <Campo rotulo="Nome do empreendimento" obrigatorio erro={erros.nome} className="col-span-2">
+                {entrada('nome', { placeholder: 'Ex.: Residencial Vista Verde', autoFocus: true })}
+              </Campo>
+              <Campo rotulo="Construtora">
+                {entrada('construtora', { placeholder: 'Ex.: Construtora Alfa' })}
+              </Campo>
+              <Campo rotulo="Tipo">
+                <select className="entrada" value={form.tipo} onChange={(e) => mudar('tipo', e.target.value)}>
+                  <option value="">Selecione…</option>
+                  {TIPOS.map((tipo) => (
+                    <option key={tipo} value={tipo}>
+                      {tipo}
+                    </option>
+                  ))}
+                </select>
+              </Campo>
+            </div>
+          </section>
+
+          <section className="form-secao">
+            <h3 className="form-secao__titulo">
+              <Icone nome="local" tamanho={13} />
+              Localização
+            </h3>
+            {/* Grade de 2 colunas fixas: latitude e longitude precisam ficar
+                lado a lado, e com auto-fit a longitude caia sozinha na linha. */}
+            <div className="grade grade--2">
+              <Campo rotulo="Cidade">{entrada('cidade', { placeholder: 'Ex.: Curitiba' })}</Campo>
+              <Campo rotulo="Bairro">{entrada('bairro', { placeholder: 'Ex.: Batel' })}</Campo>
+              <Campo rotulo="Endereço" className="col-inteira">
+                {entrada('endereco', { placeholder: 'Rua, número e complemento' })}
+              </Campo>
+              <Campo rotulo="Latitude" dica="para o mapa" erro={erros.latitude}>
+                {entrada('latitude', { placeholder: '-25.4284', inputMode: 'decimal' })}
+              </Campo>
+              <Campo rotulo="Longitude" dica="para o mapa" erro={erros.longitude}>
+                {entrada('longitude', { placeholder: '-49.2733', inputMode: 'decimal' })}
+              </Campo>
+            </div>
+            <p className="campo__dica" style={{ marginTop: 'var(--e2)' }}>
+              Sem latitude e longitude o empreendimento é cadastrado normalmente, mas não aparece no mapa.
+            </p>
+          </section>
+
+          <section className="form-secao">
+            <h3 className="form-secao__titulo">
+              <Icone nome="regua" tamanho={13} />
+              Produto
+            </h3>
+            <div className="grade">
+              <Campo rotulo="Valor médio do m²" dica="R$">
+                {entrada('valor_m2', { placeholder: '10800', inputMode: 'decimal' })}
+              </Campo>
+              <Campo rotulo="Metragem mínima" dica="m²">
+                {entrada('metragem_min', { placeholder: '45', inputMode: 'decimal' })}
+              </Campo>
+              <Campo rotulo="Metragem máxima" dica="m²" erro={erros.metragem_max}>
+                {entrada('metragem_max', { placeholder: '82', inputMode: 'decimal' })}
+              </Campo>
+              <Campo rotulo="Dormitórios">
+                {entrada('dormitorios', { placeholder: '3', inputMode: 'numeric' })}
+              </Campo>
+              <Campo rotulo="Suítes">{entrada('suites', { placeholder: '1', inputMode: 'numeric' })}</Campo>
+              <Campo rotulo="Banheiros">{entrada('banheiros', { placeholder: '2', inputMode: 'numeric' })}</Campo>
+              <Campo rotulo="Vagas">{entrada('vagas', { placeholder: '2', inputMode: 'numeric' })}</Campo>
+            </div>
+          </section>
+
+          <section className="form-secao">
+            <h3 className="form-secao__titulo">
+              <Icone nome="obra" tamanho={13} />
+              Obra
+            </h3>
+            <div className="grade">
+              <Campo rotulo="Status da obra">
+                <select
+                  className="entrada"
+                  value={form.status_obra}
+                  onChange={(e) => mudar('status_obra', e.target.value)}
+                >
+                  <option value="">Selecione…</option>
+                  {STATUS_OBRA.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
+              </Campo>
+              <Campo rotulo="Entrega prevista" dica="mês/ano">
+                {entrada('entrega', { type: 'month' })}
+              </Campo>
+            </div>
+          </section>
+
+          <section className="form-secao">
+            <h3 className="form-secao__titulo">
+              <Icone nome="imagem" tamanho={13} />
+              Complementos
+            </h3>
+            <div className="grade">
+              <Campo rotulo="Link de imagem" className="col-inteira" dica="URL da foto de capa">
+                {entrada('imagem_url', { placeholder: 'https://…', type: 'url' })}
+              </Campo>
+              {form.imagem_url.trim() && (
+                <div className="col-inteira">
+                  <img
+                    src={form.imagem_url}
+                    alt="Pré-visualização da imagem"
+                    style={{
+                      width: '100%',
+                      maxHeight: 160,
+                      objectFit: 'cover',
+                      borderRadius: 'var(--raio)',
+                      border: '1px solid var(--borda)',
+                    }}
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none'
+                    }}
+                    onLoad={(e) => {
+                      e.currentTarget.style.display = 'block'
+                    }}
+                  />
+                </div>
+              )}
+              <Campo rotulo="Observações" className="col-inteira">
+                <textarea
+                  className="entrada"
+                  value={form.observacoes}
+                  onChange={(e) => mudar('observacoes', e.target.value)}
+                  placeholder="Diferenciais, lazer, pontos de atenção…"
+                  rows={3}
+                />
+              </Campo>
+            </div>
+          </section>
+        </form>
+      </Modal>
+    )
+  }
+
+  /* --- Etapa 2 ----------------------------------------------------------- */
+  return (
+    <Modal
+      titulo="Fluxos de pagamento"
+      subtitulo={salvo ? salvo.nome : ''}
+      onFechar={onFechar}
+      cabecalhoExtra={cabecalho}
+      largo
+      rodape={
+        <>
+          <button type="button" className="btn btn--fantasma" onClick={() => setPasso(1)}>
+            <Icone nome="seta_esquerda" tamanho={15} />
+            Voltar aos dados
+          </button>
+          <div className="direita">
+            <button type="button" className="btn btn--primario" onClick={onFechar}>
+              <Icone nome="check" tamanho={15} />
+              Concluir
+            </button>
+          </div>
+        </>
+      }
+    >
+      {salvo && (
+        <FluxosDoEmpreendimento
+          empreendimentoId={salvo.id}
+          fluxos={salvo.fluxos}
+          onMudou={(fluxos) => {
+            setSalvo((atual) => (atual ? { ...atual, fluxos } : atual))
+            onMudouFluxos()
+          }}
+          avisar={avisar}
+        />
+      )}
+    </Modal>
+  )
+}

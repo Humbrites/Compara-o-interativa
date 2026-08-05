@@ -1,0 +1,20 @@
+node_modules/
+dist/
+*.local
+
+# Banco de dados SQLite (dados locais, nao versionar)
+api/data/*.db
+api/data/*.db-shm
+api/data/*.db-wal
+
+# Logs e temporarios
+*.log
+npm-debug.log*
+.DS_Store
+.vscode/
+.idea/
+
+# Variaveis de ambiente
+.env
+.env.*
+!.env.example

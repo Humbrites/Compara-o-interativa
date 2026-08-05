@@ -1,0 +1,784 @@
+@import './tokens.css';
+@import 'leaflet/dist/leaflet.css';
+@import 'leaflet.markercluster/dist/MarkerCluster.css';
+
+/* ==========================================================================
+   Reset enxuto
+   ========================================================================== */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--fonte);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--texto);
+  background: var(--fundo);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+h4,
+p {
+  margin: 0;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--foco);
+  border-radius: var(--raio-sm);
+}
+
+/* Barras de rolagem discretas */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--borda-forte) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--borda-forte);
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: var(--raio-pill);
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--texto-3);
+  background-clip: content-box;
+}
+
+/* ==========================================================================
+   Animacoes
+   ========================================================================== */
+
+@keyframes surgir {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes entrar-direita {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes esmaecer {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes subir-modal {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes girar {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulsar {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* ==========================================================================
+   Esqueleto da aplicacao
+   ========================================================================== */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* --- Topo ---------------------------------------------------------------- */
+
+.topo {
+  display: flex;
+  align-items: center;
+  gap: var(--e4);
+  height: var(--altura-topo);
+  padding: 0 var(--e6);
+  background: var(--superficie);
+  border-bottom: 1px solid var(--borda);
+  box-shadow: var(--sombra-xs);
+  z-index: 500;
+  flex-shrink: 0;
+}
+
+.topo__marca {
+  display: flex;
+  align-items: center;
+  gap: var(--e3);
+  margin-right: var(--e2);
+}
+
+.topo__logo {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--raio);
+  background: linear-gradient(135deg, var(--marca-600), var(--marca-400));
+  color: var(--texto-invertido);
+  box-shadow: var(--sombra-sm);
+}
+
+.topo__titulo {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.topo__sub {
+  font-size: 11.5px;
+  color: var(--texto-3);
+  font-weight: 500;
+}
+
+.topo__acoes {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--e3);
+}
+
+/* --- Corpo --------------------------------------------------------------- */
+
+.corpo {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  position: relative;
+}
+
+.coluna-mapa {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.coluna-painel {
+  width: var(--largura-painel);
+  flex-shrink: 0;
+  background: var(--superficie);
+  border-left: 1px solid var(--borda);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  box-shadow: -8px 0 24px rgba(19, 26, 51, 0.04);
+  animation: entrar-direita var(--transicao-lenta) both;
+}
+
+/* ==========================================================================
+   Botoes
+   ========================================================================== */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--e2);
+  height: 38px;
+  padding: 0 var(--e4);
+  border: 1px solid transparent;
+  border-radius: var(--raio);
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background var(--transicao), border-color var(--transicao),
+    box-shadow var(--transicao), transform var(--transicao), color var(--transicao);
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn--primario {
+  background: var(--marca-600);
+  color: var(--texto-invertido);
+  box-shadow: var(--sombra-sm);
+}
+.btn--primario:hover:not(:disabled) {
+  background: var(--marca-700);
+  box-shadow: var(--sombra);
+}
+
+.btn--secundario {
+  background: var(--superficie);
+  border-color: var(--borda-forte);
+  color: var(--texto-2);
+}
+.btn--secundario:hover:not(:disabled) {
+  background: var(--superficie-3);
+  color: var(--texto);
+}
+
+.btn--fantasma {
+  background: transparent;
+  color: var(--texto-2);
+}
+.btn--fantasma:hover:not(:disabled) {
+  background: var(--superficie-3);
+  color: var(--texto);
+}
+
+.btn--perigo {
+  background: transparent;
+  border-color: transparent;
+  color: var(--perigo);
+}
+.btn--perigo:hover:not(:disabled) {
+  background: var(--perigo-fundo);
+}
+
+.btn--pequeno {
+  height: 32px;
+  padding: 0 var(--e3);
+  font-size: 12.5px;
+}
+
+.btn--icone {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: var(--raio-sm);
+}
+
+.btn--bloco {
+  width: 100%;
+}
+
+/* ==========================================================================
+   Formularios
+   ========================================================================== */
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.campo__rotulo {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--texto-2);
+  display: flex;
+  align-items: center;
+  gap: var(--e1);
+}
+
+.campo__obrigatorio {
+  color: var(--perigo);
+}
+
+.campo__dica {
+  font-size: 11px;
+  color: var(--texto-3);
+  font-weight: 500;
+}
+
+.entrada {
+  height: 38px;
+  padding: 0 var(--e3);
+  background: var(--superficie);
+  border: 1px solid var(--borda-forte);
+  border-radius: var(--raio-sm);
+  transition: border-color var(--transicao), box-shadow var(--transicao);
+  width: 100%;
+  min-width: 0;
+}
+
+textarea.entrada {
+  height: auto;
+  padding: var(--e2) var(--e3);
+  resize: vertical;
+  min-height: 72px;
+  line-height: 1.5;
+}
+
+select.entrada {
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%237b8599' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 32px;
+}
+
+.entrada:hover:not(:disabled) {
+  border-color: var(--texto-3);
+}
+
+.entrada:focus {
+  outline: none;
+  border-color: var(--marca-500);
+  box-shadow: var(--foco);
+}
+
+.entrada--erro {
+  border-color: var(--perigo);
+}
+
+.campo__erro {
+  font-size: 11.5px;
+  color: var(--perigo);
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: var(--e1);
+}
+
+/* Campo de busca com icone embutido */
+.busca {
+  position: relative;
+  flex: 1 1 240px;
+  /* Sem o minimo o campo encolhia ate cortar o proprio placeholder quando o
+     painel lateral abria. */
+  min-width: 220px;
+  max-width: 340px;
+}
+
+.busca__icone {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--texto-3);
+  pointer-events: none;
+}
+
+.busca .entrada {
+  padding-left: 34px;
+  padding-right: 30px;
+  background: var(--superficie-2);
+}
+
+.busca__limpar {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: var(--raio-pill);
+  background: transparent;
+  color: var(--texto-3);
+  transition: background var(--transicao), color var(--transicao);
+}
+.busca__limpar:hover {
+  background: var(--superficie-3);
+  color: var(--texto);
+}
+
+/* ==========================================================================
+   Selos e etiquetas
+   ========================================================================== */
+
+.selo {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: var(--raio-pill);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.selo--verde {
+  background: var(--vitoria-fundo);
+  color: var(--vitoria);
+}
+.selo--azul {
+  background: var(--info-fundo);
+  color: var(--info);
+}
+.selo--ambar {
+  background: var(--alerta-fundo);
+  color: var(--alerta);
+}
+.selo--roxo {
+  background: var(--roxo-fundo);
+  color: var(--roxo);
+}
+.selo--ciano {
+  background: var(--ciano-fundo);
+  color: var(--ciano);
+}
+.selo--cinza {
+  background: var(--neutro-fundo);
+  color: var(--texto-2);
+}
+
+.selo--contorno {
+  background: transparent;
+  border: 1px solid var(--borda-forte);
+  color: var(--texto-2);
+}
+
+/* ==========================================================================
+   Estados vazios / carregando / erro
+   ========================================================================== */
+
+.estado {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--e3);
+  padding: var(--e10) var(--e6);
+  text-align: center;
+  color: var(--texto-3);
+  animation: surgir var(--transicao-lenta) both;
+}
+
+.estado__icone {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--raio-lg);
+  background: var(--superficie-3);
+  color: var(--texto-3);
+  margin-bottom: var(--e1);
+}
+
+.estado__titulo {
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--texto);
+}
+
+.estado__texto {
+  font-size: 13px;
+  max-width: 320px;
+  line-height: 1.6;
+}
+
+.estado--erro .estado__icone {
+  background: var(--perigo-fundo);
+  color: var(--perigo);
+}
+
+.girando {
+  animation: girar 900ms linear infinite;
+}
+
+/* ==========================================================================
+   Toast
+   ========================================================================== */
+
+.toasts {
+  position: fixed;
+  right: var(--e6);
+  bottom: var(--e6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--e2);
+  z-index: 4000;
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: var(--e3);
+  min-width: 260px;
+  max-width: 400px;
+  padding: var(--e3) var(--e4);
+  border-radius: var(--raio);
+  background: var(--marca-900);
+  color: var(--texto-invertido);
+  box-shadow: var(--sombra-xl);
+  font-size: 13px;
+  font-weight: 500;
+  animation: surgir var(--transicao) both;
+  pointer-events: auto;
+}
+
+.toast--sucesso {
+  background: #0c7a4e;
+}
+.toast--erro {
+  background: #b21f31;
+}
+
+/* ==========================================================================
+   Modal
+   ========================================================================== */
+
+.modal-fundo {
+  position: fixed;
+  inset: 0;
+  background: rgba(19, 26, 51, 0.42);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--e6);
+  z-index: 3000;
+  animation: esmaecer var(--transicao) both;
+}
+
+.modal {
+  width: 100%;
+  max-width: 880px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--superficie);
+  border-radius: var(--raio-xl);
+  box-shadow: var(--sombra-xl);
+  overflow: hidden;
+  animation: subir-modal var(--transicao-lenta) both;
+}
+
+.modal--largo {
+  max-width: 1100px;
+}
+
+.modal__topo {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--e4);
+  padding: var(--e5) var(--e6);
+  border-bottom: 1px solid var(--borda);
+  flex-shrink: 0;
+}
+
+.modal__titulo {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.modal__sub {
+  font-size: 12.5px;
+  color: var(--texto-3);
+  margin-top: 2px;
+}
+
+.modal__fechar {
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  border-radius: var(--raio-sm);
+  color: var(--texto-3);
+  transition: background var(--transicao), color var(--transicao);
+  flex-shrink: 0;
+}
+.modal__fechar:hover {
+  background: var(--superficie-3);
+  color: var(--texto);
+}
+
+.modal__corpo {
+  padding: var(--e6);
+  overflow-y: auto;
+  flex: 1;
+}
+
+.modal__rodape {
+  display: flex;
+  align-items: center;
+  gap: var(--e3);
+  padding: var(--e4) var(--e6);
+  border-top: 1px solid var(--borda);
+  background: var(--superficie-2);
+  flex-shrink: 0;
+}
+
+.modal__rodape > .direita {
+  margin-left: auto;
+  display: flex;
+  gap: var(--e3);
+}
+
+/* Passos do cadastro */
+.passos {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  padding: var(--e3) var(--e6);
+  background: var(--superficie-2);
+  border-bottom: 1px solid var(--borda);
+  flex-shrink: 0;
+}
+
+.passo {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--texto-3);
+}
+
+.passo__bolha {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--raio-pill);
+  background: var(--superficie-3);
+  color: var(--texto-3);
+  font-size: 11.5px;
+  transition: background var(--transicao), color var(--transicao);
+}
+
+.passo--ativo {
+  color: var(--marca-700);
+}
+.passo--ativo .passo__bolha {
+  background: var(--marca-600);
+  color: var(--texto-invertido);
+}
+
+.passo--feito {
+  color: var(--vitoria);
+}
+.passo--feito .passo__bolha {
+  background: var(--vitoria-fundo);
+  color: var(--vitoria);
+}
+
+.passo__traco {
+  width: 26px;
+  height: 1.5px;
+  background: var(--borda-forte);
+  border-radius: var(--raio-pill);
+}
+
+/* ==========================================================================
+   Grade de formulario
+   ========================================================================== */
+
+.form-secao {
+  margin-bottom: var(--e6);
+}
+.form-secao:last-child {
+  margin-bottom: 0;
+}
+
+.form-secao__titulo {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--texto-3);
+  margin-bottom: var(--e3);
+  padding-bottom: var(--e2);
+  border-bottom: 1px solid var(--borda);
+}
+
+.grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: var(--e4);
+}
+
+.grade--2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.col-span-2 {
+  grid-column: span 2;
+}
+
+.col-inteira {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 640px) {
+  .grade,
+  .grade--2 {
+    grid-template-columns: 1fr;
+  }
+  .col-span-2 {
+    grid-column: auto;
+  }
+}

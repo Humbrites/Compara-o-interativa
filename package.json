@@ -1,0 +1,27 @@
+{
+  "name": "compara-interativa",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Dashboard interno de comparacao de empreendimentos imobiliarios com mapa interativo",
+  "type": "module",
+  "workspaces": [
+    "api",
+    "web"
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,web -c cyan,magenta \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:api": "npm run dev --workspace api",
+    "dev:web": "npm run dev --workspace web",
+    "build": "npm run build --workspace web",
+    "start": "npm run start --workspace api",
+    "typecheck": "npm run typecheck --workspace web",
+    "seed": "npm run seed --workspace api",
+    "seed:limpar": "npm run seed:limpar --workspace api"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,99 @@
+/* ==========================================================================
+   Tokens — a base visual do produto. Toda cor, sombra, raio e espacamento
+   sai daqui; nenhum componente inventa valor solto.
+   ========================================================================== */
+
+:root {
+  /* Marca ------------------------------------------------------------- */
+  --marca-900: #131a33;
+  --marca-800: #1d2748;
+  --marca-700: #2a3a6b;
+  --marca-600: #3552a0;
+  --marca-500: #4169d6;
+  --marca-400: #6b8df0;
+  --marca-300: #a4b9f7;
+  --marca-100: #e4ebfd;
+  --marca-50: #f1f5ff;
+
+  /* Superficies ------------------------------------------------------- */
+  --fundo: #f4f6fa;
+  --superficie: #ffffff;
+  --superficie-2: #fafbfd;
+  --superficie-3: #f0f3f8;
+
+  /* Texto ------------------------------------------------------------- */
+  --texto: #161d2e;
+  --texto-2: #4d5871;
+  --texto-3: #7b8599;
+  --texto-invertido: #ffffff;
+
+  /* Bordas ------------------------------------------------------------ */
+  --borda: #e3e8f0;
+  --borda-forte: #cfd7e5;
+
+  /* Semanticas — o verde e reservado ao "melhor indicador" ------------- */
+  --vitoria: #0f9d63;
+  --vitoria-fundo: #e6f7f0;
+  --vitoria-borda: #a7e5cb;
+  --alerta: #d97706;
+  --alerta-fundo: #fef4e6;
+  --perigo: #dc2b3f;
+  --perigo-fundo: #fdecee;
+  --info: #2563eb;
+  --info-fundo: #e8f0fe;
+  --roxo: #7c3aed;
+  --roxo-fundo: #f2ebfe;
+  --ciano: #0891b2;
+  --ciano-fundo: #e4f6fa;
+  --neutro-fundo: #eef1f6;
+
+  /* Raios ------------------------------------------------------------- */
+  --raio-sm: 8px;
+  --raio: 12px;
+  --raio-lg: 16px;
+  --raio-xl: 22px;
+  --raio-pill: 999px;
+
+  /* Sombras em camadas ------------------------------------------------ */
+  --sombra-xs: 0 1px 2px rgba(19, 26, 51, 0.05);
+  --sombra-sm: 0 1px 3px rgba(19, 26, 51, 0.07), 0 1px 2px rgba(19, 26, 51, 0.04);
+  --sombra: 0 4px 14px rgba(19, 26, 51, 0.07), 0 1px 3px rgba(19, 26, 51, 0.05);
+  --sombra-lg: 0 12px 32px rgba(19, 26, 51, 0.1), 0 3px 8px rgba(19, 26, 51, 0.05);
+  --sombra-xl: 0 24px 60px rgba(19, 26, 51, 0.16), 0 6px 16px rgba(19, 26, 51, 0.07);
+  --foco: 0 0 0 3px rgba(65, 105, 214, 0.22);
+
+  /* Espacamento ------------------------------------------------------- */
+  --e1: 4px;
+  --e2: 8px;
+  --e3: 12px;
+  --e4: 16px;
+  --e5: 20px;
+  --e6: 24px;
+  --e8: 32px;
+  --e10: 40px;
+
+  /* Tipografia — pilha do sistema, sem baixar fonte de fora ------------ */
+  --fonte: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    'Noto Sans', sans-serif;
+  --fonte-num: ui-monospace, 'SF Mono', 'Cascadia Mono', 'Roboto Mono', Menlo, monospace;
+
+  /* Movimento --------------------------------------------------------- */
+  --transicao: 160ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transicao-lenta: 280ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Layout ------------------------------------------------------------ */
+  --altura-topo: 64px;
+  --largura-painel: 460px;
+}
+
+/* Respeita quem pediu menos animacao no sistema. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
