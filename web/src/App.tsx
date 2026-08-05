@@ -34,7 +34,8 @@ export default function App() {
   const [comparando, setComparando] = useState(false)
   const [vendoLista, setVendoLista] = useState(false)
   const [calculandoCub, setCalculandoCub] = useState<Empreendimento | null>(null)
-  const [simulandoInvestimento, setSimulandoInvestimento] = useState(false)
+  // false = fechado; null = aberto sem imovel; id = aberto com aquele imovel.
+  const [simulandoInvestimento, setSimulandoInvestimento] = useState<false | number | null>(false)
 
   const [avisos, setAvisos] = useState<Aviso[]>([])
   const proximoAviso = useRef(1)
@@ -154,7 +155,7 @@ export default function App() {
           <button
             type="button"
             className="btn btn--secundario"
-            onClick={() => setSimulandoInvestimento(true)}
+            onClick={() => setSimulandoInvestimento(null)}
             title="Simular o retorno de um investimento imobiliário"
           >
             <Icone nome="grafico" tamanho={15} />
@@ -252,6 +253,7 @@ export default function App() {
               onAdicionarFluxo={() => setForm({ empreendimento: empreendimentoA, iniciarEmFluxos: true })}
               onAdicionarUnidade={() => setForm({ empreendimento: empreendimentoA, iniciarEmUnidades: true })}
               onCalcularCub={() => setCalculandoCub(empreendimentoA)}
+              onSimularInvestimento={() => setSimulandoInvestimento(empreendimentoA.id)}
               onCompararCom={() => setComparando(true)}
               onFechar={() => {
                 setSelecionadoA(null)
@@ -314,8 +316,13 @@ export default function App() {
         />
       )}
 
-      {simulandoInvestimento && (
-        <SimuladorInvestimento onFechar={() => setSimulandoInvestimento(false)} avisar={avisar} />
+      {simulandoInvestimento !== false && (
+        <SimuladorInvestimento
+          lista={lista}
+          empreendimentoInicial={simulandoInvestimento}
+          onFechar={() => setSimulandoInvestimento(false)}
+          avisar={avisar}
+        />
       )}
 
       {calculandoCub && (

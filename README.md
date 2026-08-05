@@ -63,8 +63,8 @@ metragem, mais barato e mais caro (esses dois são clicáveis e levam ao empreen
 **Calculadora do CUB** — dentro do cadastro, o botão **Calcular valor com CUB** simula
 a evolução das parcelas até o fim da obra e vira um fluxo de pagamento pronto.
 
-**Simulador de investimento** — no topo, o botão **Investimento** projeta quanto o imóvel
-pode render até a entrega. É um módulo à parte: todos os dados são digitados ali.
+**Simulador de investimento** — o botão **Investimento** (no topo) e **Simular investimento**
+(no painel do imóvel) projetam quanto o imóvel pode render até a entrega.
 
 ---
 
@@ -173,9 +173,17 @@ não zera o resto da simulação.
 
 ## Simulador de investimento
 
-O botão **Investimento**, no topo, abre um módulo **independente**: ele não lê o cadastro
-nem depende da calculadora do CUB, então serve para qualquer imóvel — inclusive um que
+O botão **Investimento**, no topo, abre um módulo **independente**: o cálculo não depende
+do cadastro nem da calculadora do CUB, então serve para qualquer imóvel — inclusive um que
 nem está aqui.
+
+Se o imóvel *estiver* cadastrado, dá para poupar digitação: o seletor **"Usar um imóvel
+cadastrado"** preenche o **valor de compra** (o da unidade escolhida, ou o menor preço entre
+as unidades / valor do m² × metragem mínima), o **prazo** (meses até a entrega prevista) e a
+**entrada**, quando algum fluxo tiver esse dado. O que já foi pago, o saldo devedor e a
+expectativa de valorização continuam por sua conta. O painel do imóvel tem o botão
+**Simular investimento**, que já abre com ele escolhido — e "Digitar tudo à mão" volta ao
+modo livre a qualquer momento.
 
 **O que você informa:** valor de compra (obrigatório), entrada, **valor já pago** (entrada
 + parcelas + reforços + balões — é o que define a rentabilidade), saldo devedor (0 se

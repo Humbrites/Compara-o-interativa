@@ -73,6 +73,30 @@ export function mesesDoPrazo(prazo: number, unidade: UnidadePrazo): number {
   return Math.max(0, Math.round(bruto))
 }
 
+/**
+ * Quantos meses faltam para uma entrega escrita como "2027-06", "06/2027" ou
+ * "2027" (ano sozinho conta como dezembro). Entrega no passado vira 0, e
+ * texto que nao da para ler vira null — quem chamou decide o que fazer.
+ */
+export function mesesAteAEntrega(entrega: string | null | undefined, hoje = new Date()): number | null {
+  if (!entrega) return null
+  const texto = entrega.trim()
+
+  const iso = /^(\d{4})-(\d{1,2})/.exec(texto)
+  const barra = /^(\d{1,2})[/-](\d{4})$/.exec(texto)
+  const soAno = /^(\d{4})$/.exec(texto)
+
+  let ano: number
+  let mes: number
+  if (iso) [, ano, mes] = [0, Number(iso[1]), Number(iso[2])]
+  else if (barra) [, ano, mes] = [0, Number(barra[2]), Number(barra[1])]
+  else if (soAno) [, ano, mes] = [0, Number(soAno[1]), 12]
+  else return null
+
+  const diferenca = (ano - hoje.getFullYear()) * 12 + (mes - (hoje.getMonth() + 1))
+  return Math.max(0, diferenca)
+}
+
 /** Quantos pontos desenhar na curva sem virar uma nuvem de dados. */
 function passoDaEvolucao(meses: number): number {
   if (meses <= 60) return 1

@@ -1569,6 +1569,32 @@
    Simulador de investimento
    ========================================================================== */
 
+/* Acoes do painel que abrem outra ferramenta. */
+.painel__ferramentas {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e2);
+  margin-bottom: var(--e5);
+}
+
+/* Atalho para puxar os dados de um imovel cadastrado. */
+.seletor-imovel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--e3);
+  align-items: end;
+  padding: var(--e3);
+  margin-bottom: var(--e4);
+  border: 1px solid var(--marca-100);
+  border-radius: var(--raio);
+  background: var(--marca-50);
+}
+
+.seletor-imovel__aviso {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
 /* Prazo + unidade no mesmo campo. */
 .entrada-com-unidade {
   display: flex;

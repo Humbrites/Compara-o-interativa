@@ -1,11 +1,14 @@
 import { useMemo, useState } from 'react'
+import type { Empreendimento, Unidade } from '../types'
 import { lerNumero, fmtPercentual } from '../lib/cub'
 import { fmtMoeda, fmtMoedaCurta, TRACO } from '../lib/format'
 import {
+  mesesAteAEntrega,
   simularInvestimento,
   type ResultadoInvestimento,
   type UnidadePrazo,
 } from '../lib/investimento'
+import { rotuloUnidade, valorM2Da } from '../lib/unidades'
 import { Campo, Modal } from './ui'
 import { Icone, type NomeIcone } from './Icones'
 import { GraficoLinha } from './GraficoSvg'
@@ -116,15 +119,95 @@ function textoDoPrazo(resultado: ResultadoInvestimento): string {
   return partes.join(' e ')
 }
 
+/**
+ * O que um imovel cadastrado consegue preencher sozinho. O resto (quanto ja
+ * foi pago, saldo devedor, expectativa de valorizacao) e do usuario — o
+ * simulador continua funcionando sem escolher imovel nenhum.
+ */
+function dadosDoImovel(empreendimento: Empreendimento, unidade: Unidade | null) {
+  const valorCompra = unidade?.valor ?? valorDoEmpreendimento(empreendimento)
+  const meses = mesesAteAEntrega(empreendimento.entrega)
+  // Entrada cadastrada em algum fluxo daquele imovel (o da unidade tem prioridade).
+  const fluxos = [...(unidade?.fluxos ?? []), ...empreendimento.fluxos]
+  const entrada = fluxos.find((f) => f.entrada_valor !== null)?.entrada_valor ?? null
+
+  return { valorCompra, meses, entrada }
+}
+
+/** Sem unidade escolhida, o preco sai do valor do m² pela menor metragem. */
+function valorDoEmpreendimento(e: Empreendimento): number | null {
+  if (e.unidades.length > 0) {
+    const valores = e.unidades.map((u) => u.valor).filter((v): v is number => v !== null)
+    if (valores.length > 0) return Math.min(...valores)
+  }
+  if (e.valor_m2 !== null && e.metragem_min !== null) return e.valor_m2 * e.metragem_min
+  return null
+}
+
+/** Aplica sobre o formulario o que o imovel escolhido sabe preencher. */
+function comImovel(base: Formulario, alvo: Empreendimento | null, unidadeAlvo: Unidade | null): Formulario {
+  if (!alvo) return base
+  const { valorCompra, meses, entrada } = dadosDoImovel(alvo, unidadeAlvo)
+
+  return {
+    ...base,
+    valorCompra: valorCompra !== null ? String(Math.round(valorCompra)) : base.valorCompra,
+    prazo: meses !== null ? String(meses) : base.prazo,
+    unidadePrazo: meses !== null ? 'meses' : base.unidadePrazo,
+    entrada: entrada !== null ? String(Math.round(entrada)) : base.entrada,
+  }
+}
+
 interface Props {
+  /** Imoveis cadastrados, para o atalho de preenchimento. */
+  lista?: Empreendimento[]
+  /** Ja abre com este imovel escolhido (quando vem do painel de detalhe). */
+  empreendimentoInicial?: number | null
   onFechar: () => void
   avisar: (texto: string, tipo?: 'sucesso' | 'erro') => void
 }
 
-export function SimuladorInvestimento({ onFechar, avisar }: Props) {
-  const [form, setForm] = useState<Formulario>(VAZIO)
+export function SimuladorInvestimento({
+  lista = [],
+  empreendimentoInicial = null,
+  onFechar,
+  avisar,
+}: Props) {
+  // Aberto pelo painel de um imovel: os campos ja nascem preenchidos com ele.
+  const [form, setForm] = useState<Formulario>(() =>
+    comImovel(VAZIO, lista.find((e) => e.id === empreendimentoInicial) ?? null, null),
+  )
   const [erros, setErros] = useState<Record<string, string>>({})
   const [resultado, setResultado] = useState<ResultadoInvestimento | null>(null)
+  const [empreendimentoId, setEmpreendimentoId] = useState<number | null>(empreendimentoInicial)
+  const [unidadeId, setUnidadeId] = useState<number | null>(null)
+
+  const empreendimento = useMemo(
+    () => lista.find((e) => e.id === empreendimentoId) ?? null,
+    [lista, empreendimentoId],
+  )
+  const unidade = useMemo(
+    () => empreendimento?.unidades.find((u) => u.id === unidadeId) ?? null,
+    [empreendimento, unidadeId],
+  )
+
+  /** Copia o que o imovel sabe para os campos, sem mexer no resto. */
+  function aplicarImovel(alvo: Empreendimento | null, unidadeAlvo: Unidade | null) {
+    if (!alvo) return
+    setForm((atual) => comImovel(atual, alvo, unidadeAlvo))
+    setErros({})
+  }
+
+  function escolherEmpreendimento(id: number | null) {
+    setEmpreendimentoId(id)
+    setUnidadeId(null)
+    aplicarImovel(lista.find((e) => e.id === id) ?? null, null)
+  }
+
+  function escolherUnidade(id: number | null) {
+    setUnidadeId(id)
+    aplicarImovel(empreendimento, empreendimento?.unidades.find((u) => u.id === id) ?? null)
+  }
 
   function mudar(campo: keyof Formulario, valor: string) {
     setForm((atual) => ({ ...atual, [campo]: valor }))
@@ -199,6 +282,56 @@ export function SimuladorInvestimento({ onFechar, avisar }: Props) {
           <Icone nome="dinheiro" tamanho={13} />
           Dados do investimento
         </h3>
+
+        {lista.length > 0 && (
+          <div className="seletor-imovel">
+            <Campo rotulo="Usar um imóvel cadastrado" dica="opcional — preenche os campos">
+              <select
+                className="entrada"
+                value={empreendimentoId ?? ''}
+                onChange={(e) => escolherEmpreendimento(e.target.value ? Number(e.target.value) : null)}
+              >
+                <option value="">Digitar tudo à mão</option>
+                {lista.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.nome}
+                  </option>
+                ))}
+              </select>
+            </Campo>
+
+            {empreendimento && empreendimento.unidades.length > 0 && (
+              <Campo rotulo="Unidade" dica="usa o preço dela">
+                <select
+                  className="entrada"
+                  value={unidadeId ?? ''}
+                  onChange={(e) => escolherUnidade(e.target.value ? Number(e.target.value) : null)}
+                >
+                  <option value="">Empreendimento (menor preço)</option>
+                  {empreendimento.unidades.map((item, indice) => (
+                    <option key={item.id} value={item.id}>
+                      {rotuloUnidade(item, indice)}
+                      {item.valor !== null ? ` — ${fmtMoeda(item.valor)}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </Campo>
+            )}
+
+            {empreendimento && (
+              <p className="campo__dica seletor-imovel__aviso">
+                <Icone nome="info" tamanho={12} /> Preenchi valor de compra
+                {unidade
+                  ? ` (${fmtMoeda(unidade.valor)} da unidade${
+                      valorM2Da(unidade) !== null ? `, ${fmtMoeda(valorM2Da(unidade))}/m²` : ''
+                    })`
+                  : ''}
+                {mesesAteAEntrega(empreendimento.entrega) !== null ? ' e o prazo até a entrega prevista' : ''}. O que
+                já foi pago e o saldo devedor continuam com você.
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="grade">
           <Campo rotulo="Valor de compra" obrigatorio dica="R$" erro={erros.valorCompra}>

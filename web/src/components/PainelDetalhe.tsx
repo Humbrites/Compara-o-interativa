@@ -41,6 +41,7 @@ interface Props {
   onAdicionarFluxo: () => void
   onAdicionarUnidade: () => void
   onCalcularCub: () => void
+  onSimularInvestimento: () => void
   onCompararCom: () => void
   onFechar: () => void
 }
@@ -53,6 +54,7 @@ export function PainelDetalhe({
   onAdicionarFluxo,
   onAdicionarUnidade,
   onCalcularCub,
+  onSimularInvestimento,
   onCompararCom,
   onFechar,
 }: Props) {
@@ -169,12 +171,19 @@ export function PainelDetalhe({
             </p>
           )}
 
-          {podeComparar && (
-            <button type="button" className="btn btn--secundario btn--bloco" onClick={onCompararCom} style={{ marginBottom: 'var(--e5)' }}>
-              <Icone nome="balanca" tamanho={15} />
-              Comparar com outro empreendimento
+          <div className="painel__ferramentas">
+            {podeComparar && (
+              <button type="button" className="btn btn--secundario btn--bloco" onClick={onCompararCom}>
+                <Icone nome="balanca" tamanho={15} />
+                Comparar com outro empreendimento
+              </button>
+            )}
+
+            <button type="button" className="btn btn--secundario btn--bloco" onClick={onSimularInvestimento}>
+              <Icone nome="grafico" tamanho={15} />
+              Simular investimento
             </button>
-          )}
+          </div>
 
           <section className="bloco">
             <h3 className="bloco__titulo">
