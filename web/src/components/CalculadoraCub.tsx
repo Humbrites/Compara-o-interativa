@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { FluxoInput } from '../types'
 import { indiceFixo, lerNumero, simular, fmtPercentual, MAX_MESES, type Simulacao } from '../lib/cub'
 import { exportarCsv, exportarPdf } from '../lib/exportarSimulacao'
@@ -116,7 +116,6 @@ export function CalculadoraCub({ titulo, valorSugerido, onFechar, onGerarFluxo, 
   const [erros, setErros] = useState<Record<string, string>>({})
   const [simulacao, setSimulacao] = useState<Simulacao | null>(null)
   const [gerando, setGerando] = useState(false)
-  const areaGraficos = useRef<HTMLDivElement>(null)
 
   function mudar(campo: keyof Formulario, valor: string) {
     setForm((atual) => ({ ...atual, [campo]: valor }))
@@ -164,9 +163,7 @@ export function CalculadoraCub({ titulo, valorSugerido, onFechar, onGerarFluxo, 
 
   function baixarPdf() {
     if (!simulacao) return
-    // Leva os graficos ja desenhados para a folha impressa.
-    const svgs = [...(areaGraficos.current?.querySelectorAll('figure') ?? [])].map((figura) => figura.outerHTML)
-    const abriu = exportarPdf(simulacao, titulo, svgs)
+    const abriu = exportarPdf(simulacao, titulo)
     if (!abriu) avisar('O navegador bloqueou a janela de impressão — libere os pop-ups do site', 'erro')
   }
 
@@ -428,7 +425,7 @@ export function CalculadoraCub({ titulo, valorSugerido, onFechar, onGerarFluxo, 
             </div>
           </section>
 
-          <section className="form-secao" ref={areaGraficos}>
+          <section className="form-secao">
             <h3 className="form-secao__titulo">
               <Icone nome="grafico" tamanho={13} />
               Evolução mês a mês

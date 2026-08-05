@@ -5,8 +5,9 @@ import { fmtMoeda } from './format'
 /**
  * Exportacoes sem biblioteca externa:
  * - Excel: CSV com BOM e ";" — o que o Excel pt-BR abre com dois cliques.
- * - PDF: janela de impressao do proprio navegador ("Salvar como PDF"), com
- *   os graficos ja renderizados indo junto.
+ * - PDF: janela de impressao do proprio navegador ("Salvar como PDF"), com o
+ *   resumo e a tabela mes a mes. Os graficos ficam so na tela: no papel eles
+ *   ocupavam o espaco que a tabela usa melhor.
  */
 
 function baixar(conteudo: BlobPart, nomeArquivo: string, tipo: string) {
@@ -85,19 +86,6 @@ const ESTILO_IMPRESSAO = `
   .item { border: 1px solid #e3e8f0; border-radius: 8px; padding: 8px 10px; }
   .rotulo { font-size: 9px; text-transform: uppercase; letter-spacing: .04em; color: #7b8599; }
   .valor { font-size: 14px; font-weight: 700; }
-  .graficos { display: grid; gap: 14px; margin-bottom: 20px; }
-  .grafico__titulo { font-size: 11px; font-weight: 700; text-transform: uppercase;
-                     letter-spacing: .04em; color: #7b8599; margin-bottom: 4px; }
-  .grafico__descricao { display: block; text-transform: none; letter-spacing: 0;
-                        font-weight: 500; color: #7b8599; }
-  svg { max-width: 100%; }
-  .grafico__grade { stroke: #e3e8f0; stroke-width: 1; }
-  .grafico__tick { fill: #7b8599; font-size: 10px; }
-  .grafico__linha { fill: none; stroke: #4169d6; stroke-width: 2; }
-  .grafico__preenchimento { fill: rgba(65,105,214,.14); stroke: none; }
-  .grafico__ponto { fill: #4169d6; stroke: #fff; stroke-width: 2; }
-  .grafico__barra { fill: #4169d6; }
-  .grafico__cursor, .grafico__tooltip { display: none; }
   table { width: 100%; border-collapse: collapse; font-size: 11px; }
   th, td { padding: 5px 8px; border-bottom: 1px solid #e3e8f0; text-align: right;
            font-variant-numeric: tabular-nums; }
@@ -109,7 +97,7 @@ const ESTILO_IMPRESSAO = `
   @media print { thead { display: table-header-group; } tr { break-inside: avoid; } }
 `
 
-export function exportarPdf(simulacao: Simulacao, titulo: string, graficos: string[]) {
+export function exportarPdf(simulacao: Simulacao, titulo: string) {
   const { linhas, resumo } = simulacao
 
   const item = (rotulo: string, valor: string) =>
@@ -145,8 +133,6 @@ export function exportarPdf(simulacao: Simulacao, titulo: string, graficos: stri
     )}
     ${item('Total sem reajuste', fmtMoeda(resumo.totalSemReajuste, true))}
   </div>
-
-  <div class="graficos">${graficos.join('')}</div>
 
   <table>
     <thead>

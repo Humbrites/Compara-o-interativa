@@ -140,8 +140,9 @@ mouse; **a tabela é a leitura exata** — nenhum valor existe só no gráfico.
 
 - **Exportar Excel** baixa um `.csv` com BOM e separador `;` — abre no Excel em
   português com dois cliques, sem passar por biblioteca nenhuma.
-- **Exportar PDF** abre a folha de impressão do navegador (resumo + gráficos + tabela);
-  é só escolher "Salvar como PDF". Se o navegador bloquear pop-up, a tela avisa.
+- **Exportar PDF** abre a folha de impressão do navegador com o **resumo e a tabela mês
+  a mês** — é só escolher "Salvar como PDF". Os gráficos ficam só na tela; no papel a
+  tabela cumpre o papel deles. Se o navegador bloquear pop-up, a tela avisa.
 - **Gerar fluxo de pagamento** cria o fluxo com o nome `CUB 0,70% · 36x`, o número de
   parcelas, a parcela inicial, a entrada (em R$ e em % do imóvel) e um resumo na descrição.
   O fluxo guarda os parâmetros da simulação (`cub_percentual`, `cub_meses`,
