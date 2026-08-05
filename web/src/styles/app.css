@@ -407,7 +407,7 @@ select.entrada {
   /* Sem o minimo o campo encolhia ate cortar o proprio placeholder quando o
      painel lateral abria. */
   min-width: 220px;
-  max-width: 340px;
+  max-width: 420px;
 }
 
 .busca__icone {

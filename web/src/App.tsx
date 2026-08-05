@@ -9,6 +9,7 @@ import { BarraFiltros } from './components/BarraFiltros'
 import { PainelDetalhe } from './components/PainelDetalhe'
 import { FormEmpreendimento } from './components/FormEmpreendimento'
 import { Comparativo } from './components/Comparativo'
+import { ListaEmpreendimentos } from './components/ListaEmpreendimentos'
 import { Icone } from './components/Icones'
 import { Carregando, Estado, Toasts, type Aviso } from './components/ui'
 
@@ -28,6 +29,7 @@ export default function App() {
 
   const [form, setForm] = useState<EstadoForm | null>(null)
   const [comparando, setComparando] = useState(false)
+  const [vendoLista, setVendoLista] = useState(false)
 
   const [avisos, setAvisos] = useState<Aviso[]>([])
   const proximoAviso = useRef(1)
@@ -152,7 +154,7 @@ export default function App() {
         <div className="coluna-mapa">
           {!carregando && !erroCarga && lista.length > 0 && (
             <>
-              <Kpis indicadores={indicadores} onIrPara={irPara} />
+              <Kpis indicadores={indicadores} onIrPara={irPara} onVerLista={() => setVendoLista(true)} />
               <BarraFiltros filtros={filtros} onMudar={setFiltros} lista={lista} totalFiltrado={filtrados.length} />
             </>
           )}
@@ -235,6 +237,27 @@ export default function App() {
           onSalvar={salvarEmpreendimento}
           onMudouFluxos={() => void carregar()}
           avisar={avisar}
+        />
+      )}
+
+      {vendoLista && (
+        <ListaEmpreendimentos
+          lista={lista}
+          selecionado={selecionadoA}
+          onSelecionar={(id) => {
+            selecionar(id)
+            setVendoLista(false)
+          }}
+          onEditar={(e) => {
+            setVendoLista(false)
+            setForm({ empreendimento: e })
+          }}
+          onExcluir={(e) => void excluirEmpreendimento(e)}
+          onAdicionar={() => {
+            setVendoLista(false)
+            setForm({ empreendimento: null })
+          }}
+          onFechar={() => setVendoLista(false)}
         />
       )}
 

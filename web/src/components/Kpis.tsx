@@ -9,17 +9,24 @@ interface CartaoProps {
   detalhe?: string
   variante?: 'barato' | 'caro'
   onClick?: () => void
+  titulo?: string
 }
 
-function Cartao({ icone, rotulo, valor, detalhe, variante, onClick }: CartaoProps) {
+function Cartao({ icone, rotulo, valor, detalhe, variante, onClick, titulo }: CartaoProps) {
   const classes = ['kpi']
   if (variante) classes.push(`kpi--${variante}`)
+  if (onClick) classes.push('kpi--clicavel')
 
   const conteudo = (
     <>
       <div className="kpi__topo">
         <Icone nome={icone} tamanho={13} />
         <span className="kpi__rotulo">{rotulo}</span>
+        {onClick && (
+          <span className="kpi__seta">
+            <Icone nome="seta_direita" tamanho={13} />
+          </span>
+        )}
       </div>
       <div className="kpi__valor">{valor}</div>
       {detalhe && (
@@ -30,10 +37,11 @@ function Cartao({ icone, rotulo, valor, detalhe, variante, onClick }: CartaoProp
     </>
   )
 
-  // Os cartoes de mais barato/mais caro levam ao empreendimento no mapa.
+  // Cartoes clicaveis: "Empreendimentos" abre a lista; mais barato/caro levam
+  // ao empreendimento no mapa.
   if (onClick) {
     return (
-      <button type="button" className={classes.join(' ')} onClick={onClick} style={{ textAlign: 'left' }}>
+      <button type="button" className={classes.join(' ')} onClick={onClick} title={titulo}>
         {conteudo}
       </button>
     )
@@ -45,14 +53,22 @@ function Cartao({ icone, rotulo, valor, detalhe, variante, onClick }: CartaoProp
 interface Props {
   indicadores: Indicadores
   onIrPara: (id: number) => void
+  onVerLista: () => void
 }
 
-export function Kpis({ indicadores, onIrPara }: Props) {
+export function Kpis({ indicadores, onIrPara, onVerLista }: Props) {
   const { total, precoMedioM2, maiorMetragem, menorMetragem, maisBarato, maisCaro } = indicadores
 
   return (
     <div className="kpis">
-      <Cartao icone="predio" rotulo="Empreendimentos" valor={String(total)} detalhe="no filtro atual" />
+      <Cartao
+        icone="predio"
+        rotulo="Empreendimentos"
+        valor={String(total)}
+        detalhe="ver todos os cadastrados"
+        onClick={onVerLista}
+        titulo="Abrir a lista de empreendimentos cadastrados"
+      />
 
       <Cartao
         icone="dinheiro"

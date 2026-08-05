@@ -31,6 +31,31 @@
   transform: translateY(-1px);
 }
 
+/* Cartao que abre alguma coisa: texto alinhado e affordance no hover. */
+.kpi--clicavel {
+  text-align: left;
+  border-color: var(--borda-forte);
+}
+
+.kpi--clicavel:hover {
+  border-color: var(--marca-400);
+  background: var(--marca-50);
+}
+
+.kpi__seta {
+  margin-left: auto;
+  display: inline-flex;
+  color: var(--texto-3);
+  opacity: 0;
+  transform: translateX(-3px);
+  transition: opacity var(--transicao), transform var(--transicao);
+}
+
+.kpi--clicavel:hover .kpi__seta {
+  opacity: 1;
+  transform: none;
+}
+
 .kpi__topo {
   display: flex;
   align-items: center;
@@ -101,6 +126,32 @@
   border-bottom: 1px solid var(--borda);
   flex-wrap: wrap;
   flex-shrink: 0;
+}
+
+/* Painel revelado pelo botao "Filtros" — nasce recolhido. */
+.filtros--painel {
+  border-top: none;
+  padding-top: 0;
+  animation: surgir var(--transicao) both;
+}
+
+.filtros__contador {
+  display: inline-grid;
+  place-items: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 5px;
+  border-radius: var(--raio-pill);
+  background: var(--marca-600);
+  color: var(--texto-invertido);
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.btn--ativo {
+  background: var(--marca-50);
+  border-color: var(--marca-400);
+  color: var(--marca-700);
 }
 
 .filtros__select {
@@ -990,6 +1041,172 @@
   .texto-livre {
     grid-template-columns: 1fr;
   }
+}
+
+/* ==========================================================================
+   Guia "Empreendimentos cadastrados"
+   ========================================================================== */
+
+.tabela-lista__area {
+  /* A tabela e larga: rola sozinha em vez de estourar a largura da pagina. */
+  overflow-x: auto;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-lg);
+}
+
+.tabela-lista {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: var(--superficie);
+  font-size: 13px;
+}
+
+.tabela-lista th,
+.tabela-lista td {
+  padding: var(--e2) var(--e3);
+  border-bottom: 1px solid var(--borda);
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.tabela-lista thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--superficie-2);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--texto-3);
+  padding: 0;
+}
+
+.tabela-lista thead th:not(:has(button)) {
+  padding: var(--e2) var(--e3);
+}
+
+.tabela-lista tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.tabela-lista tbody tr {
+  cursor: pointer;
+  transition: background var(--transicao);
+}
+
+.tabela-lista tbody tr:hover {
+  background: var(--marca-50);
+}
+
+.tabela-lista__linha--ativa {
+  background: var(--marca-50);
+  box-shadow: inset 3px 0 0 var(--marca-600);
+}
+
+.tabela-lista__ordenar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: var(--e2) var(--e3);
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--texto-3);
+  transition: color var(--transicao), background var(--transicao);
+}
+
+.tabela-lista__ordenar:hover {
+  background: var(--superficie-3);
+  color: var(--texto);
+}
+
+.tabela-lista__ordenar--ativa {
+  color: var(--marca-700);
+}
+
+.tabela-lista__num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.tabela-lista__num .tabela-lista__ordenar {
+  justify-content: flex-end;
+}
+
+.tabela-lista__valor {
+  font-weight: 700;
+  color: var(--marca-700);
+}
+
+.tabela-lista__emp {
+  display: flex;
+  align-items: center;
+  gap: var(--e3);
+  min-width: 0;
+}
+
+.tabela-lista__foto {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--raio-sm);
+  object-fit: cover;
+  flex-shrink: 0;
+  background: var(--superficie-3);
+}
+
+.tabela-lista__foto--vazia {
+  display: grid;
+  place-items: center;
+  color: var(--texto-3);
+}
+
+.tabela-lista__texto {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.tabela-lista__nome {
+  font-weight: 650;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tabela-lista__sub {
+  font-size: 11.5px;
+  color: var(--texto-3);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tabela-lista__vazio {
+  color: var(--texto-3);
+}
+
+.tabela-lista__aviso {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 2px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--alerta);
+}
+
+.tabela-lista__acoes {
+  display: flex;
+  gap: 2px;
+  justify-content: flex-end;
 }
 
 /* ==========================================================================
