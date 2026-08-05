@@ -4,6 +4,8 @@ import type {
   FluxoPagamento,
   FluxoInput,
   ImagemEmpreendimento,
+  Unidade,
+  UnidadeInput,
 } from '../types'
 
 /** Resposta dos endpoints de imagem: a galeria inteira, ja na ordem. */
@@ -50,6 +52,14 @@ export const api = {
     request<FluxoPagamento>(`/api/fluxos/${id}`, { method: 'PUT', body: JSON.stringify(dados) }),
 
   excluirFluxo: (id: number) => request<void>(`/api/fluxos/${id}`, { method: 'DELETE' }),
+
+  criarUnidade: (dados: UnidadeInput) =>
+    request<Unidade>('/api/unidades', { method: 'POST', body: JSON.stringify(dados) }),
+
+  editarUnidade: (id: number, dados: UnidadeInput) =>
+    request<Unidade>(`/api/unidades/${id}`, { method: 'PUT', body: JSON.stringify(dados) }),
+
+  excluirUnidade: (id: number) => request<void>(`/api/unidades/${id}`, { method: 'DELETE' }),
 
   enviarImagens: (empreendimentoId: number, arquivos: File[]) => {
     const corpo = new FormData()

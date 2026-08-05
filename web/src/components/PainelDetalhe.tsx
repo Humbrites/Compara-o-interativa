@@ -1,10 +1,22 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Empreendimento } from '../types'
-import { fmtArea, fmtEntrega, fmtFaixaMetragem, fmtInteiro, fmtMoeda, fmtTexto, TRACO } from '../lib/format'
+import {
+  fmtArea,
+  fmtEntrega,
+  fmtFaixaInteiro,
+  fmtFaixaMetragem,
+  fmtFaixaMoeda,
+  fmtInteiro,
+  fmtMoeda,
+  fmtTexto,
+  TRACO,
+} from '../lib/format'
 import { corDoStatus } from '../lib/opcoes'
 import { fotosDe } from '../lib/imagens'
+import { resumoUnidades } from '../lib/unidades'
 import { Icone, type NomeIcone } from './Icones'
 import { CartaoFluxo } from './CartaoFluxo'
+import { CartaoUnidade } from './CartaoUnidade'
 import { Galeria } from './Galeria'
 import { Selo } from './ui'
 
@@ -27,6 +39,7 @@ interface Props {
   onEditar: () => void
   onExcluir: () => void
   onAdicionarFluxo: () => void
+  onAdicionarUnidade: () => void
   onCompararCom: () => void
   onFechar: () => void
 }
@@ -37,12 +50,15 @@ export function PainelDetalhe({
   onEditar,
   onExcluir,
   onAdicionarFluxo,
+  onAdicionarUnidade,
   onCompararCom,
   onFechar,
 }: Props) {
   const local = [e.bairro, e.cidade].filter(Boolean).join(', ')
 
   const fotos = useMemo(() => fotosDe(e), [e])
+  const resumo = useMemo(() => resumoUnidades(e.unidades), [e.unidades])
+  const temUnidades = e.unidades.length > 0
   // A galeria some quando todo link quebra; ai o nome volta para o cabecalho.
   const [galeriaVazia, setGaleriaVazia] = useState(false)
   useEffect(() => setGaleriaVazia(false), [e.id])
@@ -111,15 +127,45 @@ export function PainelDetalhe({
           )}
 
           <div className="ficha">
-            <ItemFicha icone="cama" rotulo="Dormitórios" valor={fmtInteiro(e.dormitorios)} />
+            <ItemFicha
+              icone="cama"
+              rotulo="Dormitórios"
+              valor={
+                temUnidades
+                  ? fmtFaixaInteiro(resumo.dormitorios.min, resumo.dormitorios.max)
+                  : fmtInteiro(e.dormitorios)
+              }
+            />
             <ItemFicha icone="predio" rotulo="Suítes" valor={fmtInteiro(e.suites)} />
             <ItemFicha icone="banheira" rotulo="Banheiros" valor={fmtInteiro(e.banheiros)} />
-            <ItemFicha icone="carro" rotulo="Vagas" valor={fmtInteiro(e.vagas)} />
-            <ItemFicha icone="regua" rotulo="Metragem" valor={fmtFaixaMetragem(e.metragem_min, e.metragem_max)} />
-            <ItemFicha icone="grafico" rotulo="Metragem máx." valor={fmtArea(e.metragem_max)} />
+            <ItemFicha
+              icone="carro"
+              rotulo="Vagas"
+              valor={temUnidades ? fmtFaixaInteiro(resumo.vagas.min, resumo.vagas.max) : fmtInteiro(e.vagas)}
+            />
+            <ItemFicha
+              icone="regua"
+              rotulo="Metragem"
+              valor={
+                temUnidades
+                  ? fmtFaixaMetragem(resumo.metragem.min, resumo.metragem.max)
+                  : fmtFaixaMetragem(e.metragem_min, e.metragem_max)
+              }
+            />
+            <ItemFicha
+              icone="grafico"
+              rotulo="Metragem máx."
+              valor={temUnidades ? fmtArea(resumo.metragem.max) : fmtArea(e.metragem_max)}
+            />
             <ItemFicha icone="obra" rotulo="Status" valor={fmtTexto(e.status_obra)} />
             <ItemFicha icone="calendario" rotulo="Entrega" valor={fmtEntrega(e.entrega)} />
           </div>
+
+          {temUnidades && (
+            <p className="campo__dica" style={{ marginTop: 'calc(var(--e4) * -1 + var(--e2))', marginBottom: 'var(--e4)' }}>
+              <Icone nome="info" tamanho={12} /> Dormitórios, vagas e metragem vêm das unidades cadastradas.
+            </p>
+          )}
 
           {podeComparar && (
             <button type="button" className="btn btn--secundario btn--bloco" onClick={onCompararCom} style={{ marginBottom: 'var(--e5)' }}>
@@ -127,6 +173,50 @@ export function PainelDetalhe({
               Comparar com outro empreendimento
             </button>
           )}
+
+          <section className="bloco">
+            <h3 className="bloco__titulo">
+              <Icone nome="predio" tamanho={13} />
+              Unidades
+              {temUnidades && <span className="bloco__contador">{resumo.total}</span>}
+              <button type="button" className="btn btn--fantasma btn--pequeno" onClick={onAdicionarUnidade}>
+                <Icone nome="mais" tamanho={13} />
+                Adicionar
+              </button>
+            </h3>
+
+            {!temUnidades ? (
+              <div className="observacao">
+                Nenhuma unidade cadastrada. Cadastre as plantas (metragem, dormitórios, vagas, posição e preço) para
+                comparar unidade a unidade.
+              </div>
+            ) : (
+              <>
+                <div className="resumo-unidades">
+                  <div className="resumo-unidades__item">
+                    <span className="resumo-unidades__rotulo">Disponíveis</span>
+                    <span className="resumo-unidades__valor">
+                      {resumo.disponiveis} de {resumo.total}
+                    </span>
+                  </div>
+                  <div className="resumo-unidades__item">
+                    <span className="resumo-unidades__rotulo">Valores</span>
+                    <span className="resumo-unidades__valor">{fmtFaixaMoeda(resumo.valor.min, resumo.valor.max)}</span>
+                  </div>
+                  <div className="resumo-unidades__item">
+                    <span className="resumo-unidades__rotulo">Valor do m²</span>
+                    <span className="resumo-unidades__valor">
+                      {fmtFaixaMoeda(resumo.valorM2.min, resumo.valorM2.max)}
+                    </span>
+                  </div>
+                </div>
+
+                {e.unidades.map((unidade, indice) => (
+                  <CartaoUnidade key={unidade.id} unidade={unidade} indice={indice} />
+                ))}
+              </>
+            )}
+          </section>
 
           <section className="bloco">
             <h3 className="bloco__titulo">
@@ -140,7 +230,8 @@ export function PainelDetalhe({
 
             {e.fluxos.length === 0 ? (
               <div className="observacao">
-                Nenhum fluxo de pagamento cadastrado. Adicione a tabela de venda para que ela entre no comparativo.
+                Nenhum fluxo geral cadastrado. A tabela de venda pode ficar aqui (vale para o empreendimento inteiro)
+                ou dentro de cada unidade.
               </div>
             ) : (
               e.fluxos.map((fluxo, indice) => <CartaoFluxo key={fluxo.id} fluxo={fluxo} indice={indice} />)

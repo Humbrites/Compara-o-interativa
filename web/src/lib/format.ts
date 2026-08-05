@@ -36,6 +36,20 @@ export function fmtFaixaMetragem(min: number | null, max: number | null): string
   return fmtArea(min ?? max)
 }
 
+/** Faixa de inteiros: "2 a 3", ou so o numero quando min e max coincidem. */
+export function fmtFaixaInteiro(min: number | null, max: number | null): string {
+  if (min == null && max == null) return TRACO
+  if (min != null && max != null) return min === max ? String(min) : `${min} a ${max}`
+  return String(min ?? max)
+}
+
+/** Faixa de valores: "R$ 486 mil – R$ 1,5 mi" vira "R$ 486.000 – R$ 1.560.000". */
+export function fmtFaixaMoeda(min: number | null, max: number | null): string {
+  if (min == null && max == null) return TRACO
+  if (min != null && max != null) return min === max ? fmtMoeda(min) : `${fmtMoeda(min)} – ${fmtMoeda(max)}`
+  return fmtMoeda(min ?? max)
+}
+
 /**
  * A entrega e guardada como texto livre ("2027-06", "Dez/2027", "2028").
  * Aqui so tentamos deixar bonito o formato ISO vindo do input month.

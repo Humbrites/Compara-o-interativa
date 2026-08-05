@@ -1,8 +1,15 @@
 import { useMemo, useState } from 'react'
-import type { Empreendimento } from '../types'
-import { compararEmpreendimentos, compararFluxos, textosDoFluxo, type LinhaComparativo } from '../lib/comparar'
+import type { Empreendimento, FluxoPagamento, Unidade } from '../types'
+import {
+  compararEmpreendimentos,
+  compararFluxos,
+  compararUnidades,
+  textosDoFluxo,
+  type LinhaComparativo,
+} from '../lib/comparar'
 import { fmtMoeda, fmtTexto } from '../lib/format'
 import { capaDe } from '../lib/imagens'
+import { localizacaoUnidade, rotuloUnidade } from '../lib/unidades'
 import { Icone } from './Icones'
 import { Modal, Estado } from './ui'
 
@@ -197,6 +204,72 @@ function SeletorLateral({
 }
 
 /* ------------------------------------------------------------------ */
+/* Fluxos disponiveis de um lado                                       */
+/* ------------------------------------------------------------------ */
+
+interface OpcaoFluxo {
+  fluxo: FluxoPagamento
+  rotulo: string
+}
+
+/**
+ * O que aparece no seletor de fluxo: primeiro as tabelas da unidade
+ * escolhida, depois as gerais do empreendimento.
+ */
+function opcoesDeFluxo(e: Empreendimento, unidade: Unidade | null): OpcaoFluxo[] {
+  const nome = (fluxo: FluxoPagamento, indice: number) => fluxo.nome?.trim() || `Fluxo ${indice + 1}`
+
+  const daUnidade = (unidade?.fluxos ?? []).map((fluxo, indice) => ({
+    fluxo,
+    rotulo: `${nome(fluxo, indice)} · ${rotuloUnidade(unidade as Unidade)}`,
+  }))
+
+  const gerais = e.fluxos.map((fluxo, indice) => ({
+    fluxo,
+    rotulo: unidade ? `${nome(fluxo, indice)} · geral` : nome(fluxo, indice),
+  }))
+
+  return [...daUnidade, ...gerais]
+}
+
+/** Seletor de unidade de um dos lados. */
+function SeletorUnidade({
+  empreendimento: e,
+  valor,
+  onMudar,
+}: {
+  empreendimento: Empreendimento
+  valor: number | null
+  onMudar: (id: number | null) => void
+}) {
+  return (
+    <>
+      <span className="seletor-fluxo__rotulo">Unidade de {e.nome}:</span>
+      <select
+        className="entrada filtros__select"
+        value={valor ?? ''}
+        onChange={(evento) => onMudar(evento.target.value ? Number(evento.target.value) : null)}
+        disabled={e.unidades.length === 0}
+      >
+        {e.unidades.length === 0 ? (
+          <option>Sem unidade cadastrada</option>
+        ) : (
+          <>
+            <option value="">Empreendimento (sem unidade)</option>
+            {e.unidades.map((unidade, indice) => (
+              <option key={unidade.id} value={unidade.id}>
+                {rotuloUnidade(unidade, indice)}
+                {localizacaoUnidade(unidade) ? ` — ${localizacaoUnidade(unidade)}` : ''}
+              </option>
+            ))}
+          </>
+        )}
+      </select>
+    </>
+  )
+}
+
+/* ------------------------------------------------------------------ */
 /* Modal principal                                                     */
 /* ------------------------------------------------------------------ */
 
@@ -210,23 +283,42 @@ interface Props {
 }
 
 export function Comparativo({ a, b, lista, onEscolherB, onTrocarLados, onFechar }: Props) {
-  // Qual fluxo de cada lado entra na tabela comparativa.
-  const [fluxoA, setFluxoA] = useState(0)
-  const [fluxoB, setFluxoB] = useState(0)
+  // Unidade escolhida de cada lado (null = comparar so o empreendimento).
+  const [unidadeAId, setUnidadeAId] = useState<number | null>(null)
+  const [unidadeBId, setUnidadeBId] = useState<number | null>(null)
+  // Qual fluxo de cada lado entra na tabela comparativa (por id, porque a
+  // lista muda de tamanho conforme a unidade escolhida).
+  const [fluxoAId, setFluxoAId] = useState<number | null>(null)
+  const [fluxoBId, setFluxoBId] = useState<number | null>(null)
+
+  const unidadeA = useMemo(() => a.unidades.find((u) => u.id === unidadeAId) ?? null, [a.unidades, unidadeAId])
+  const unidadeB = useMemo(() => b?.unidades.find((u) => u.id === unidadeBId) ?? null, [b, unidadeBId])
+
+  // Com uma unidade escolhida, a tabela dela vem primeiro; as gerais seguem
+  // valendo para os dois casos.
+  const opcoesA = useMemo(() => opcoesDeFluxo(a, unidadeA), [a, unidadeA])
+  const opcoesB = useMemo(() => (b ? opcoesDeFluxo(b, unidadeB) : []), [b, unidadeB])
+
+  const escolhidoA = opcoesA.find((o) => o.fluxo.id === fluxoAId) ?? opcoesA[0] ?? null
+  const escolhidoB = opcoesB.find((o) => o.fluxo.id === fluxoBId) ?? opcoesB[0] ?? null
 
   const linhasGerais = useMemo(() => (b ? compararEmpreendimentos(a, b) : []), [a, b])
-  const linhasFluxo = useMemo(() => {
-    if (!b) return []
-    return compararFluxos(a.fluxos[fluxoA] ?? null, b.fluxos[fluxoB] ?? null)
-  }, [a, b, fluxoA, fluxoB])
+  const linhasUnidade = useMemo(
+    () => (unidadeA || unidadeB ? compararUnidades(unidadeA, unidadeB) : []),
+    [unidadeA, unidadeB],
+  )
+  const linhasFluxo = useMemo(
+    () => compararFluxos(escolhidoA?.fluxo ?? null, escolhidoB?.fluxo ?? null),
+    [escolhidoA, escolhidoB],
+  )
 
   const placar = useMemo(() => {
-    const todas = [...linhasGerais, ...linhasFluxo]
+    const todas = [...linhasGerais, ...linhasUnidade, ...linhasFluxo]
     return {
       a: todas.filter((l) => l.vencedor === 'a').length,
       b: todas.filter((l) => l.vencedor === 'b').length,
     }
-  }, [linhasGerais, linhasFluxo])
+  }, [linhasGerais, linhasUnidade, linhasFluxo])
 
   if (!b) {
     return (
@@ -240,8 +332,8 @@ export function Comparativo({ a, b, lista, onEscolherB, onTrocarLados, onFechar 
     )
   }
 
-  const textosA = textosDoFluxo(a.fluxos[fluxoA] ?? null)
-  const textosB = textosDoFluxo(b.fluxos[fluxoB] ?? null)
+  const textosA = textosDoFluxo(escolhidoA?.fluxo ?? null)
+  const textosB = textosDoFluxo(escolhidoB?.fluxo ?? null)
   const temTextoLivre = textosA.descricao || textosB.descricao || textosA.observacoes || textosB.observacoes
 
   return (
@@ -279,21 +371,51 @@ export function Comparativo({ a, b, lista, onEscolherB, onTrocarLados, onFechar 
         />
       </div>
 
+      {(a.unidades.length > 0 || b.unidades.length > 0) && (
+        <div className="bloco-comp">
+          <div className="seletor-fluxo">
+            <SeletorUnidade empreendimento={a} valor={unidadeAId} onMudar={setUnidadeAId} />
+            <SeletorUnidade empreendimento={b} valor={unidadeBId} onMudar={setUnidadeBId} />
+          </div>
+
+          {linhasUnidade.length > 0 ? (
+            <TabelaComparativa
+              legenda="Unidade escolhida"
+              linhas={linhasUnidade}
+              nomeA={unidadeA ? rotuloUnidade(unidadeA) : a.nome}
+              nomeB={unidadeB ? rotuloUnidade(unidadeB) : b.nome}
+            />
+          ) : (
+            <p className="campo__dica">
+              <Icone nome="info" tamanho={12} /> Escolha uma unidade de cada lado para comparar metragem, dormitórios,
+              vagas, posição e preço unidade a unidade.
+            </p>
+          )}
+
+          {(unidadeA || unidadeB) && !(unidadeA && unidadeB) && (
+            <p className="campo__dica" style={{ marginTop: 'var(--e3)' }}>
+              <Icone nome="info" tamanho={12} /> Só um lado tem unidade escolhida — sem os dois valores, nenhuma linha
+              é destacada.
+            </p>
+          )}
+        </div>
+      )}
+
       <div className="bloco-comp">
         <div className="seletor-fluxo">
           <span className="seletor-fluxo__rotulo">Fluxo de {a.nome}:</span>
           <select
             className="entrada filtros__select"
-            value={fluxoA}
-            onChange={(e) => setFluxoA(Number(e.target.value))}
-            disabled={a.fluxos.length === 0}
+            value={escolhidoA?.fluxo.id ?? ''}
+            onChange={(e) => setFluxoAId(e.target.value ? Number(e.target.value) : null)}
+            disabled={opcoesA.length === 0}
           >
-            {a.fluxos.length === 0 ? (
+            {opcoesA.length === 0 ? (
               <option>Sem fluxo cadastrado</option>
             ) : (
-              a.fluxos.map((fluxo, indice) => (
-                <option key={fluxo.id} value={indice}>
-                  {fluxo.nome?.trim() || `Fluxo ${indice + 1}`}
+              opcoesA.map((opcao) => (
+                <option key={opcao.fluxo.id} value={opcao.fluxo.id}>
+                  {opcao.rotulo}
                 </option>
               ))
             )}
@@ -302,16 +424,16 @@ export function Comparativo({ a, b, lista, onEscolherB, onTrocarLados, onFechar 
           <span className="seletor-fluxo__rotulo">Fluxo de {b.nome}:</span>
           <select
             className="entrada filtros__select"
-            value={fluxoB}
-            onChange={(e) => setFluxoB(Number(e.target.value))}
-            disabled={b.fluxos.length === 0}
+            value={escolhidoB?.fluxo.id ?? ''}
+            onChange={(e) => setFluxoBId(e.target.value ? Number(e.target.value) : null)}
+            disabled={opcoesB.length === 0}
           >
-            {b.fluxos.length === 0 ? (
+            {opcoesB.length === 0 ? (
               <option>Sem fluxo cadastrado</option>
             ) : (
-              b.fluxos.map((fluxo, indice) => (
-                <option key={fluxo.id} value={indice}>
-                  {fluxo.nome?.trim() || `Fluxo ${indice + 1}`}
+              opcoesB.map((opcao) => (
+                <option key={opcao.fluxo.id} value={opcao.fluxo.id}>
+                  {opcao.rotulo}
                 </option>
               ))
             )}
@@ -339,12 +461,12 @@ export function Comparativo({ a, b, lista, onEscolherB, onTrocarLados, onFechar 
           </div>
         )}
 
-        {(a.fluxos.length === 0 || b.fluxos.length === 0) && (
+        {(opcoesA.length === 0 || opcoesB.length === 0) && (
           <p className="campo__dica" style={{ marginTop: 'var(--e3)' }}>
             <Icone nome="info" tamanho={12} />{' '}
-            {a.fluxos.length === 0 && b.fluxos.length === 0
+            {opcoesA.length === 0 && opcoesB.length === 0
               ? 'Nenhum dos dois tem fluxo de pagamento cadastrado.'
-              : `${a.fluxos.length === 0 ? a.nome : b.nome} ainda não tem fluxo de pagamento cadastrado.`}
+              : `${opcoesA.length === 0 ? a.nome : b.nome} ainda não tem fluxo de pagamento cadastrado.`}
           </p>
         )}
       </div>

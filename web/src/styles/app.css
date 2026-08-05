@@ -686,13 +686,28 @@ select.entrada {
   flex-shrink: 0;
 }
 
+/* E um <button>: com o cadastro salvo da para pular de etapa clicando. */
 .passo {
   display: flex;
   align-items: center;
   gap: var(--e2);
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: inherit;
   font-size: 12.5px;
   font-weight: 600;
   color: var(--texto-3);
+  text-align: left;
+  cursor: pointer;
+}
+
+.passo:disabled {
+  cursor: default;
+}
+
+.passo:not(:disabled):hover {
+  color: var(--marca-600);
 }
 
 .passo__bolha {

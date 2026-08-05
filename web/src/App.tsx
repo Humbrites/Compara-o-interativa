@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { Empreendimento, EmpreendimentoInput, Filtros, ImagemEmpreendimento } from './types'
+import type { Empreendimento, EmpreendimentoInput, Filtros, ImagemEmpreendimento, Unidade } from './types'
 import { FILTROS_VAZIOS } from './types'
 import { api } from './lib/api'
 import { aplicarFiltros, calcularIndicadores } from './lib/dashboard'
@@ -16,6 +16,7 @@ import { Carregando, Estado, Toasts, type Aviso } from './components/ui'
 interface EstadoForm {
   empreendimento: Empreendimento | null
   iniciarEmFluxos?: boolean
+  iniciarEmUnidades?: boolean
 }
 
 export default function App() {
@@ -95,7 +96,7 @@ export default function App() {
   }
 
   async function excluirEmpreendimento(e: Empreendimento) {
-    if (!window.confirm(`Excluir "${e.nome}"? Os fluxos de pagamento dele também serão removidos.`)) return
+    if (!window.confirm(`Excluir "${e.nome}"? As unidades, os fluxos de pagamento e as fotos dele também serão removidos.`)) return
 
     try {
       await api.excluir(e.id)
@@ -115,6 +116,11 @@ export default function App() {
   /** A galeria muda dentro do modal; o painel e as listas acompanham na hora. */
   function atualizarImagens(id: number, imagens: ImagemEmpreendimento[]) {
     setLista((atual) => atual.map((e) => (e.id === id ? { ...e, imagens } : e)))
+  }
+
+  /** Mesma coisa para as unidades (e os fluxos que moram dentro delas). */
+  function atualizarUnidades(id: number, unidades: Unidade[]) {
+    setLista((atual) => atual.map((e) => (e.id === id ? { ...e, unidades } : e)))
   }
 
   /* --- Render ------------------------------------------------------------ */
@@ -221,6 +227,7 @@ export default function App() {
               onEditar={() => setForm({ empreendimento: empreendimentoA })}
               onExcluir={() => void excluirEmpreendimento(empreendimentoA)}
               onAdicionarFluxo={() => setForm({ empreendimento: empreendimentoA, iniciarEmFluxos: true })}
+              onAdicionarUnidade={() => setForm({ empreendimento: empreendimentoA, iniciarEmUnidades: true })}
               onCompararCom={() => setComparando(true)}
               onFechar={() => {
                 setSelecionadoA(null)
@@ -235,6 +242,7 @@ export default function App() {
         <FormEmpreendimento
           empreendimento={form.empreendimento}
           iniciarEmFluxos={form.iniciarEmFluxos}
+          iniciarEmUnidades={form.iniciarEmUnidades}
           onFechar={() => {
             setForm(null)
             void carregar()
@@ -242,6 +250,7 @@ export default function App() {
           onSalvar={salvarEmpreendimento}
           onMudouFluxos={() => void carregar()}
           onMudouImagens={atualizarImagens}
+          onMudouUnidades={atualizarUnidades}
           avisar={avisar}
         />
       )}

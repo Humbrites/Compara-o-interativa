@@ -45,12 +45,13 @@ e agrupa os marcadores em *clusters* quando há muitos empreendimentos próximos
 Usa Leaflet com OpenStreetMap: **sem token, sem conta, sem custo**.
 
 **Painel de detalhes** (lado direito) — galeria de fotos, nome, construtora, localização,
-dormitórios, metragem, valor do m², status, entrega e todos os fluxos de pagamento.
+dormitórios, metragem, valor do m², status, entrega, as **unidades** e os fluxos de pagamento.
 A capa navega entre as fotos e um clique amplia em tela cheia (setas e Esc no teclado).
 
 **Comparativo A vs B** — a tela se divide comparando os dois empreendimentos.
 O melhor indicador de cada linha fica **destacado em verde**, e o cabeçalho mostra
-quantos indicadores cada lado venceu.
+quantos indicadores cada lado venceu. Escolhendo uma **unidade** de cada lado, entra
+também a tabela unidade × unidade (metragem, dormitórios, vagas, andar, posição e preço).
 
 **Filtros e busca** — cidade, construtora, tipo, status, dormitórios, faixa de metragem
 e faixa de valor do m²; busca por nome, construtora, cidade ou bairro (ignora acentos:
@@ -61,9 +62,10 @@ metragem, mais barato e mais caro (esses dois são clicáveis e levam ao empreen
 
 ---
 
-## Cadastro em duas etapas
+## Cadastro em três etapas
 
-O botão **Adicionar empreendimento** abre um formulário de duas etapas:
+O botão **Adicionar empreendimento** abre um formulário de três etapas (com o cadastro
+salvo, dá para pular de uma para outra clicando no título da etapa):
 
 **1. Dados do empreendimento** — nome (único campo obrigatório), construtora, cidade,
 bairro, endereço, latitude, longitude, valor médio do m², metragem mínima e máxima,
@@ -80,9 +82,21 @@ funciona: elas sobem assim que o cadastro é criado. Os arquivos ficam em
 `api/data/uploads/` (fora do Git, como o banco) e são servidos em `/uploads/<arquivo>`.
 Excluir a foto — ou o empreendimento inteiro — apaga o arquivo do disco.
 
-**2. Fluxos de pagamento** — depois de salvar, avança direto para o cadastro dos fluxos.
+**2. Unidades** — as plantas que o corretor vende. Cada uma tem identificação, torre/bloco,
+andar e número, posição solar (Norte, Sul, Leste, Oeste e as diagonais) e face (frente, fundos,
+lateral, esquina), metragem privativa e total, dormitórios, suítes, banheiros, vagas, valor,
+valor do m² e situação (disponível, reservada, vendida). **Cada unidade tem os próprios fluxos
+de pagamento**, abertos dentro do cartão dela.
+
+> O valor do m² da unidade é calculado a partir do preço e da metragem privativa — informe
+> só se quiser sobrescrever. Com unidades cadastradas, o painel passa a mostrar a **faixa**
+> delas (metragem, dormitórios e vagas) no lugar dos campos gerais.
+
+**3. Fluxos de pagamento** — as tabelas que valem para o **empreendimento inteiro**.
 Um empreendimento pode ter **vários** (tabela padrão, plano obra, à vista…), cada um com
 entrada, parcelamento, reforços, chaves, financiamento, descrição livre e observações.
+No comparativo, o seletor de fluxo mostra primeiro as tabelas da unidade escolhida e
+depois as gerais.
 
 ---
 
@@ -98,6 +112,10 @@ estiver em branco, ninguém vence (destacar seria enganoso). Valores iguais vira
 | Dormitórios, suítes, banheiros, vagas | o **maior** |
 | Status da obra | a obra **mais avançada** |
 | Entrega prevista | a **mais próxima** |
+| Valor da unidade e valor do m² | o **menor** |
+| Metragem da unidade (privativa e total) | a **maior** |
+| Andar | o **mais alto** |
+| Posição solar, face, torre e situação | ninguém — é preferência do cliente |
 | Entrada | a **menor** (exige menos caixa) |
 | Parcelamento | **mais** parcelas (dilui o desembolso) |
 | Reforços | **menos** reforços |
@@ -130,6 +148,7 @@ compara-interativa/
         │   ├── dashboard.ts filtros, busca e cálculo dos indicadores
         │   ├── format.ts    formatação em pt-BR (R$, m², datas)
         │   ├── imagens.ts   capa e galeria de cada empreendimento
+        │   ├── unidades.ts  rótulo, posição, valor do m² e faixas das unidades
         │   └── opcoes.ts    status da obra, tipos e suas ordens
         └── styles/          design system (tokens.css) e estilos
 ```
@@ -137,9 +156,14 @@ compara-interativa/
 **Banco de dados:** um único arquivo SQLite em `api/data/compara.db`. Backup é copiar
 esse arquivo; ele **não vai para o Git** (cada instalação tem os próprios dados).
 
-**Três tabelas:** `empreendimentos`, `fluxos_pagamento` e `imagens` (relação 1:N — excluir
-um empreendimento remove os fluxos e as fotos dele em cascata). Da foto, o banco guarda só o
-nome do arquivo, o nome original e a posição; o arquivo em si vive em `api/data/uploads/`.
+**Quatro tabelas:** `empreendimentos`, `unidades`, `fluxos_pagamento` e `imagens` — tudo 1:N
+com cascata (excluir o empreendimento leva unidades, fluxos e fotos; excluir a unidade leva os
+fluxos dela). Da foto, o banco guarda só o nome do arquivo, o nome original e a posição; o
+arquivo em si vive em `api/data/uploads/`.
+
+O fluxo de pagamento tem `unidade_id`: **em branco = tabela geral** do empreendimento,
+preenchido = tabela daquela unidade. Foi assim que as tabelas já cadastradas continuaram
+valendo quando as unidades entraram.
 
 ### Rotas da API
 
@@ -153,6 +177,10 @@ nome do arquivo, o nome original e a posição; o arquivo em si vive em `api/dat
 | `POST` | `/api/fluxos` | cria fluxo |
 | `PUT` | `/api/fluxos/:id` | edita fluxo |
 | `DELETE` | `/api/fluxos/:id` | exclui fluxo |
+| `GET` | `/api/empreendimentos/:id/unidades` | lista as unidades com os fluxos delas |
+| `POST` | `/api/unidades` | cria unidade |
+| `PUT` | `/api/unidades/:id` | edita unidade |
+| `DELETE` | `/api/unidades/:id` | exclui unidade (leva os fluxos dela) |
 | `POST` | `/api/empreendimentos/:id/imagens` | envia fotos (multipart, várias de uma vez) |
 | `PUT` | `/api/empreendimentos/:id/imagens/ordem` | reordena — o primeiro id vira a capa |
 | `DELETE` | `/api/imagens/:id` | exclui a foto e o arquivo do disco |

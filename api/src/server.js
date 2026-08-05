@@ -7,7 +7,7 @@ import { createWriteStream } from 'node:fs'
 import { unlink } from 'node:fs/promises'
 import { pipeline } from 'node:stream/promises'
 import { extname, join } from 'node:path'
-import { db, CAMPOS_EMPREENDIMENTO, CAMPOS_FLUXO, sanitizar, UPLOAD_DIR } from './db.js'
+import { db, CAMPOS_EMPREENDIMENTO, CAMPOS_FLUXO, CAMPOS_UNIDADE, sanitizar, UPLOAD_DIR } from './db.js'
 
 const app = Fastify({ logger: true })
 
@@ -41,9 +41,35 @@ const PORT = Number(process.env.PORT || 3210)
 const listarEmpreendimentos = db.prepare('SELECT * FROM empreendimentos ORDER BY nome COLLATE NOCASE')
 const buscarEmpreendimento = db.prepare('SELECT * FROM empreendimentos WHERE id = ?')
 const listarFluxos = db.prepare('SELECT * FROM fluxos_pagamento ORDER BY id')
-const fluxosDoEmpreendimento = db.prepare('SELECT * FROM fluxos_pagamento WHERE empreendimento_id = ? ORDER BY id')
+// Fluxos "gerais": os que valem para o empreendimento inteiro, sem unidade.
+const fluxosDoEmpreendimento = db.prepare(
+  'SELECT * FROM fluxos_pagamento WHERE empreendimento_id = ? AND unidade_id IS NULL ORDER BY id',
+)
 const listarImagens = db.prepare('SELECT * FROM imagens ORDER BY empreendimento_id, ordem, id')
 const imagensDoEmpreendimento = db.prepare('SELECT * FROM imagens WHERE empreendimento_id = ? ORDER BY ordem, id')
+
+// Ordem de leitura do corretor: torre, andar e depois o numero da unidade.
+const ORDEM_UNIDADE = `ORDER BY COALESCE(torre, ''), COALESCE(andar, 999999), COALESCE(numero, ''), id`
+const listarUnidades = db.prepare(`SELECT * FROM unidades ${ORDEM_UNIDADE}`)
+const unidadesDoEmpreendimento = db.prepare(`SELECT * FROM unidades WHERE empreendimento_id = ? ${ORDEM_UNIDADE}`)
+const buscarUnidade = db.prepare('SELECT * FROM unidades WHERE id = ?')
+const fluxosDaUnidade = db.prepare('SELECT * FROM fluxos_pagamento WHERE unidade_id = ? ORDER BY id')
+
+/** Agrupa uma lista pelo campo indicado, preservando a ordem de entrada. */
+function agrupar(linhas, campo) {
+  const mapa = new Map()
+  for (const linha of linhas) {
+    const chave = linha[campo]
+    if (!mapa.has(chave)) mapa.set(chave, [])
+    mapa.get(chave).push(linha)
+  }
+  return mapa
+}
+
+/** Unidade com os fluxos de pagamento dela aninhados. */
+function comFluxos(unidade) {
+  return { ...unidade, fluxos: fluxosDaUnidade.all(unidade.id) }
+}
 
 /** Acrescenta a URL pública ao registro da imagem. */
 function comUrl(imagem) {
@@ -85,22 +111,29 @@ function atualizar(tabela, id, dados) {
 // front trabalha inteiramente em memoria (filtros, busca, comparativo).
 app.get('/api/empreendimentos', () => {
   const empreendimentos = listarEmpreendimentos.all()
+  const todosFluxos = listarFluxos.all()
 
-  const fluxosPorId = new Map()
-  for (const fluxo of listarFluxos.all()) {
-    if (!fluxosPorId.has(fluxo.empreendimento_id)) fluxosPorId.set(fluxo.empreendimento_id, [])
-    fluxosPorId.get(fluxo.empreendimento_id).push(fluxo)
-  }
+  // Fluxo sem unidade e a tabela geral do empreendimento; com unidade, e dela.
+  const fluxosGerais = agrupar(
+    todosFluxos.filter((fluxo) => fluxo.unidade_id === null),
+    'empreendimento_id',
+  )
+  const fluxosPorUnidade = agrupar(
+    todosFluxos.filter((fluxo) => fluxo.unidade_id !== null),
+    'unidade_id',
+  )
 
-  const imagensPorId = new Map()
-  for (const imagem of listarImagens.all()) {
-    if (!imagensPorId.has(imagem.empreendimento_id)) imagensPorId.set(imagem.empreendimento_id, [])
-    imagensPorId.get(imagem.empreendimento_id).push(comUrl(imagem))
-  }
+  const unidadesPorEmpreendimento = agrupar(
+    listarUnidades.all().map((unidade) => ({ ...unidade, fluxos: fluxosPorUnidade.get(unidade.id) || [] })),
+    'empreendimento_id',
+  )
+
+  const imagensPorId = agrupar(listarImagens.all().map(comUrl), 'empreendimento_id')
 
   return empreendimentos.map((e) => ({
     ...e,
-    fluxos: fluxosPorId.get(e.id) || [],
+    fluxos: fluxosGerais.get(e.id) || [],
+    unidades: unidadesPorEmpreendimento.get(e.id) || [],
     imagens: imagensPorId.get(e.id) || [],
   }))
 })
@@ -108,19 +141,25 @@ app.get('/api/empreendimentos', () => {
 app.get('/api/empreendimentos/:id', (req, reply) => {
   const empreendimento = buscarEmpreendimento.get(req.params.id)
   if (!empreendimento) return reply.code(404).send({ erro: 'Empreendimento nao encontrado' })
-  return {
-    ...empreendimento,
-    fluxos: fluxosDoEmpreendimento.all(empreendimento.id),
-    imagens: imagensDoEmpreendimento.all(empreendimento.id).map(comUrl),
-  }
+  return montarEmpreendimento(empreendimento.id)
 })
+
+/** Empreendimento completo: fluxos gerais, unidades (com fluxos) e galeria. */
+function montarEmpreendimento(id) {
+  return {
+    ...buscarEmpreendimento.get(id),
+    fluxos: fluxosDoEmpreendimento.all(id),
+    unidades: unidadesDoEmpreendimento.all(id).map(comFluxos),
+    imagens: imagensDoEmpreendimento.all(id).map(comUrl),
+  }
+}
 
 app.post('/api/empreendimentos', (req, reply) => {
   const dados = sanitizar(req.body || {}, CAMPOS_EMPREENDIMENTO)
   if (!dados.nome) return reply.code(400).send({ erro: 'O nome do empreendimento e obrigatorio' })
 
   const id = inserir('empreendimentos', dados)
-  return reply.code(201).send({ ...buscarEmpreendimento.get(id), fluxos: [], imagens: [] })
+  return reply.code(201).send({ ...buscarEmpreendimento.get(id), fluxos: [], unidades: [], imagens: [] })
 })
 
 app.put('/api/empreendimentos/:id', (req, reply) => {
@@ -133,11 +172,7 @@ app.put('/api/empreendimentos/:id', (req, reply) => {
   }
 
   atualizar('empreendimentos', id, dados)
-  return {
-    ...buscarEmpreendimento.get(id),
-    fluxos: fluxosDoEmpreendimento.all(id),
-    imagens: imagensDoEmpreendimento.all(id).map(comUrl),
-  }
+  return montarEmpreendimento(id)
 })
 
 app.delete('/api/empreendimentos/:id', async (req, reply) => {
@@ -158,6 +193,14 @@ app.delete('/api/empreendimentos/:id', async (req, reply) => {
 
 app.post('/api/fluxos', (req, reply) => {
   const dados = sanitizar(req.body || {}, CAMPOS_FLUXO)
+
+  // Fluxo de unidade herda o empreendimento dela — nao da para divergir.
+  if (dados.unidade_id) {
+    const unidade = buscarUnidade.get(dados.unidade_id)
+    if (!unidade) return reply.code(404).send({ erro: 'Unidade nao encontrada' })
+    dados.empreendimento_id = unidade.empreendimento_id
+  }
+
   if (!dados.empreendimento_id) return reply.code(400).send({ erro: 'Informe o empreendimento do fluxo' })
   if (!buscarEmpreendimento.get(dados.empreendimento_id)) {
     return reply.code(404).send({ erro: 'Empreendimento nao encontrado' })
@@ -172,8 +215,11 @@ app.put('/api/fluxos/:id', (req, reply) => {
   const existente = db.prepare('SELECT * FROM fluxos_pagamento WHERE id = ?').get(id)
   if (!existente) return reply.code(404).send({ erro: 'Fluxo nao encontrado' })
 
-  // O vinculo com o empreendimento nao muda por edicao.
-  const dados = sanitizar(req.body || {}, CAMPOS_FLUXO.filter((c) => c !== 'empreendimento_id'))
+  // Os vinculos (empreendimento e unidade) nao mudam por edicao.
+  const dados = sanitizar(
+    req.body || {},
+    CAMPOS_FLUXO.filter((c) => c !== 'empreendimento_id' && c !== 'unidade_id'),
+  )
   atualizar('fluxos_pagamento', id, dados)
   return db.prepare('SELECT * FROM fluxos_pagamento WHERE id = ?').get(id)
 })
@@ -184,6 +230,46 @@ app.delete('/api/fluxos/:id', (req, reply) => {
     return reply.code(404).send({ erro: 'Fluxo nao encontrado' })
   }
   db.prepare('DELETE FROM fluxos_pagamento WHERE id = ?').run(id)
+  return reply.code(204).send()
+})
+
+/* ------------------------------------------------------------------ */
+/* Unidades                                                            */
+/* ------------------------------------------------------------------ */
+
+app.get('/api/empreendimentos/:id/unidades', (req, reply) => {
+  const { id } = req.params
+  if (!buscarEmpreendimento.get(id)) return reply.code(404).send({ erro: 'Empreendimento nao encontrado' })
+  return unidadesDoEmpreendimento.all(id).map(comFluxos)
+})
+
+app.post('/api/unidades', (req, reply) => {
+  const dados = sanitizar(req.body || {}, CAMPOS_UNIDADE)
+  if (!dados.empreendimento_id) return reply.code(400).send({ erro: 'Informe o empreendimento da unidade' })
+  if (!buscarEmpreendimento.get(dados.empreendimento_id)) {
+    return reply.code(404).send({ erro: 'Empreendimento nao encontrado' })
+  }
+
+  const id = inserir('unidades', dados)
+  return reply.code(201).send(comFluxos(buscarUnidade.get(id)))
+})
+
+app.put('/api/unidades/:id', (req, reply) => {
+  const { id } = req.params
+  if (!buscarUnidade.get(id)) return reply.code(404).send({ erro: 'Unidade nao encontrada' })
+
+  // A unidade nao troca de empreendimento por edicao.
+  const dados = sanitizar(req.body || {}, CAMPOS_UNIDADE.filter((c) => c !== 'empreendimento_id'))
+  atualizar('unidades', id, dados)
+  return comFluxos(buscarUnidade.get(id))
+})
+
+app.delete('/api/unidades/:id', (req, reply) => {
+  const { id } = req.params
+  if (!buscarUnidade.get(id)) return reply.code(404).send({ erro: 'Unidade nao encontrada' })
+
+  // ON DELETE CASCADE leva junto os fluxos de pagamento da unidade.
+  db.prepare('DELETE FROM unidades WHERE id = ?').run(id)
   return reply.code(204).send()
 })
 

@@ -1,6 +1,7 @@
-import type { Empreendimento, FluxoPagamento } from '../types'
+import type { Empreendimento, FluxoPagamento, Unidade } from '../types'
 import { fmtArea, fmtEntrega, fmtInteiro, fmtMoeda, fmtPct, fmtTexto, TRACO } from './format'
 import { ordemDaEntrega, pesoDoStatus } from './opcoes'
+import { localizacaoUnidade, valorM2Da } from './unidades'
 
 /** Em qual direcao esta o "melhor" de um indicador. */
 export type Direcao = 'maior' | 'menor'
@@ -131,6 +132,125 @@ const DEFS_EMPREENDIMENTO: Definicao<Empreendimento>[] = [
 
 export function compararEmpreendimentos(a: Empreendimento, b: Empreendimento): LinhaComparativo[] {
   return montar(DEFS_EMPREENDIMENTO, a, b)
+}
+
+/* ------------------------------------------------------------------ */
+/* Unidade x Unidade                                                   */
+/* ------------------------------------------------------------------ */
+
+/** Linha informativa: mostra o texto dos dois lados sem eleger vencedor. */
+const SEM_DISPUTA = () => null
+
+const DEFS_UNIDADE: Definicao<Unidade | null>[] = [
+  {
+    chave: 'u_valor',
+    rotulo: 'Valor da unidade',
+    direcao: 'menor',
+    valor: (u) => u?.valor ?? null,
+    texto: (u) => fmtMoeda(u?.valor ?? null),
+    criterio: 'Menor preço é melhor',
+  },
+  {
+    chave: 'u_valor_m2',
+    rotulo: 'Valor do m²',
+    direcao: 'menor',
+    valor: (u) => (u ? valorM2Da(u) : null),
+    texto: (u) => fmtMoeda(u ? valorM2Da(u) : null, true),
+    criterio: 'Menor valor por m² é melhor',
+  },
+  {
+    chave: 'u_metragem',
+    rotulo: 'Metragem privativa',
+    direcao: 'maior',
+    valor: (u) => u?.metragem ?? null,
+    texto: (u) => fmtArea(u?.metragem ?? null),
+    criterio: 'Maior área privativa é melhor',
+  },
+  {
+    chave: 'u_metragem_total',
+    rotulo: 'Metragem total',
+    direcao: 'maior',
+    valor: (u) => u?.metragem_total ?? null,
+    texto: (u) => fmtArea(u?.metragem_total ?? null),
+    criterio: 'Maior área total é melhor',
+  },
+  {
+    chave: 'u_dormitorios',
+    rotulo: 'Dormitórios',
+    direcao: 'maior',
+    valor: (u) => u?.dormitorios ?? null,
+    texto: (u) => fmtInteiro(u?.dormitorios ?? null),
+    criterio: 'Mais dormitórios é melhor',
+  },
+  {
+    chave: 'u_suites',
+    rotulo: 'Suítes',
+    direcao: 'maior',
+    valor: (u) => u?.suites ?? null,
+    texto: (u) => fmtInteiro(u?.suites ?? null),
+    criterio: 'Mais suítes é melhor',
+  },
+  {
+    chave: 'u_banheiros',
+    rotulo: 'Banheiros',
+    direcao: 'maior',
+    valor: (u) => u?.banheiros ?? null,
+    texto: (u) => fmtInteiro(u?.banheiros ?? null),
+    criterio: 'Mais banheiros é melhor',
+  },
+  {
+    chave: 'u_vagas',
+    rotulo: 'Vagas',
+    direcao: 'maior',
+    valor: (u) => u?.vagas ?? null,
+    texto: (u) => fmtInteiro(u?.vagas ?? null),
+    criterio: 'Mais vagas é melhor',
+  },
+  {
+    chave: 'u_andar',
+    rotulo: 'Andar',
+    direcao: 'maior',
+    valor: (u) => u?.andar ?? null,
+    texto: (u) => fmtInteiro(u?.andar ?? null),
+    criterio: 'Andar mais alto costuma valorizar',
+  },
+  // Posicao, face e status sao gosto do cliente, nao "melhor" — sem destaque.
+  {
+    chave: 'u_posicao',
+    rotulo: 'Posição solar',
+    direcao: 'maior',
+    valor: SEM_DISPUTA,
+    texto: (u) => fmtTexto(u?.posicao_solar ?? null),
+    criterio: 'Depende da preferência do cliente',
+  },
+  {
+    chave: 'u_face',
+    rotulo: 'Face',
+    direcao: 'maior',
+    valor: SEM_DISPUTA,
+    texto: (u) => fmtTexto(u?.face ?? null),
+    criterio: 'Depende da preferência do cliente',
+  },
+  {
+    chave: 'u_torre',
+    rotulo: 'Torre / andar / nº',
+    direcao: 'maior',
+    valor: SEM_DISPUTA,
+    texto: (u) => (u ? localizacaoUnidade(u) || TRACO : TRACO),
+    criterio: 'Localização da unidade no empreendimento',
+  },
+  {
+    chave: 'u_status',
+    rotulo: 'Situação',
+    direcao: 'maior',
+    valor: SEM_DISPUTA,
+    texto: (u) => fmtTexto(u?.status ?? null),
+    criterio: 'Disponível, reservada ou vendida',
+  },
+]
+
+export function compararUnidades(a: Unidade | null, b: Unidade | null): LinhaComparativo[] {
+  return montar(DEFS_UNIDADE, a, b)
 }
 
 /* ------------------------------------------------------------------ */

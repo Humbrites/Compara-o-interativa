@@ -80,7 +80,48 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_imagens_empreendimento
     ON imagens(empreendimento_id, ordem);
+
+  -- Unidades: as plantas/apartamentos de um mesmo empreendimento. O que muda
+  -- de uma para outra (metragem, dormitorios, vagas, posicao e preco) mora
+  -- aqui; o empreendimento segue com os dados gerais.
+  CREATE TABLE IF NOT EXISTS unidades (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    empreendimento_id INTEGER NOT NULL REFERENCES empreendimentos(id) ON DELETE CASCADE,
+    identificacao     TEXT,
+    torre             TEXT,
+    andar             INTEGER,
+    numero            TEXT,
+    metragem          REAL,
+    metragem_total    REAL,
+    dormitorios       INTEGER,
+    suites            INTEGER,
+    banheiros         INTEGER,
+    vagas             INTEGER,
+    posicao_solar     TEXT,
+    face              TEXT,
+    valor             REAL,
+    valor_m2          REAL,
+    status            TEXT,
+    observacoes       TEXT,
+    criado_em         TEXT NOT NULL DEFAULT (datetime('now')),
+    atualizado_em     TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_unidades_empreendimento
+    ON unidades(empreendimento_id);
 `)
+
+// Fluxo de pagamento passou a poder ser de uma unidade especifica; os que ja
+// existiam ficam com unidade_id NULL e seguem valendo como tabela geral do
+// empreendimento. ADD COLUMN so roda quando a coluna ainda nao existe.
+const colunasFluxo = db.prepare('PRAGMA table_info(fluxos_pagamento)').all()
+if (!colunasFluxo.some((coluna) => coluna.name === 'unidade_id')) {
+  db.exec(`
+    ALTER TABLE fluxos_pagamento
+      ADD COLUMN unidade_id INTEGER REFERENCES unidades(id) ON DELETE CASCADE;
+  `)
+}
+db.exec('CREATE INDEX IF NOT EXISTS idx_fluxos_unidade ON fluxos_pagamento(unidade_id);')
 
 /** Colunas gravaveis de cada tabela — a fonte da verdade para montar INSERT/UPDATE. */
 export const CAMPOS_EMPREENDIMENTO = [
@@ -91,7 +132,7 @@ export const CAMPOS_EMPREENDIMENTO = [
 ]
 
 export const CAMPOS_FLUXO = [
-  'empreendimento_id', 'nome',
+  'empreendimento_id', 'unidade_id', 'nome',
   'entrada_pct', 'entrada_valor',
   'parcelas', 'parcela_valor',
   'reforcos_qtd', 'reforco_valor',
@@ -99,12 +140,20 @@ export const CAMPOS_FLUXO = [
   'descricao', 'observacoes',
 ]
 
+export const CAMPOS_UNIDADE = [
+  'empreendimento_id', 'identificacao', 'torre', 'andar', 'numero',
+  'metragem', 'metragem_total',
+  'dormitorios', 'suites', 'banheiros', 'vagas',
+  'posicao_solar', 'face', 'valor', 'valor_m2', 'status', 'observacoes',
+]
+
 const NUMERICOS = new Set([
   'latitude', 'longitude', 'valor_m2', 'metragem_min', 'metragem_max',
   'dormitorios', 'suites', 'banheiros', 'vagas',
-  'empreendimento_id', 'entrada_pct', 'entrada_valor', 'parcelas',
+  'empreendimento_id', 'unidade_id', 'entrada_pct', 'entrada_valor', 'parcelas',
   'parcela_valor', 'reforcos_qtd', 'reforco_valor', 'chaves_pct',
   'financiamento_pct',
+  'andar', 'metragem', 'metragem_total', 'valor',
 ])
 
 /**

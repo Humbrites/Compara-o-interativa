@@ -26,12 +26,15 @@ function paraFormulario(fluxo: FluxoPagamento): Formulario {
 
 interface Props {
   empreendimentoId: number
+  /** Preenchido = o fluxo pertence a essa unidade, nao ao empreendimento. */
+  unidadeId?: number | null
   fluxos: FluxoPagamento[]
   onMudou: (fluxos: FluxoPagamento[]) => void
   avisar: (texto: string, tipo?: 'sucesso' | 'erro') => void
 }
 
-export function FluxosDoEmpreendimento({ empreendimentoId, fluxos, onMudou, avisar }: Props) {
+export function FluxosDoEmpreendimento({ empreendimentoId, unidadeId = null, fluxos, onMudou, avisar }: Props) {
+  const daUnidade = unidadeId !== null
   const [form, setForm] = useState<Formulario | null>(null)
   const [editandoId, setEditandoId] = useState<number | null>(null)
   const [salvando, setSalvando] = useState(false)
@@ -55,6 +58,7 @@ export function FluxosDoEmpreendimento({ empreendimentoId, fluxos, onMudou, avis
     setSalvando(true)
     try {
       const dados: FluxoInput = { empreendimento_id: empreendimentoId }
+      if (daUnidade) dados.unidade_id = unidadeId
       for (const campo of CAMPOS) {
         dados[campo as keyof FluxoInput] = form[campo].trim() || null
       }
@@ -96,7 +100,11 @@ export function FluxosDoEmpreendimento({ empreendimentoId, fluxos, onMudou, avis
         <Estado
           icone="cartao"
           titulo="Nenhum fluxo de pagamento ainda"
-          texto="Cadastre a tabela de venda: entrada, parcelamento, reforços, chaves e financiamento. Um empreendimento pode ter vários fluxos."
+          texto={
+            daUnidade
+              ? 'Cadastre a tabela de venda desta unidade: entrada, parcelamento, reforços, chaves e financiamento. Ela entra no comparativo quando a unidade for escolhida.'
+              : 'Cadastre a tabela de venda: entrada, parcelamento, reforços, chaves e financiamento. Um empreendimento pode ter vários fluxos.'
+          }
           acao={
             <button type="button" className="btn btn--primario" onClick={abrirNovo}>
               <Icone nome="mais" tamanho={15} />

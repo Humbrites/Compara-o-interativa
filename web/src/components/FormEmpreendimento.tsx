@@ -1,10 +1,11 @@
-import { useState } from 'react'
-import type { Empreendimento, EmpreendimentoInput, ImagemEmpreendimento } from '../types'
+import { Fragment, useState } from 'react'
+import type { Empreendimento, EmpreendimentoInput, ImagemEmpreendimento, Unidade } from '../types'
 import { STATUS_OBRA, TIPOS } from '../lib/opcoes'
 import { api } from '../lib/api'
 import { Campo, Modal } from './ui'
 import { Icone } from './Icones'
 import { FluxosDoEmpreendimento } from './FormFluxos'
+import { UnidadesDoEmpreendimento } from './FormUnidades'
 import { GaleriaUpload } from './GaleriaUpload'
 
 /** O formulario trabalha com texto puro; a conversao acontece no envio. */
@@ -55,25 +56,35 @@ interface Props {
   empreendimento: Empreendimento | null
   /** Abre direto na etapa dos fluxos (usado pelo botao "adicionar fluxo"). */
   iniciarEmFluxos?: boolean
+  /** Abre direto na etapa das unidades (botao "adicionar unidade" do painel). */
+  iniciarEmUnidades?: boolean
   onFechar: () => void
   onSalvar: (dados: EmpreendimentoInput) => Promise<Empreendimento>
   onMudouFluxos: () => void
   onMudouImagens: (id: number, imagens: ImagemEmpreendimento[]) => void
+  onMudouUnidades: (id: number, unidades: Unidade[]) => void
   avisar: (texto: string, tipo?: 'sucesso' | 'erro') => void
 }
 
 export function FormEmpreendimento({
   empreendimento,
   iniciarEmFluxos,
+  iniciarEmUnidades,
   onFechar,
   onSalvar,
   onMudouFluxos,
   onMudouImagens,
+  onMudouUnidades,
   avisar,
 }: Props) {
   const [form, setForm] = useState<Formulario>(() => paraFormulario(empreendimento))
   const [erros, setErros] = useState<Record<string, string>>({})
-  const [passo, setPasso] = useState<1 | 2>(iniciarEmFluxos && empreendimento ? 2 : 1)
+  const [passo, setPasso] = useState<1 | 2 | 3>(() => {
+    if (!empreendimento) return 1
+    if (iniciarEmFluxos) return 3
+    if (iniciarEmUnidades) return 2
+    return 1
+  })
   const [salvando, setSalvando] = useState(false)
   // Depois de salvar a etapa 1 passamos a trabalhar sobre o registro criado.
   const [salvo, setSalvo] = useState<Empreendimento | null>(empreendimento)
@@ -86,6 +97,12 @@ export function FormEmpreendimento({
   function aplicarImagens(id: number, imagens: ImagemEmpreendimento[]) {
     setSalvo((atual) => (atual ? { ...atual, imagens } : atual))
     onMudouImagens(id, imagens)
+  }
+
+  /** Mesma ideia para as unidades. */
+  function aplicarUnidades(id: number, unidades: Unidade[]) {
+    setSalvo((atual) => (atual ? { ...atual, unidades } : atual))
+    onMudouUnidades(id, unidades)
   }
 
   const editando = empreendimento !== null
@@ -154,17 +171,31 @@ export function FormEmpreendimento({
   }
 
   /* --- Cabecalho com os dois passos ------------------------------------- */
+  const ETAPAS = ['Dados do empreendimento', 'Unidades', 'Fluxos de pagamento']
+
   const cabecalho = (
     <div className="passos">
-      <div className={`passo${passo === 1 ? ' passo--ativo' : ''}${passo > 1 ? ' passo--feito' : ''}`}>
-        <span className="passo__bolha">{passo > 1 ? <Icone nome="check" tamanho={12} espessura={3} /> : '1'}</span>
-        Dados do empreendimento
-      </div>
-      <span className="passo__traco" />
-      <div className={`passo${passo === 2 ? ' passo--ativo' : ''}`}>
-        <span className="passo__bolha">2</span>
-        Fluxos de pagamento
-      </div>
+      {ETAPAS.map((titulo, indice) => {
+        const numero = indice + 1
+        const feito = passo > numero
+        return (
+          <Fragment key={titulo}>
+            {indice > 0 && <span className="passo__traco" />}
+            <button
+              type="button"
+              className={`passo${passo === numero ? ' passo--ativo' : ''}${feito ? ' passo--feito' : ''}`}
+              // Navegar entre as etapas so faz sentido com o cadastro ja salvo.
+              disabled={!salvo}
+              onClick={() => salvo && setPasso(numero as 1 | 2 | 3)}
+            >
+              <span className="passo__bolha">
+                {feito ? <Icone nome="check" tamanho={12} espessura={3} /> : numero}
+              </span>
+              {titulo}
+            </button>
+          </Fragment>
+        )
+      })}
     </div>
   )
 
@@ -375,19 +406,55 @@ export function FormEmpreendimento({
     )
   }
 
-  /* --- Etapa 2 ----------------------------------------------------------- */
+  /* --- Etapa 2: unidades --------------------------------------------------- */
+  if (passo === 2) {
+    return (
+      <Modal
+        titulo="Unidades"
+        subtitulo={salvo ? `${salvo.nome} — cada planta com metragem, dormitórios, vagas, posição e preço` : ''}
+        onFechar={onFechar}
+        cabecalhoExtra={cabecalho}
+        largo
+        rodape={
+          <>
+            <button type="button" className="btn btn--fantasma" onClick={() => setPasso(1)}>
+              <Icone nome="seta_esquerda" tamanho={15} />
+              Voltar aos dados
+            </button>
+            <div className="direita">
+              <button type="button" className="btn btn--primario" onClick={() => setPasso(3)}>
+                Avançar aos fluxos
+                <Icone nome="seta_direita" tamanho={15} />
+              </button>
+            </div>
+          </>
+        }
+      >
+        {salvo && (
+          <UnidadesDoEmpreendimento
+            empreendimentoId={salvo.id}
+            unidades={salvo.unidades}
+            onMudou={(unidades) => aplicarUnidades(salvo.id, unidades)}
+            avisar={avisar}
+          />
+        )}
+      </Modal>
+    )
+  }
+
+  /* --- Etapa 3: fluxos gerais ---------------------------------------------- */
   return (
     <Modal
       titulo="Fluxos de pagamento"
-      subtitulo={salvo ? salvo.nome : ''}
+      subtitulo={salvo ? `${salvo.nome} — tabelas que valem para o empreendimento inteiro` : ''}
       onFechar={onFechar}
       cabecalhoExtra={cabecalho}
       largo
       rodape={
         <>
-          <button type="button" className="btn btn--fantasma" onClick={() => setPasso(1)}>
+          <button type="button" className="btn btn--fantasma" onClick={() => setPasso(2)}>
             <Icone nome="seta_esquerda" tamanho={15} />
-            Voltar aos dados
+            Voltar às unidades
           </button>
           <div className="direita">
             <button type="button" className="btn btn--primario" onClick={onFechar}>

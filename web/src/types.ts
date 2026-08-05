@@ -1,6 +1,8 @@
 export interface FluxoPagamento {
   id: number
   empreendimento_id: number
+  /** null = tabela geral do empreendimento; preenchido = fluxo daquela unidade. */
+  unidade_id: number | null
   nome: string | null
   entrada_pct: number | null
   entrada_valor: number | null
@@ -15,6 +17,39 @@ export interface FluxoPagamento {
   criado_em: string
   atualizado_em: string
 }
+
+/**
+ * Unidade de um empreendimento: a planta/apartamento que o corretor vende.
+ * O que muda de uma para outra (metragem, dormitorios, vagas, posicao e
+ * preco) mora aqui; o empreendimento guarda os dados gerais.
+ */
+export interface Unidade {
+  id: number
+  empreendimento_id: number
+  identificacao: string | null
+  torre: string | null
+  andar: number | null
+  numero: string | null
+  metragem: number | null
+  metragem_total: number | null
+  dormitorios: number | null
+  suites: number | null
+  banheiros: number | null
+  vagas: number | null
+  posicao_solar: string | null
+  face: string | null
+  valor: number | null
+  valor_m2: number | null
+  status: string | null
+  observacoes: string | null
+  criado_em: string
+  atualizado_em: string
+  fluxos: FluxoPagamento[]
+}
+
+export type UnidadeInput = Partial<
+  Record<keyof Omit<Unidade, 'id' | 'criado_em' | 'atualizado_em' | 'fluxos'>, string | number | null>
+>
 
 /** Foto enviada pelo usuario; o arquivo mora na API e chega aqui como URL. */
 export interface ImagemEmpreendimento {
@@ -52,12 +87,14 @@ export interface Empreendimento {
   observacoes: string | null
   criado_em: string
   atualizado_em: string
+  /** Fluxos gerais: os que valem para o empreendimento todo, sem unidade. */
   fluxos: FluxoPagamento[]
+  unidades: Unidade[]
   imagens: ImagemEmpreendimento[]
 }
 
 /** Payload de escrita: tudo opcional menos o nome, e numeros aceitam string vinda do input. */
-export type EmpreendimentoInput = Partial<Record<keyof Omit<Empreendimento, 'id' | 'criado_em' | 'atualizado_em' | 'fluxos' | 'imagens'>, string | number | null>> & {
+export type EmpreendimentoInput = Partial<Record<keyof Omit<Empreendimento, 'id' | 'criado_em' | 'atualizado_em' | 'fluxos' | 'unidades' | 'imagens'>, string | number | null>> & {
   nome: string
 }
 
