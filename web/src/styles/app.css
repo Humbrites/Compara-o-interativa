@@ -336,6 +336,9 @@ img {
   color: var(--texto-2);
   display: flex;
   align-items: center;
+  /* Sem isso, uma dica comprida espreme e quebra o proprio rotulo em duas
+     linhas; com wrap, quem desce e a dica. */
+  flex-wrap: wrap;
   gap: var(--e1);
 }
 
@@ -662,6 +665,8 @@ select.entrada {
 .modal__rodape {
   display: flex;
   align-items: center;
+  /* Em tela estreita os botoes quebram em vez de vazarem pela borda. */
+  flex-wrap: wrap;
   gap: var(--e3);
   padding: var(--e4) var(--e6);
   border-top: 1px solid var(--borda);
@@ -672,7 +677,21 @@ select.entrada {
 .modal__rodape > .direita {
   margin-left: auto;
   display: flex;
+  flex-wrap: wrap;
   gap: var(--e3);
+}
+
+/* Com pouco espaco, o bloco da direita ocupa a linha toda e os botoes
+   dividem o espaco — nenhum fica cortado. */
+@media (max-width: 560px) {
+  .modal__rodape > .direita {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .modal__rodape > .direita .btn {
+    flex: 1 1 auto;
+  }
 }
 
 /* Passos do cadastro */

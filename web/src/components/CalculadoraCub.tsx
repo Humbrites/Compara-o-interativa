@@ -257,7 +257,7 @@ export function CalculadoraCub({ titulo, valorSugerido, onFechar, onGerarFluxo, 
         </h3>
 
         <div className="grade">
-          <Campo rotulo="Valor do imóvel" dica="opcional, só referência" erro={erros.valorImovel}>
+          <Campo rotulo="Valor do imóvel" erro={erros.valorImovel}>
             <input
               className={`entrada${erros.valorImovel ? ' entrada--erro' : ''}`}
               value={form.valorImovel}
@@ -267,7 +267,7 @@ export function CalculadoraCub({ titulo, valorSugerido, onFechar, onGerarFluxo, 
             />
           </Campo>
 
-          <Campo rotulo="Valor de entrada" dica="abatido do imóvel" erro={erros.entrada}>
+          <Campo rotulo="Entrada" dica="R$" erro={erros.entrada}>
             <input
               className={`entrada${erros.entrada ? ' entrada--erro' : ''}`}
               value={form.entrada}
@@ -288,7 +288,7 @@ export function CalculadoraCub({ titulo, valorSugerido, onFechar, onGerarFluxo, 
             />
           </Campo>
 
-          <Campo rotulo="Meses restantes da obra" obrigatorio erro={erros.meses}>
+          <Campo rotulo="Meses de obra" obrigatorio dica="restantes" erro={erros.meses}>
             <input
               className={`entrada${erros.meses ? ' entrada--erro' : ''}`}
               value={form.meses}
@@ -324,9 +324,9 @@ export function CalculadoraCub({ titulo, valorSugerido, onFechar, onGerarFluxo, 
         </div>
 
         <p className="campo__dica" style={{ marginTop: 'var(--e3)' }}>
-          <Icone nome="info" tamanho={12} /> O reajuste incide só sobre a parcela, mês a mês e composto — o valor do
-          imóvel fica fixo. Quando houver a tabela oficial do CUB, ela entra no lugar deste percentual sem mudar o
-          cálculo.
+          <Icone nome="info" tamanho={12} /> A entrada abate o valor do imóvel; o reajuste incide só sobre a parcela,
+          mês a mês e composto. Valor do imóvel e entrada são opcionais — sem eles a simulação mostra apenas a evolução
+          das parcelas. Quando houver a tabela oficial do CUB, ela entra no lugar deste percentual sem mudar o cálculo.
         </p>
       </section>
 
