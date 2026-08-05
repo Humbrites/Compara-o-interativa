@@ -4,6 +4,9 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
+    // Fixo em IPv4: "localhost" no Node resolve para ::1 primeiro, e tunel SSH
+    // costuma tentar 127.0.0.1 — sem isso a porta parece fechada de fora.
+    host: '127.0.0.1',
     port: 5273,
     // O front chama /api/... e o Vite repassa para a API local — assim nao ha
     // URL de backend espalhada pelo codigo nem dor de CORS no navegador.
