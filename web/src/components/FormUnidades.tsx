@@ -7,6 +7,7 @@ import { Campo, Estado } from './ui'
 import { Icone } from './Icones'
 import { CartaoUnidade } from './CartaoUnidade'
 import { FluxosDoEmpreendimento } from './FormFluxos'
+import { CalculadoraCub } from './CalculadoraCub'
 
 type Formulario = Record<string, string>
 
@@ -41,6 +42,8 @@ export function UnidadesDoEmpreendimento({ empreendimentoId, unidades, onMudou, 
   const [salvando, setSalvando] = useState(false)
   // Qual unidade esta com o bloco de fluxos aberto.
   const [fluxosAbertos, setFluxosAbertos] = useState<number | null>(null)
+  // Qual unidade esta com a calculadora do CUB aberta.
+  const [cubAberto, setCubAberto] = useState<Unidade | null>(null)
 
   function abrirNova() {
     setEditandoId(null)
@@ -131,6 +134,18 @@ export function UnidadesDoEmpreendimento({ empreendimentoId, unidades, onMudou, 
     onMudou(unidades.map((u) => (u.id === unidadeId ? { ...u, fluxos } : u)))
   }
 
+  /** A simulacao do CUB vira um fluxo daquela unidade. */
+  async function gerarFluxoDoCub(unidade: Unidade, dados: Parameters<typeof api.criarFluxo>[0]) {
+    const criado = await api.criarFluxo({
+      ...dados,
+      empreendimento_id: empreendimentoId,
+      unidade_id: unidade.id,
+    })
+    trocarFluxos(unidade.id, [...unidade.fluxos, criado])
+    setFluxosAbertos(unidade.id)
+    avisar('Fluxo gerado pela calculadora do CUB')
+  }
+
   return (
     <div>
       {unidades.length === 0 && !form && (
@@ -158,16 +173,23 @@ export function UnidadesDoEmpreendimento({ empreendimentoId, unidades, onMudou, 
               onExcluir={() => void excluir(unidade)}
               rodape={
                 <>
-                  <button
-                    type="button"
-                    className="btn btn--fantasma btn--pequeno"
-                    onClick={() => setFluxosAbertos((atual) => (atual === unidade.id ? null : unidade.id))}
-                  >
-                    <Icone nome={fluxosAbertos === unidade.id ? 'seta_cima' : 'seta_baixo'} tamanho={13} />
-                    {unidade.fluxos.length === 0
-                      ? 'Fluxos de pagamento'
-                      : `Fluxos de pagamento (${unidade.fluxos.length})`}
-                  </button>
+                  <div className="unidade__botoes">
+                    <button
+                      type="button"
+                      className="btn btn--fantasma btn--pequeno"
+                      onClick={() => setFluxosAbertos((atual) => (atual === unidade.id ? null : unidade.id))}
+                    >
+                      <Icone nome={fluxosAbertos === unidade.id ? 'seta_cima' : 'seta_baixo'} tamanho={13} />
+                      {unidade.fluxos.length === 0
+                        ? 'Fluxos de pagamento'
+                        : `Fluxos de pagamento (${unidade.fluxos.length})`}
+                    </button>
+
+                    <button type="button" className="btn btn--secundario btn--pequeno" onClick={() => setCubAberto(unidade)}>
+                      <Icone nome="grafico" tamanho={13} />
+                      Calcular com CUB
+                    </button>
+                  </div>
 
                   {fluxosAbertos === unidade.id && (
                     <div className="unidade__fluxos">
@@ -187,6 +209,16 @@ export function UnidadesDoEmpreendimento({ empreendimentoId, unidades, onMudou, 
             />
           ))}
         </div>
+      )}
+
+      {cubAberto && (
+        <CalculadoraCub
+          titulo={rotuloUnidade(cubAberto)}
+          valorSugerido={cubAberto.valor}
+          onFechar={() => setCubAberto(null)}
+          onGerarFluxo={(dados) => gerarFluxoDoCub(cubAberto, dados)}
+          avisar={avisar}
+        />
       )}
 
       {!form && unidades.length > 0 && (

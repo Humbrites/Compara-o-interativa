@@ -1744,6 +1744,12 @@
   border-top: 1px dashed var(--borda);
 }
 
+.unidade__botoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e2);
+}
+
 /* Fluxos da unidade abertos dentro do proprio cartao. */
 .unidade__fluxos {
   margin-top: var(--e3);
