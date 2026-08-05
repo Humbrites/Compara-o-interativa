@@ -44,11 +44,15 @@ export function exportarCsv(simulacao: Simulacao, titulo: string) {
     [titulo],
     [],
     ['Valor do imóvel', resumo.valorImovel === null ? 'não informado' : numero(resumo.valorImovel)],
+    ['Valor de entrada', numero(resumo.entrada)],
+    ['Saldo após a entrada', resumo.saldo === null ? 'não informado' : numero(resumo.saldo)],
     ['Meses restantes de obra', String(resumo.meses)],
     ['Parcela inicial', numero(resumo.parcelaInicial)],
     ['Índice aplicado', resumo.fonte],
     ['Parcela final', numero(resumo.parcelaFinal)],
-    ['Total pago durante a obra', numero(resumo.totalPago)],
+    ['Total pago durante a obra (parcelas)', numero(resumo.totalPago)],
+    ['Entrada + parcelas', numero(resumo.totalDesembolsado)],
+    ['Saldo na entrega', resumo.saldoAoFimDaObra === null ? 'não informado' : numero(resumo.saldoAoFimDaObra)],
     ['Total sem reajuste', numero(resumo.totalSemReajuste)],
     ['Total de reajuste', numero(resumo.totalReajuste)],
     ['Reajuste acumulado na parcela (%)', numero(resumo.percentualAcumulado)],
@@ -120,17 +124,26 @@ export function exportarPdf(simulacao: Simulacao, titulo: string, graficos: stri
 </head>
 <body>
   <h1>Simulação de reajuste pelo CUB</h1>
-  <div class="sub">${titulo} · ${resumo.fonte} · ${resumo.meses} meses de obra</div>
+  <div class="sub">${titulo} · ${resumo.fonte} · ${resumo.meses} meses de obra${
+    resumo.entrada > 0 ? ` · entrada de ${fmtMoeda(resumo.entrada)}` : ''
+  }</div>
 
   <div class="resumo">
     ${item('Valor do imóvel', resumo.valorImovel === null ? '—' : fmtMoeda(resumo.valorImovel))}
+    ${item('Entrada', resumo.entrada > 0 ? fmtMoeda(resumo.entrada) : '—')}
+    ${item('Saldo após a entrada', resumo.saldo === null ? '—' : fmtMoeda(resumo.saldo, true))}
+    ${item('Meses restantes', String(resumo.meses))}
     ${item('Parcela inicial', fmtMoeda(resumo.parcelaInicial, true))}
     ${item('Parcela final', fmtMoeda(resumo.parcelaFinal, true))}
     ${item('Reajuste acumulado', fmtPercentual(resumo.percentualAcumulado, 2))}
-    ${item('Total pago na obra', fmtMoeda(resumo.totalPago, true))}
-    ${item('Total sem reajuste', fmtMoeda(resumo.totalSemReajuste, true))}
     ${item('Total de reajuste', fmtMoeda(resumo.totalReajuste, true))}
-    ${item('Meses restantes', String(resumo.meses))}
+    ${item('Total pago na obra', fmtMoeda(resumo.totalPago, true))}
+    ${item('Entrada + parcelas', fmtMoeda(resumo.totalDesembolsado, true))}
+    ${item(
+      resumo.saldoAoFimDaObra !== null && resumo.saldoAoFimDaObra < 0 ? 'Pago a mais que o saldo' : 'Saldo na entrega',
+      resumo.saldoAoFimDaObra === null ? '—' : fmtMoeda(Math.abs(resumo.saldoAoFimDaObra), true),
+    )}
+    ${item('Total sem reajuste', fmtMoeda(resumo.totalSemReajuste, true))}
   </div>
 
   <div class="graficos">${graficos.join('')}</div>

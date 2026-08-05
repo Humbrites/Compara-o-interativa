@@ -19,6 +19,7 @@ export interface FluxoPagamento {
   cub_meses: number | null
   cub_valor_imovel: number | null
   cub_parcela_inicial: number | null
+  cub_entrada: number | null
   criado_em: string
   atualizado_em: string
 }

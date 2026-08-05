@@ -12,12 +12,13 @@ const ATALHOS_CUB = [0.35, 0.6, 0.7, 0.75, 1]
 
 interface Formulario {
   valorImovel: string
+  entrada: string
   parcelaInicial: string
   meses: string
   percentual: string
 }
 
-const VAZIO: Formulario = { valorImovel: '', parcelaInicial: '', meses: '', percentual: '' }
+const VAZIO: Formulario = { valorImovel: '', entrada: '', parcelaInicial: '', meses: '', percentual: '' }
 
 function validar(form: Formulario): { erros: Record<string, string>; entrada: ReturnType<typeof montar> | null } {
   const erros: Record<string, string> = {}
@@ -39,13 +40,30 @@ function validar(form: Formulario): { erros: Record<string, string>; entrada: Re
     erros.valorImovel = 'Valor do imóvel inválido'
   }
 
+  const entrada = form.entrada.trim() ? lerNumero(form.entrada) : 0
+  if (form.entrada.trim() && (entrada === null || entrada < 0)) {
+    erros.entrada = 'Valor de entrada inválido'
+  } else if (entrada !== null && valorImovel !== null && entrada > valorImovel) {
+    erros.entrada = 'A entrada não pode passar do valor do imóvel'
+  }
+
   if (Object.keys(erros).length > 0) return { erros, entrada: null }
-  return { erros, entrada: montar(valorImovel, parcela as number, meses as number, percentual as number) }
+  return {
+    erros,
+    entrada: montar(valorImovel, entrada ?? 0, parcela as number, meses as number, percentual as number),
+  }
 }
 
-function montar(valorImovel: number | null, parcelaInicial: number, meses: number, percentual: number) {
+function montar(
+  valorImovel: number | null,
+  entrada: number,
+  parcelaInicial: number,
+  meses: number,
+  percentual: number,
+) {
   return {
     valorImovel,
+    entrada,
     parcelaInicial,
     meses: Math.trunc(meses),
     percentual,
@@ -164,16 +182,26 @@ export function CalculadoraCub({ titulo, valorSugerido, onFechar, onGerarFluxo, 
         nome: `CUB ${fmtPercentual(percentualInformado)} · ${resumo.meses}x`,
         parcelas: resumo.meses,
         parcela_valor: resumo.parcelaInicial,
+        entrada_valor: resumo.entrada > 0 ? resumo.entrada : null,
+        entrada_pct: resumo.percentualEntrada !== null && resumo.entrada > 0 ? resumo.percentualEntrada : null,
         descricao:
           `Parcelas corrigidas pelo CUB a ${resumo.fonte}. ` +
           `A parcela sai de ${fmtMoeda(resumo.parcelaInicial, true)} e chega a ${fmtMoeda(resumo.parcelaFinal, true)} ` +
           `no último mês de obra (${fmtPercentual(resumo.percentualAcumulado, 2)} de reajuste acumulado).`,
         observacoes:
           `Total pago na obra: ${fmtMoeda(resumo.totalPago, true)} — ` +
-          `${fmtMoeda(resumo.totalReajuste, true)} a mais do que manter a parcela inicial.`,
+          `${fmtMoeda(resumo.totalReajuste, true)} a mais do que manter a parcela inicial.` +
+          (resumo.entrada > 0
+            ? ` Com a entrada de ${fmtMoeda(resumo.entrada)}, o desembolso até a entrega fica em ` +
+              `${fmtMoeda(resumo.totalDesembolsado, true)}.`
+            : '') +
+          (resumo.saldoAoFimDaObra !== null && resumo.saldoAoFimDaObra > 0
+            ? ` Restam ${fmtMoeda(resumo.saldoAoFimDaObra)} do saldo para financiar na entrega.`
+            : ''),
         cub_percentual: percentualInformado,
         cub_meses: resumo.meses,
         cub_valor_imovel: resumo.valorImovel,
+        cub_entrada: resumo.entrada,
         cub_parcela_inicial: resumo.parcelaInicial,
       })
       onFechar()
@@ -235,6 +263,16 @@ export function CalculadoraCub({ titulo, valorSugerido, onFechar, onGerarFluxo, 
               value={form.valorImovel}
               onChange={(e) => mudar('valorImovel', e.target.value)}
               placeholder="450.000,00"
+              inputMode="decimal"
+            />
+          </Campo>
+
+          <Campo rotulo="Valor de entrada" dica="abatido do imóvel" erro={erros.entrada}>
+            <input
+              className={`entrada${erros.entrada ? ' entrada--erro' : ''}`}
+              value={form.entrada}
+              onChange={(e) => mudar('entrada', e.target.value)}
+              placeholder="50.000,00"
               inputMode="decimal"
             />
           </Campo>
@@ -309,6 +347,20 @@ export function CalculadoraCub({ titulo, valorSugerido, onFechar, onGerarFluxo, 
 
             <div className="resumo-cub">
               <ItemResumo rotulo="Valor do imóvel" valor={resumo.valorImovel === null ? '—' : fmtMoeda(resumo.valorImovel)} />
+              <ItemResumo
+                rotulo="Entrada"
+                valor={resumo.entrada > 0 ? fmtMoeda(resumo.entrada) : '—'}
+                dica={
+                  resumo.percentualEntrada !== null && resumo.entrada > 0
+                    ? `${fmtPercentual(resumo.percentualEntrada, 2)} do imóvel`
+                    : undefined
+                }
+              />
+              <ItemResumo
+                rotulo="Saldo após a entrada"
+                valor={resumo.saldo === null ? '—' : fmtMoeda(resumo.saldo, true)}
+                dica={resumo.saldo === null ? 'informe o valor do imóvel' : 'o que as parcelas atacam'}
+              />
               <ItemResumo rotulo="Meses restantes" valor={String(resumo.meses)} />
               <ItemResumo rotulo="Parcela inicial" valor={fmtMoeda(resumo.parcelaInicial, true)} />
               <ItemResumo rotulo="CUB aplicado" valor={resumo.fonte} />
@@ -327,13 +379,31 @@ export function CalculadoraCub({ titulo, valorSugerido, onFechar, onGerarFluxo, 
               <ItemResumo
                 rotulo="Total pago na obra"
                 valor={fmtMoeda(resumo.totalPago, true)}
+                dica="só as parcelas"
+                destaque
+              />
+              <ItemResumo
+                rotulo="Entrada + parcelas"
+                valor={fmtMoeda(resumo.totalDesembolsado, true)}
                 dica={
                   resumo.percentualDoImovel !== null
                     ? `${fmtPercentual(resumo.percentualDoImovel, 2)} do valor do imóvel`
-                    : undefined
+                    : 'desembolso até a entrega'
                 }
                 destaque
               />
+              {resumo.saldoAoFimDaObra !== null && (
+                <ItemResumo
+                  rotulo={resumo.saldoAoFimDaObra >= 0 ? 'Saldo na entrega' : 'Pago a mais que o saldo'}
+                  valor={fmtMoeda(Math.abs(resumo.saldoAoFimDaObra), true)}
+                  dica={
+                    resumo.saldoAoFimDaObra >= 0
+                      ? 'o que sobra para financiar'
+                      : 'as parcelas passaram do saldo'
+                  }
+                  destaque
+                />
+              )}
               <ItemResumo
                 rotulo="Total de reajuste"
                 valor={fmtMoeda(resumo.totalReajuste, true)}

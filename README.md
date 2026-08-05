@@ -109,9 +109,15 @@ O botão **Calcular valor com CUB** aparece junto dos fluxos de pagamento — ta
 gerais do empreendimento quanto nos de cada unidade (aí o valor do imóvel já vem
 preenchido com o valor da unidade).
 
-**O que você informa:** valor do imóvel (opcional, só referência), parcela inicial,
-meses restantes de obra e o percentual mensal do CUB — com atalhos para 0,35%, 0,60%,
-0,70%, 0,75% e 1,00%. Os campos aceitam `2.000,50`, `2000.50` ou `R$ 2.000`.
+**O que você informa:** valor do imóvel (opcional, só referência), **valor de entrada**,
+parcela inicial, meses restantes de obra e o percentual mensal do CUB — com atalhos para
+0,35%, 0,60%, 0,70%, 0,75% e 1,00%. Os campos aceitam `2.000,50`, `2000.50` ou `R$ 2.000`.
+
+A **entrada abate o valor do imóvel**: o resumo mostra o *saldo após a entrada* (o que as
+parcelas atacam), o *desembolso até a entrega* (entrada + parcelas) e o *saldo na entrega*
+— o que sobra para financiar quando a obra termina. Entrada maior que o valor do imóvel é
+recusada, e uma entrada que faça as parcelas passarem do saldo aparece como
+"pago a mais que o saldo".
 
 **Como a conta é feita:** juros compostos sobre a parcela, mês a mês —
 `parcela do mês = parcela anterior × (1 + CUB)`. O **valor do imóvel não entra na
@@ -122,8 +128,8 @@ conta**; o reajuste incide só sobre a parcela.
 > cobrado). Com 2.000,00 a 0,70% isso dá 2.014,00 → 2.028,10 → 2.042,30. O modo de
 > precisão total existe (`arredondarPorMes: false`) e difere em centavos.
 
-**O que você vê:** o resumo em destaque (parcela final, total pago na obra, total de
-reajuste, percentual acumulado e quanto o total representa do valor do imóvel), a
+**O que você vê:** o resumo em destaque (entrada e saldo, parcela final, total pago na
+obra, entrada + parcelas, saldo na entrega, total de reajuste e percentual acumulado), a
 tabela mês a mês (parcela antes, % do CUB, valor do reajuste, parcela atual e
 acumulado pago) e três gráficos — evolução da parcela, reajuste de cada mês e total
 pago acumulado. Todos desenhados em SVG no próprio projeto, com tooltip ao passar o
@@ -137,9 +143,9 @@ mouse; **a tabela é a leitura exata** — nenhum valor existe só no gráfico.
 - **Exportar PDF** abre a folha de impressão do navegador (resumo + gráficos + tabela);
   é só escolher "Salvar como PDF". Se o navegador bloquear pop-up, a tela avisa.
 - **Gerar fluxo de pagamento** cria o fluxo com o nome `CUB 0,70% · 36x`, o número de
-  parcelas, a parcela inicial e um resumo na descrição. O fluxo guarda os parâmetros da
-  simulação (`cub_percentual`, `cub_meses`, `cub_valor_imovel`, `cub_parcela_inicial`) e
-  ganha o selo **CUB** no cartão.
+  parcelas, a parcela inicial, a entrada (em R$ e em % do imóvel) e um resumo na descrição.
+  O fluxo guarda os parâmetros da simulação (`cub_percentual`, `cub_meses`,
+  `cub_valor_imovel`, `cub_parcela_inicial`, `cub_entrada`) e ganha o selo **CUB** no cartão.
 
 ### Trocar o percentual fixo pela tabela oficial
 

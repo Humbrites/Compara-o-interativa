@@ -40,6 +40,8 @@ export function indiceDaTabela(
 
 export interface EntradaSimulacao {
   valorImovel: number | null
+  /** Entrada paga na assinatura — abate o valor do imovel. */
+  entrada?: number | null
   parcelaInicial: number
   meses: number
   fonte: FonteIndice
@@ -70,19 +72,32 @@ export interface LinhaSimulacao {
 
 export interface ResumoSimulacao {
   valorImovel: number | null
+  entrada: number
+  /** Valor do imovel menos a entrada — o que sobra para pagar (null sem valor). */
+  saldo: number | null
   meses: number
   parcelaInicial: number
   parcelaFinal: number
   fonte: string
   /** Soma das parcelas ja reajustadas. */
   totalPago: number
+  /** Entrada + parcelas: tudo que sai do bolso ate a entrega. */
+  totalDesembolsado: number
+  /**
+   * O que ainda falta do saldo quando a obra termina — o normal e sobrar
+   * (vira financiamento na entrega); negativo significa que as parcelas
+   * passaram do saldo.
+   */
+  saldoAoFimDaObra: number | null
   /** Quanto se pagaria mantendo a parcela inicial o periodo inteiro. */
   totalSemReajuste: number
   /** A diferenca entre os dois — o custo do reajuste. */
   totalReajuste: number
   /** Quanto a PARCELA cresceu do primeiro ao ultimo mes, em %. */
   percentualAcumulado: number
-  /** Quanto o total pago representa do valor do imovel (null sem valor). */
+  /** Quanto a entrada representa do valor do imovel (null sem valor). */
+  percentualEntrada: number | null
+  /** Quanto o desembolso ate a entrega representa do valor do imovel. */
   percentualDoImovel: number | null
 }
 
@@ -101,6 +116,7 @@ export const MAX_MESES = 600
  */
 export function simular({
   valorImovel,
+  entrada = 0,
   parcelaInicial,
   meses,
   fonte,
@@ -136,19 +152,30 @@ export function simular({
   const parcelaFinal = linhas.length > 0 ? linhas[linhas.length - 1].parcelaAtual : parcelaInicial
   const totalSemReajuste = parcelaInicial * total
 
+  const valorEntrada = entrada && Number.isFinite(entrada) ? entrada : 0
+  const temValor = valorImovel !== null && Number.isFinite(valorImovel) && valorImovel > 0
+  // A entrada sai do valor do imovel; o resto e o que as parcelas atacam.
+  const saldo = temValor ? (valorImovel as number) - valorEntrada : null
+  const totalDesembolsado = valorEntrada + acumulado
+
   return {
     linhas,
     resumo: {
       valorImovel,
+      entrada: valorEntrada,
+      saldo,
       meses: total,
       parcelaInicial,
       parcelaFinal,
       fonte: fonte.descricao,
       totalPago: acumulado,
+      totalDesembolsado,
+      saldoAoFimDaObra: saldo === null ? null : saldo - acumulado,
       totalSemReajuste,
       totalReajuste: acumulado - totalSemReajuste,
       percentualAcumulado: parcelaInicial > 0 ? (parcelaFinal / parcelaInicial - 1) * 100 : 0,
-      percentualDoImovel: valorImovel && valorImovel > 0 ? (acumulado / valorImovel) * 100 : null,
+      percentualEntrada: temValor ? (valorEntrada / (valorImovel as number)) * 100 : null,
+      percentualDoImovel: temValor ? (totalDesembolsado / (valorImovel as number)) * 100 : null,
     },
   }
 }
