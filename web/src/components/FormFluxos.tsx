@@ -4,6 +4,7 @@ import { api } from '../lib/api'
 import { Campo, Estado } from './ui'
 import { Icone } from './Icones'
 import { CartaoFluxo } from './CartaoFluxo'
+import { CalculadoraCub } from './CalculadoraCub'
 
 type Formulario = Record<string, string>
 
@@ -28,16 +29,47 @@ interface Props {
   empreendimentoId: number
   /** Preenchido = o fluxo pertence a essa unidade, nao ao empreendimento. */
   unidadeId?: number | null
+  /** Nome que a calculadora do CUB mostra e usa nos arquivos exportados. */
+  titulo?: string
+  /** Valor que pre-preenche o "valor do imovel" na calculadora. */
+  valorSugerido?: number | null
   fluxos: FluxoPagamento[]
   onMudou: (fluxos: FluxoPagamento[]) => void
   avisar: (texto: string, tipo?: 'sucesso' | 'erro') => void
 }
 
-export function FluxosDoEmpreendimento({ empreendimentoId, unidadeId = null, fluxos, onMudou, avisar }: Props) {
+export function FluxosDoEmpreendimento({
+  empreendimentoId,
+  unidadeId = null,
+  titulo = 'Empreendimento',
+  valorSugerido = null,
+  fluxos,
+  onMudou,
+  avisar,
+}: Props) {
   const daUnidade = unidadeId !== null
   const [form, setForm] = useState<Formulario | null>(null)
   const [editandoId, setEditandoId] = useState<number | null>(null)
   const [salvando, setSalvando] = useState(false)
+  const [calculando, setCalculando] = useState(false)
+
+  /** A calculadora do CUB devolve um fluxo pronto — so falta gravar. */
+  async function gerarPelaCalculadora(dados: FluxoInput) {
+    const criado = await api.criarFluxo({
+      ...dados,
+      empreendimento_id: empreendimentoId,
+      ...(daUnidade ? { unidade_id: unidadeId } : {}),
+    })
+    onMudou([...fluxos, criado])
+    avisar('Fluxo gerado pela calculadora do CUB')
+  }
+
+  const botaoCub = (
+    <button type="button" className="btn btn--secundario btn--bloco" onClick={() => setCalculando(true)}>
+      <Icone nome="grafico" tamanho={15} />
+      Calcular valor com CUB
+    </button>
+  )
 
   function abrirNovo() {
     setEditandoId(null)
@@ -106,10 +138,16 @@ export function FluxosDoEmpreendimento({ empreendimentoId, unidadeId = null, flu
               : 'Cadastre a tabela de venda: entrada, parcelamento, reforços, chaves e financiamento. Um empreendimento pode ter vários fluxos.'
           }
           acao={
-            <button type="button" className="btn btn--primario" onClick={abrirNovo}>
-              <Icone nome="mais" tamanho={15} />
-              Adicionar fluxo
-            </button>
+            <div className="acoes-fluxo">
+              <button type="button" className="btn btn--primario" onClick={abrirNovo}>
+                <Icone nome="mais" tamanho={15} />
+                Adicionar fluxo
+              </button>
+              <button type="button" className="btn btn--secundario" onClick={() => setCalculando(true)}>
+                <Icone nome="grafico" tamanho={15} />
+                Calcular valor com CUB
+              </button>
+            </div>
           }
         />
       )}
@@ -128,11 +166,25 @@ export function FluxosDoEmpreendimento({ empreendimentoId, unidadeId = null, flu
         </div>
       )}
 
+      {/* Com a lista vazia os dois caminhos ja aparecem dentro do <Estado>. */}
       {!form && fluxos.length > 0 && (
-        <button type="button" className="btn btn--secundario btn--bloco" onClick={abrirNovo}>
-          <Icone nome="mais" tamanho={15} />
-          Adicionar outro fluxo
-        </button>
+        <div className="acoes-fluxo">
+          <button type="button" className="btn btn--secundario btn--bloco" onClick={abrirNovo}>
+            <Icone nome="mais" tamanho={15} />
+            Adicionar outro fluxo
+          </button>
+          {botaoCub}
+        </div>
+      )}
+
+      {calculando && (
+        <CalculadoraCub
+          titulo={titulo}
+          valorSugerido={valorSugerido}
+          onFechar={() => setCalculando(false)}
+          onGerarFluxo={gerarPelaCalculadora}
+          avisar={avisar}
+        />
       )}
 
       {form && (

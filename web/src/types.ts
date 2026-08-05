@@ -14,6 +14,11 @@ export interface FluxoPagamento {
   financiamento_pct: number | null
   descricao: string | null
   observacoes: string | null
+  /** Parametros da simulacao do CUB que gerou o fluxo (null se veio da mao). */
+  cub_percentual: number | null
+  cub_meses: number | null
+  cub_valor_imovel: number | null
+  cub_parcela_inicial: number | null
   criado_em: string
   atualizado_em: string
 }

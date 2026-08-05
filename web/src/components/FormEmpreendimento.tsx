@@ -468,6 +468,7 @@ export function FormEmpreendimento({
       {salvo && (
         <FluxosDoEmpreendimento
           empreendimentoId={salvo.id}
+          titulo={salvo.nome}
           fluxos={salvo.fluxos}
           onMudou={(fluxos) => {
             setSalvo((atual) => (atual ? { ...atual, fluxos } : atual))

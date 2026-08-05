@@ -1282,6 +1282,290 @@
 }
 
 /* ==========================================================================
+   Calculadora do CUB — resumo, graficos e tabela de evolucao
+   ========================================================================== */
+
+.acoes-fluxo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e2);
+}
+
+.acoes-fluxo .btn--bloco {
+  flex: 1 1 220px;
+}
+
+/* Atalhos dos percentuais mais usados. */
+.atalhos-cub {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--e2);
+  margin-top: var(--e3);
+}
+
+.atalho {
+  padding: 3px var(--e3);
+  border: 1px solid var(--borda-forte);
+  border-radius: var(--raio-pill);
+  background: var(--superficie);
+  color: var(--texto-2);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: border-color var(--transicao), background var(--transicao), color var(--transicao);
+}
+
+.atalho:hover {
+  border-color: var(--marca-400);
+  color: var(--marca-700);
+}
+
+.atalho--ativo {
+  border-color: var(--marca-500);
+  background: var(--marca-50);
+  color: var(--marca-700);
+}
+
+.resumo-cub {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--e2);
+}
+
+.resumo-cub__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--e3);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  background: var(--superficie-2);
+  min-width: 0;
+}
+
+.resumo-cub__item--destaque {
+  border-color: var(--marca-300);
+  background: var(--marca-50);
+}
+
+.resumo-cub__rotulo {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--texto-3);
+}
+
+.resumo-cub__valor {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--texto);
+  letter-spacing: -0.01em;
+}
+
+.resumo-cub__item--destaque .resumo-cub__valor {
+  color: var(--marca-700);
+}
+
+.resumo-cub__dica {
+  font-size: 11px;
+  color: var(--texto-3);
+}
+
+.acoes-exportar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e2);
+  margin-top: var(--e3);
+}
+
+/* --- Graficos ------------------------------------------------------------ */
+
+.grafico {
+  margin: 0 0 var(--e5);
+}
+
+.grafico__titulo {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--texto-3);
+  margin-bottom: var(--e1);
+}
+
+.grafico__descricao {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--texto-2);
+}
+
+.grafico__area {
+  position: relative;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  background: var(--superficie);
+  overflow: hidden;
+}
+
+/* Grade e eixos recessivos: uma sombra do dado, nunca concorrente. */
+.grafico__grade {
+  stroke: var(--borda);
+  stroke-width: 1;
+}
+
+.grafico__tick {
+  fill: var(--texto-3);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.grafico__linha {
+  fill: none;
+  stroke: var(--marca-500);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.grafico__preenchimento {
+  fill: rgba(65, 105, 214, 0.14);
+  stroke: none;
+}
+
+.grafico__ponto {
+  fill: var(--marca-500);
+  /* Anel da superficie em vez de borda, para nao "engordar" a marca. */
+  stroke: var(--superficie);
+  stroke-width: 2;
+}
+
+.grafico__cursor {
+  stroke: var(--borda-forte);
+  stroke-width: 1;
+}
+
+.grafico__barra {
+  fill: var(--marca-500);
+  transition: fill var(--transicao);
+}
+
+.grafico__barra--ativa {
+  fill: var(--marca-700);
+}
+
+.grafico__tooltip {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 120px;
+  padding: var(--e2);
+  border-radius: var(--raio-sm);
+  background: var(--marca-900);
+  color: #fff;
+  font-size: 11.5px;
+  box-shadow: var(--sombra-lg);
+  pointer-events: none;
+}
+
+.grafico__tooltip-rotulo {
+  color: var(--marca-300);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.grafico__tooltip-valor {
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.grafico__tooltip-detalhe {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+/* --- Tabela de evolucao --------------------------------------------------- */
+
+.tabela-cub__area {
+  max-height: 420px;
+  overflow: auto;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+}
+
+.tabela-cub {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tabela-cub th,
+.tabela-cub td {
+  padding: var(--e2) var(--e3);
+  text-align: right;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--borda);
+}
+
+.tabela-cub th:first-child,
+.tabela-cub td:first-child {
+  text-align: left;
+}
+
+.tabela-cub thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--superficie-3);
+  color: var(--texto-2);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tabela-cub tbody tr:hover {
+  background: var(--marca-50);
+}
+
+.tabela-cub__reajuste {
+  color: var(--alerta);
+}
+
+.tabela-cub__forte {
+  font-weight: 700;
+  color: var(--texto);
+}
+
+.tabela-cub tfoot td {
+  position: sticky;
+  bottom: 0;
+  background: var(--superficie-2);
+  font-weight: 700;
+  border-top: 2px solid var(--borda-forte);
+}
+
+.fluxo__selo-cub {
+  padding: 1px var(--e2);
+  border-radius: var(--raio-pill);
+  background: var(--marca-100);
+  color: var(--marca-700);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+/* ==========================================================================
    Unidades
    ========================================================================== */
 

@@ -123,6 +123,17 @@ if (!colunasFluxo.some((coluna) => coluna.name === 'unidade_id')) {
 }
 db.exec('CREATE INDEX IF NOT EXISTS idx_fluxos_unidade ON fluxos_pagamento(unidade_id);')
 
+// Parametros da simulacao do CUB que gerou o fluxo — guardados para poder
+// reabrir a calculadora com os mesmos numeros (e, no futuro, refazer a conta
+// com a tabela oficial de indices).
+const COLUNAS_CUB = ['cub_percentual', 'cub_meses', 'cub_valor_imovel', 'cub_parcela_inicial']
+for (const coluna of COLUNAS_CUB) {
+  const existentes = db.prepare('PRAGMA table_info(fluxos_pagamento)').all()
+  if (!existentes.some((c) => c.name === coluna)) {
+    db.exec(`ALTER TABLE fluxos_pagamento ADD COLUMN ${coluna} REAL;`)
+  }
+}
+
 /** Colunas gravaveis de cada tabela — a fonte da verdade para montar INSERT/UPDATE. */
 export const CAMPOS_EMPREENDIMENTO = [
   'nome', 'construtora', 'cidade', 'bairro', 'endereco',
@@ -138,6 +149,7 @@ export const CAMPOS_FLUXO = [
   'reforcos_qtd', 'reforco_valor',
   'chaves_pct', 'financiamento_pct',
   'descricao', 'observacoes',
+  'cub_percentual', 'cub_meses', 'cub_valor_imovel', 'cub_parcela_inicial',
 ]
 
 export const CAMPOS_UNIDADE = [
@@ -154,6 +166,7 @@ const NUMERICOS = new Set([
   'parcela_valor', 'reforcos_qtd', 'reforco_valor', 'chaves_pct',
   'financiamento_pct',
   'andar', 'metragem', 'metragem_total', 'valor',
+  'cub_percentual', 'cub_meses', 'cub_valor_imovel', 'cub_parcela_inicial',
 ])
 
 /**

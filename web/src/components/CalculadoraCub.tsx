@@ -1,0 +1,429 @@
+import { useMemo, useRef, useState } from 'react'
+import type { FluxoInput } from '../types'
+import { indiceFixo, lerNumero, simular, fmtPercentual, MAX_MESES, type Simulacao } from '../lib/cub'
+import { exportarCsv, exportarPdf } from '../lib/exportarSimulacao'
+import { fmtMoeda, fmtMoedaCurta } from '../lib/format'
+import { Campo, Modal } from './ui'
+import { Icone } from './Icones'
+import { GraficoBarras, GraficoLinha } from './GraficoSvg'
+
+/** Percentuais que aparecem no dia a dia — atalho para não digitar. */
+const ATALHOS_CUB = [0.35, 0.6, 0.7, 0.75, 1]
+
+interface Formulario {
+  valorImovel: string
+  parcelaInicial: string
+  meses: string
+  percentual: string
+}
+
+const VAZIO: Formulario = { valorImovel: '', parcelaInicial: '', meses: '', percentual: '' }
+
+function validar(form: Formulario): { erros: Record<string, string>; entrada: ReturnType<typeof montar> | null } {
+  const erros: Record<string, string> = {}
+
+  const parcela = lerNumero(form.parcelaInicial)
+  if (parcela === null || parcela <= 0) erros.parcelaInicial = 'Informe a parcela inicial'
+
+  const meses = lerNumero(form.meses)
+  if (meses === null || meses < 1) erros.meses = 'Informe quantos meses faltam de obra'
+  else if (meses > MAX_MESES) erros.meses = `No máximo ${MAX_MESES} meses`
+
+  const percentual = lerNumero(form.percentual)
+  if (percentual === null) erros.percentual = 'Informe o percentual mensal do CUB'
+  else if (percentual < 0) erros.percentual = 'O percentual não pode ser negativo'
+  else if (percentual > 20) erros.percentual = 'Percentual mensal acima de 20% — confira'
+
+  const valorImovel = form.valorImovel.trim() ? lerNumero(form.valorImovel) : null
+  if (form.valorImovel.trim() && (valorImovel === null || valorImovel <= 0)) {
+    erros.valorImovel = 'Valor do imóvel inválido'
+  }
+
+  if (Object.keys(erros).length > 0) return { erros, entrada: null }
+  return { erros, entrada: montar(valorImovel, parcela as number, meses as number, percentual as number) }
+}
+
+function montar(valorImovel: number | null, parcelaInicial: number, meses: number, percentual: number) {
+  return {
+    valorImovel,
+    parcelaInicial,
+    meses: Math.trunc(meses),
+    percentual,
+    // A fonte de indice e o ponto de troca: quando existir a tabela oficial
+    // do CUB, e aqui que ela entra no lugar do percentual fixo.
+    fonte: indiceFixo(percentual),
+  }
+}
+
+function ItemResumo({
+  rotulo,
+  valor,
+  dica,
+  destaque,
+}: {
+  rotulo: string
+  valor: string
+  dica?: string
+  destaque?: boolean
+}) {
+  return (
+    <div className={`resumo-cub__item${destaque ? ' resumo-cub__item--destaque' : ''}`}>
+      <span className="resumo-cub__rotulo">{rotulo}</span>
+      <span className="resumo-cub__valor">{valor}</span>
+      {dica && <span className="resumo-cub__dica">{dica}</span>}
+    </div>
+  )
+}
+
+interface Props {
+  /** Aparece no cabeçalho e nos arquivos exportados. */
+  titulo: string
+  /** Pré-preenche o valor do imóvel (valor da unidade, quando houver). */
+  valorSugerido?: number | null
+  onFechar: () => void
+  /** Cria o fluxo de pagamento com o resultado da simulação. */
+  onGerarFluxo: (dados: FluxoInput) => Promise<void>
+  avisar: (texto: string, tipo?: 'sucesso' | 'erro') => void
+}
+
+export function CalculadoraCub({ titulo, valorSugerido, onFechar, onGerarFluxo, avisar }: Props) {
+  const [form, setForm] = useState<Formulario>(() => ({
+    ...VAZIO,
+    valorImovel: valorSugerido ? String(valorSugerido) : '',
+  }))
+  const [erros, setErros] = useState<Record<string, string>>({})
+  const [simulacao, setSimulacao] = useState<Simulacao | null>(null)
+  const [gerando, setGerando] = useState(false)
+  const areaGraficos = useRef<HTMLDivElement>(null)
+
+  function mudar(campo: keyof Formulario, valor: string) {
+    setForm((atual) => ({ ...atual, [campo]: valor }))
+    if (erros[campo]) setErros((atual) => ({ ...atual, [campo]: '' }))
+  }
+
+  function aoSimular() {
+    const { erros: novosErros, entrada } = validar(form)
+    setErros(novosErros)
+    if (!entrada) {
+      setSimulacao(null)
+      avisar('Revise os campos destacados', 'erro')
+      return
+    }
+    setSimulacao(simular(entrada))
+  }
+
+  function limpar() {
+    setForm(VAZIO)
+    setErros({})
+    setSimulacao(null)
+  }
+
+  const pontos = useMemo(() => {
+    if (!simulacao) return { parcelas: [], reajustes: [], acumulado: [] }
+    const rotulo = (mes: number) => `Mês ${mes}`
+    return {
+      parcelas: simulacao.linhas.map((l) => ({
+        rotulo: rotulo(l.mes),
+        valor: l.parcelaAtual,
+        detalhe: `reajuste de ${fmtMoeda(l.reajuste, true)}`,
+      })),
+      reajustes: simulacao.linhas.map((l) => ({
+        rotulo: rotulo(l.mes),
+        valor: l.reajuste,
+        detalhe: `sobre ${fmtMoeda(l.parcelaAntes, true)}`,
+      })),
+      acumulado: simulacao.linhas.map((l) => ({
+        rotulo: rotulo(l.mes),
+        valor: l.acumuladoPago,
+        detalhe: `${l.mes} de ${simulacao.resumo.meses} meses`,
+      })),
+    }
+  }, [simulacao])
+
+  function baixarPdf() {
+    if (!simulacao) return
+    // Leva os graficos ja desenhados para a folha impressa.
+    const svgs = [...(areaGraficos.current?.querySelectorAll('figure') ?? [])].map((figura) => figura.outerHTML)
+    const abriu = exportarPdf(simulacao, titulo, svgs)
+    if (!abriu) avisar('O navegador bloqueou a janela de impressão — libere os pop-ups do site', 'erro')
+  }
+
+  async function gerarFluxo() {
+    if (!simulacao) return
+    const { resumo } = simulacao
+
+    const percentualInformado = lerNumero(form.percentual) ?? 0
+
+    setGerando(true)
+    try {
+      await onGerarFluxo({
+        nome: `CUB ${fmtPercentual(percentualInformado)} · ${resumo.meses}x`,
+        parcelas: resumo.meses,
+        parcela_valor: resumo.parcelaInicial,
+        descricao:
+          `Parcelas corrigidas pelo CUB a ${resumo.fonte}. ` +
+          `A parcela sai de ${fmtMoeda(resumo.parcelaInicial, true)} e chega a ${fmtMoeda(resumo.parcelaFinal, true)} ` +
+          `no último mês de obra (${fmtPercentual(resumo.percentualAcumulado, 2)} de reajuste acumulado).`,
+        observacoes:
+          `Total pago na obra: ${fmtMoeda(resumo.totalPago, true)} — ` +
+          `${fmtMoeda(resumo.totalReajuste, true)} a mais do que manter a parcela inicial.`,
+        cub_percentual: percentualInformado,
+        cub_meses: resumo.meses,
+        cub_valor_imovel: resumo.valorImovel,
+        cub_parcela_inicial: resumo.parcelaInicial,
+      })
+      onFechar()
+    } catch (erro) {
+      avisar(erro instanceof Error ? erro.message : 'Falha ao gerar o fluxo', 'erro')
+    } finally {
+      setGerando(false)
+    }
+  }
+
+  const resumo = simulacao?.resumo
+
+  return (
+    <Modal
+      titulo="Calcular valor com CUB"
+      subtitulo={`${titulo} — simule o reajuste das parcelas até o fim da obra`}
+      largo
+      onFechar={onFechar}
+      rodape={
+        <>
+          <button type="button" className="btn btn--fantasma" onClick={limpar}>
+            <Icone nome="fechar" tamanho={15} />
+            Limpar
+          </button>
+          <div className="direita">
+            {simulacao && (
+              <button type="button" className="btn btn--secundario" onClick={() => void gerarFluxo()} disabled={gerando}>
+                {gerando ? (
+                  <>
+                    <Icone nome="spinner" tamanho={15} className="girando" />
+                    Gerando…
+                  </>
+                ) : (
+                  <>
+                    <Icone nome="cartao" tamanho={15} />
+                    Gerar fluxo de pagamento
+                  </>
+                )}
+              </button>
+            )}
+            <button type="button" className="btn btn--primario" onClick={aoSimular}>
+              <Icone nome="grafico" tamanho={15} />
+              Simular
+            </button>
+          </div>
+        </>
+      }
+    >
+      <section className="form-secao">
+        <h3 className="form-secao__titulo">
+          <Icone nome="dinheiro" tamanho={13} />
+          Dados da simulação
+        </h3>
+
+        <div className="grade">
+          <Campo rotulo="Valor do imóvel" dica="opcional, só referência" erro={erros.valorImovel}>
+            <input
+              className={`entrada${erros.valorImovel ? ' entrada--erro' : ''}`}
+              value={form.valorImovel}
+              onChange={(e) => mudar('valorImovel', e.target.value)}
+              placeholder="450.000,00"
+              inputMode="decimal"
+            />
+          </Campo>
+
+          <Campo rotulo="Parcela inicial" obrigatorio dica="R$" erro={erros.parcelaInicial}>
+            <input
+              className={`entrada${erros.parcelaInicial ? ' entrada--erro' : ''}`}
+              value={form.parcelaInicial}
+              onChange={(e) => mudar('parcelaInicial', e.target.value)}
+              placeholder="2.000,00"
+              inputMode="decimal"
+              autoFocus
+            />
+          </Campo>
+
+          <Campo rotulo="Meses restantes da obra" obrigatorio erro={erros.meses}>
+            <input
+              className={`entrada${erros.meses ? ' entrada--erro' : ''}`}
+              value={form.meses}
+              onChange={(e) => mudar('meses', e.target.value)}
+              placeholder="36"
+              inputMode="numeric"
+            />
+          </Campo>
+
+          <Campo rotulo="CUB mensal" obrigatorio dica="% ao mês" erro={erros.percentual}>
+            <input
+              className={`entrada${erros.percentual ? ' entrada--erro' : ''}`}
+              value={form.percentual}
+              onChange={(e) => mudar('percentual', e.target.value)}
+              placeholder="0,70"
+              inputMode="decimal"
+            />
+          </Campo>
+        </div>
+
+        <div className="atalhos-cub">
+          <span className="campo__dica">Usar:</span>
+          {ATALHOS_CUB.map((valor) => (
+            <button
+              key={valor}
+              type="button"
+              className={`atalho${lerNumero(form.percentual) === valor ? ' atalho--ativo' : ''}`}
+              onClick={() => mudar('percentual', String(valor).replace('.', ','))}
+            >
+              {fmtPercentual(valor)}
+            </button>
+          ))}
+        </div>
+
+        <p className="campo__dica" style={{ marginTop: 'var(--e3)' }}>
+          <Icone nome="info" tamanho={12} /> O reajuste incide só sobre a parcela, mês a mês e composto — o valor do
+          imóvel fica fixo. Quando houver a tabela oficial do CUB, ela entra no lugar deste percentual sem mudar o
+          cálculo.
+        </p>
+      </section>
+
+      {resumo && simulacao && (
+        <>
+          <section className="form-secao">
+            <h3 className="form-secao__titulo">
+              <Icone nome="alvo" tamanho={13} />
+              Resumo da obra
+            </h3>
+
+            <div className="resumo-cub">
+              <ItemResumo rotulo="Valor do imóvel" valor={resumo.valorImovel === null ? '—' : fmtMoeda(resumo.valorImovel)} />
+              <ItemResumo rotulo="Meses restantes" valor={String(resumo.meses)} />
+              <ItemResumo rotulo="Parcela inicial" valor={fmtMoeda(resumo.parcelaInicial, true)} />
+              <ItemResumo rotulo="CUB aplicado" valor={resumo.fonte} />
+              <ItemResumo
+                rotulo="Parcela final"
+                valor={fmtMoeda(resumo.parcelaFinal, true)}
+                dica="no último mês de obra"
+                destaque
+              />
+              <ItemResumo
+                rotulo="Reajuste acumulado"
+                valor={fmtPercentual(resumo.percentualAcumulado, 2)}
+                dica="sobre a parcela"
+                destaque
+              />
+              <ItemResumo
+                rotulo="Total pago na obra"
+                valor={fmtMoeda(resumo.totalPago, true)}
+                dica={
+                  resumo.percentualDoImovel !== null
+                    ? `${fmtPercentual(resumo.percentualDoImovel, 2)} do valor do imóvel`
+                    : undefined
+                }
+                destaque
+              />
+              <ItemResumo
+                rotulo="Total de reajuste"
+                valor={fmtMoeda(resumo.totalReajuste, true)}
+                dica={`a mais que ${fmtMoeda(resumo.totalSemReajuste, true)} sem correção`}
+                destaque
+              />
+            </div>
+
+            <div className="acoes-exportar">
+              <button type="button" className="btn btn--secundario btn--pequeno" onClick={baixarPdf}>
+                <Icone nome="lista" tamanho={13} />
+                Exportar PDF
+              </button>
+              <button
+                type="button"
+                className="btn btn--secundario btn--pequeno"
+                onClick={() => exportarCsv(simulacao, titulo)}
+              >
+                <Icone nome="grafico" tamanho={13} />
+                Exportar Excel
+              </button>
+            </div>
+          </section>
+
+          <section className="form-secao" ref={areaGraficos}>
+            <h3 className="form-secao__titulo">
+              <Icone nome="grafico" tamanho={13} />
+              Evolução mês a mês
+            </h3>
+
+            <GraficoLinha
+              titulo="Parcela ao longo da obra"
+              descricao={`de ${fmtMoeda(resumo.parcelaInicial, true)} a ${fmtMoeda(resumo.parcelaFinal, true)}`}
+              pontos={pontos.parcelas}
+              formatar={(v) => fmtMoeda(v, true)}
+              formatarEixo={fmtMoedaCurta}
+            />
+
+            <GraficoBarras
+              titulo="Reajuste de cada mês"
+              descricao="quanto o CUB acrescenta na parcela do mês"
+              pontos={pontos.reajustes}
+              formatar={(v) => fmtMoeda(v, true)}
+              formatarEixo={fmtMoedaCurta}
+            />
+
+            <GraficoLinha
+              titulo="Total pago acumulado"
+              descricao={`chega a ${fmtMoeda(resumo.totalPago, true)} no fim da obra`}
+              pontos={pontos.acumulado}
+              formatar={(v) => fmtMoeda(v, true)}
+              formatarEixo={fmtMoedaCurta}
+              comArea
+            />
+          </section>
+
+          <section className="form-secao">
+            <h3 className="form-secao__titulo">
+              <Icone nome="lista" tamanho={13} />
+              Tabela de evolução
+            </h3>
+
+            <div className="tabela-cub__area">
+              <table className="tabela-cub">
+                <thead>
+                  <tr>
+                    <th>Mês</th>
+                    <th>Parcela antes</th>
+                    <th>% CUB</th>
+                    <th>Valor do reajuste</th>
+                    <th>Parcela atual</th>
+                    <th>Acumulado pago</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {simulacao.linhas.map((linha) => (
+                    <tr key={linha.mes}>
+                      <td>{linha.mes}</td>
+                      <td>{fmtMoeda(linha.parcelaAntes, true)}</td>
+                      <td>{fmtPercentual(linha.percentual)}</td>
+                      <td className="tabela-cub__reajuste">{fmtMoeda(linha.reajuste, true)}</td>
+                      <td className="tabela-cub__forte">{fmtMoeda(linha.parcelaAtual, true)}</td>
+                      <td>{fmtMoeda(linha.acumuladoPago, true)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td>Total</td>
+                    <td />
+                    <td />
+                    <td className="tabela-cub__reajuste">{fmtMoeda(resumo.totalReajuste, true)}</td>
+                    <td />
+                    <td className="tabela-cub__forte">{fmtMoeda(resumo.totalPago, true)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </section>
+        </>
+      )}
+    </Modal>
+  )
+}

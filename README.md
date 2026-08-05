@@ -60,6 +60,9 @@ e faixa de valor do m²; busca por nome, construtora, cidade ou bairro (ignora a
 **Indicadores** — quantidade de empreendimentos, preço médio do m², maior e menor
 metragem, mais barato e mais caro (esses dois são clicáveis e levam ao empreendimento).
 
+**Calculadora do CUB** — dentro do cadastro, o botão **Calcular valor com CUB** simula
+a evolução das parcelas até o fim da obra e vira um fluxo de pagamento pronto.
+
 ---
 
 ## Cadastro em três etapas
@@ -97,6 +100,64 @@ Um empreendimento pode ter **vários** (tabela padrão, plano obra, à vista…)
 entrada, parcelamento, reforços, chaves, financiamento, descrição livre e observações.
 No comparativo, o seletor de fluxo mostra primeiro as tabelas da unidade escolhida e
 depois as gerais.
+
+---
+
+## Calculadora do CUB
+
+O botão **Calcular valor com CUB** aparece junto dos fluxos de pagamento — tanto nos
+gerais do empreendimento quanto nos de cada unidade (aí o valor do imóvel já vem
+preenchido com o valor da unidade).
+
+**O que você informa:** valor do imóvel (opcional, só referência), parcela inicial,
+meses restantes de obra e o percentual mensal do CUB — com atalhos para 0,35%, 0,60%,
+0,70%, 0,75% e 1,00%. Os campos aceitam `2.000,50`, `2000.50` ou `R$ 2.000`.
+
+**Como a conta é feita:** juros compostos sobre a parcela, mês a mês —
+`parcela do mês = parcela anterior × (1 + CUB)`. O **valor do imóvel não entra na
+conta**; o reajuste incide só sobre a parcela.
+
+> A parcela é **arredondada em centavos a cada mês** antes do próximo reajuste, que é
+> como a construtora emite o boleto (o mês seguinte corrige o valor efetivamente
+> cobrado). Com 2.000,00 a 0,70% isso dá 2.014,00 → 2.028,10 → 2.042,30. O modo de
+> precisão total existe (`arredondarPorMes: false`) e difere em centavos.
+
+**O que você vê:** o resumo em destaque (parcela final, total pago na obra, total de
+reajuste, percentual acumulado e quanto o total representa do valor do imóvel), a
+tabela mês a mês (parcela antes, % do CUB, valor do reajuste, parcela atual e
+acumulado pago) e três gráficos — evolução da parcela, reajuste de cada mês e total
+pago acumulado. Todos desenhados em SVG no próprio projeto, com tooltip ao passar o
+mouse; **a tabela é a leitura exata** — nenhum valor existe só no gráfico.
+
+**Botões:** *Simular*, *Limpar*, *Exportar PDF*, *Exportar Excel* e
+**Gerar fluxo de pagamento**.
+
+- **Exportar Excel** baixa um `.csv` com BOM e separador `;` — abre no Excel em
+  português com dois cliques, sem passar por biblioteca nenhuma.
+- **Exportar PDF** abre a folha de impressão do navegador (resumo + gráficos + tabela);
+  é só escolher "Salvar como PDF". Se o navegador bloquear pop-up, a tela avisa.
+- **Gerar fluxo de pagamento** cria o fluxo com o nome `CUB 0,70% · 36x`, o número de
+  parcelas, a parcela inicial e um resumo na descrição. O fluxo guarda os parâmetros da
+  simulação (`cub_percentual`, `cub_meses`, `cub_valor_imovel`, `cub_parcela_inicial`) e
+  ganha o selo **CUB** no cartão.
+
+### Trocar o percentual fixo pela tabela oficial
+
+O cálculo não sabe de onde vem o percentual: ele pergunta a uma **fonte de índice**
+(`web/src/lib/cub.ts`).
+
+```ts
+interface FonteIndice {
+  descricao: string
+  percentualDoMes: (mes: number) => number   // 1 = primeiro mês de obra
+}
+```
+
+Hoje a calculadora passa `indiceFixo(0.7)`. Quando existir a tabela oficial, passe
+`indiceDaTabela([0.62, 0.58, 0.71, …], reserva)` no lugar — a mesma função `simular()`
+roda sem alteração, e a coluna "% CUB" da tabela passa a mostrar o índice de cada mês
+sozinha. Meses além da tabela caem no percentual de reserva, então uma tabela curta
+não zera o resto da simulação.
 
 ---
 
@@ -145,6 +206,8 @@ compara-interativa/
         ├── components/      Mapa, PainelDetalhe, Comparativo, formulários…
         ├── lib/
         │   ├── comparar.ts  regras do "melhor indicador"
+        │   ├── cub.ts       simulação do CUB (fonte de índice plugável)
+        │   ├── exportarSimulacao.ts  CSV para Excel e folha de impressão"
         │   ├── dashboard.ts filtros, busca e cálculo dos indicadores
         │   ├── format.ts    formatação em pt-BR (R$, m², datas)
         │   ├── imagens.ts   capa e galeria de cada empreendimento
@@ -162,7 +225,8 @@ fluxos dela). Da foto, o banco guarda só o nome do arquivo, o nome original e a
 arquivo em si vive em `api/data/uploads/`.
 
 O fluxo de pagamento tem `unidade_id`: **em branco = tabela geral** do empreendimento,
-preenchido = tabela daquela unidade. Foi assim que as tabelas já cadastradas continuaram
+preenchido = tabela daquela unidade. As colunas `cub_*` guardam os parâmetros da
+simulação que gerou o fluxo (ficam nulas nos fluxos digitados à mão). Foi assim que as tabelas já cadastradas continuaram
 valendo quando as unidades entraram.
 
 ### Rotas da API
@@ -192,7 +256,8 @@ valendo quando as unidades entraram.
 ## Notas técnicas
 
 - **Sem dependências externas em tempo de execução** além dos tiles do OpenStreetMap:
-  as fontes são as do sistema e os ícones são SVG desenhados no próprio projeto.
+  as fontes são as do sistema, e os ícones e os gráficos são SVG desenhados no próprio
+  projeto — sem biblioteca de gráfico, sem gerador de PDF, sem CDN.
 - **Campo em branco vira `NULL`**, nunca `0` ou string vazia — é o que permite ao
   comparativo distinguir "não informado" de "zero".
 - A interface carrega a base inteira e trabalha em memória (filtros, busca e comparativo

@@ -174,6 +174,8 @@ export function UnidadesDoEmpreendimento({ empreendimentoId, unidades, onMudou, 
                       <FluxosDoEmpreendimento
                         empreendimentoId={empreendimentoId}
                         unidadeId={unidade.id}
+                        titulo={rotuloUnidade(unidade, indice)}
+                        valorSugerido={unidade.valor}
                         fluxos={unidade.fluxos}
                         onMudou={(fluxos) => trocarFluxos(unidade.id, fluxos)}
                         avisar={avisar}

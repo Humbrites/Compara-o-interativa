@@ -54,6 +54,8 @@ export function CartaoFluxo({ fluxo, indice, onEditar, onExcluir }: Props) {
       <header className="fluxo__topo">
         <Icone nome="cartao" tamanho={14} />
         <span className="fluxo__nome">{fluxo.nome?.trim() || `Fluxo ${indice + 1}`}</span>
+        {/* Sinaliza que as parcelas saíram da calculadora do CUB. */}
+        {fluxo.cub_percentual !== null && <span className="fluxo__selo-cub">CUB</span>}
         {(onEditar || onExcluir) && (
           <div className="fluxo__acoes">
             {onEditar && (
