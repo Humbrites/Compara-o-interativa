@@ -16,6 +16,19 @@ export interface FluxoPagamento {
   atualizado_em: string
 }
 
+/** Foto enviada pelo usuario; o arquivo mora na API e chega aqui como URL. */
+export interface ImagemEmpreendimento {
+  id: number
+  empreendimento_id: number
+  arquivo: string
+  nome_original: string | null
+  tamanho: number | null
+  /** Posicao na galeria — a de ordem 0 e a capa. */
+  ordem: number
+  criado_em: string
+  url: string
+}
+
 export interface Empreendimento {
   id: number
   nome: string
@@ -40,10 +53,11 @@ export interface Empreendimento {
   criado_em: string
   atualizado_em: string
   fluxos: FluxoPagamento[]
+  imagens: ImagemEmpreendimento[]
 }
 
 /** Payload de escrita: tudo opcional menos o nome, e numeros aceitam string vinda do input. */
-export type EmpreendimentoInput = Partial<Record<keyof Omit<Empreendimento, 'id' | 'criado_em' | 'atualizado_em' | 'fluxos'>, string | number | null>> & {
+export type EmpreendimentoInput = Partial<Record<keyof Omit<Empreendimento, 'id' | 'criado_em' | 'atualizado_em' | 'fluxos' | 'imagens'>, string | number | null>> & {
   nome: string
 }
 

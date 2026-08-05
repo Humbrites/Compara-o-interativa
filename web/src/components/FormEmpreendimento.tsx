@@ -1,9 +1,11 @@
 import { useState } from 'react'
-import type { Empreendimento, EmpreendimentoInput } from '../types'
+import type { Empreendimento, EmpreendimentoInput, ImagemEmpreendimento } from '../types'
 import { STATUS_OBRA, TIPOS } from '../lib/opcoes'
+import { api } from '../lib/api'
 import { Campo, Modal } from './ui'
 import { Icone } from './Icones'
 import { FluxosDoEmpreendimento } from './FormFluxos'
+import { GaleriaUpload } from './GaleriaUpload'
 
 /** O formulario trabalha com texto puro; a conversao acontece no envio. */
 type Formulario = Record<string, string>
@@ -56,6 +58,7 @@ interface Props {
   onFechar: () => void
   onSalvar: (dados: EmpreendimentoInput) => Promise<Empreendimento>
   onMudouFluxos: () => void
+  onMudouImagens: (id: number, imagens: ImagemEmpreendimento[]) => void
   avisar: (texto: string, tipo?: 'sucesso' | 'erro') => void
 }
 
@@ -65,6 +68,7 @@ export function FormEmpreendimento({
   onFechar,
   onSalvar,
   onMudouFluxos,
+  onMudouImagens,
   avisar,
 }: Props) {
   const [form, setForm] = useState<Formulario>(() => paraFormulario(empreendimento))
@@ -73,6 +77,16 @@ export function FormEmpreendimento({
   const [salvando, setSalvando] = useState(false)
   // Depois de salvar a etapa 1 passamos a trabalhar sobre o registro criado.
   const [salvo, setSalvo] = useState<Empreendimento | null>(empreendimento)
+  // Fotos escolhidas antes de o cadastro existir — sobem logo apos o salvar.
+  const [pendentes, setPendentes] = useState<File[]>([])
+  // O campo de link so aparece a pedido, ou quando ja veio preenchido.
+  const [verLink, setVerLink] = useState(() => Boolean(empreendimento?.imagem_url))
+
+  /** Guarda a galeria no estado local e avisa a tela de fora. */
+  function aplicarImagens(id: number, imagens: ImagemEmpreendimento[]) {
+    setSalvo((atual) => (atual ? { ...atual, imagens } : atual))
+    onMudouImagens(id, imagens)
+  }
 
   const editando = empreendimento !== null
 
@@ -111,8 +125,27 @@ export function FormEmpreendimento({
 
       const resultado = await onSalvar(dados as EmpreendimentoInput)
       setSalvo(resultado)
-      setPasso(2)
       avisar(editando ? 'Empreendimento atualizado' : 'Empreendimento cadastrado')
+
+      // So agora existe id para pendurar as fotos escolhidas antes de salvar.
+      if (pendentes.length > 0) {
+        try {
+          const resposta = await api.enviarImagens(resultado.id, pendentes)
+          setPendentes([])
+          setSalvo({ ...resultado, imagens: resposta.imagens })
+          onMudouImagens(resultado.id, resposta.imagens)
+
+          const recusadas = resposta.recusadas ?? []
+          if (recusadas.length > 0) avisar(`${recusadas[0].nome}: ${recusadas[0].motivo}`, 'erro')
+          else avisar(pendentes.length === 1 ? 'Foto enviada' : `${pendentes.length} fotos enviadas`)
+        } catch (erro) {
+          // O cadastro ja foi salvo: as fotos continuam na lista para tentar de novo.
+          avisar(erro instanceof Error ? erro.message : 'Cadastro salvo, mas as fotos não subiram', 'erro')
+          return
+        }
+      }
+
+      setPasso(2)
     } catch (erro) {
       avisar(erro instanceof Error ? erro.message : 'Falha ao salvar', 'erro')
     } finally {
@@ -271,33 +304,61 @@ export function FormEmpreendimento({
           <section className="form-secao">
             <h3 className="form-secao__titulo">
               <Icone nome="imagem" tamanho={13} />
-              Complementos
+              Fotos
             </h3>
-            <div className="grade">
-              <Campo rotulo="Link de imagem" className="col-inteira" dica="URL da foto de capa">
-                {entrada('imagem_url', { placeholder: 'https://…', type: 'url' })}
-              </Campo>
-              {form.imagem_url.trim() && (
-                <div className="col-inteira">
-                  <img
-                    src={form.imagem_url}
-                    alt="Pré-visualização da imagem"
-                    style={{
-                      width: '100%',
-                      maxHeight: 160,
-                      objectFit: 'cover',
-                      borderRadius: 'var(--raio)',
-                      border: '1px solid var(--borda)',
-                    }}
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none'
-                    }}
-                    onLoad={(e) => {
-                      e.currentTarget.style.display = 'block'
-                    }}
-                  />
+
+            <GaleriaUpload
+              empreendimentoId={salvo?.id ?? null}
+              imagens={salvo?.imagens ?? []}
+              pendentes={pendentes}
+              onImagens={(imagens) => salvo && aplicarImagens(salvo.id, imagens)}
+              onPendentes={setPendentes}
+              avisar={avisar}
+            />
+
+            {/* O link avulso e a forma antiga de dar capa ao empreendimento;
+                fica recolhido para nao competir com o envio de arquivos. */}
+            <div className="link-avulso">
+              <button type="button" className="btn btn--fantasma btn--pequeno" onClick={() => setVerLink((v) => !v)}>
+                <Icone nome={verLink ? 'seta_cima' : 'seta_baixo'} tamanho={13} />
+                Usar um link de imagem
+              </button>
+
+              {verLink && (
+                <div className="grade" style={{ marginTop: 'var(--e3)' }}>
+                  <Campo
+                    rotulo="Link de imagem"
+                    className="col-inteira"
+                    dica="só vale quando não há fotos enviadas"
+                  >
+                    {entrada('imagem_url', { placeholder: 'https://…', type: 'url' })}
+                  </Campo>
+                  {form.imagem_url.trim() && (
+                    <div className="col-inteira">
+                      <img
+                        src={form.imagem_url}
+                        alt="Pré-visualização da imagem"
+                        className="link-avulso__previa"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none'
+                        }}
+                        onLoad={(e) => {
+                          e.currentTarget.style.display = 'block'
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
+            </div>
+          </section>
+
+          <section className="form-secao">
+            <h3 className="form-secao__titulo">
+              <Icone nome="lista" tamanho={13} />
+              Observações
+            </h3>
+            <div className="grade">
               <Campo rotulo="Observações" className="col-inteira">
                 <textarea
                   className="entrada"

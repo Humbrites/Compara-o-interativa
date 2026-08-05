@@ -7,7 +7,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const DATA_DIR = join(__dirname, '..', 'data')
 const DB_FILE = process.env.DB_FILE || join(DATA_DIR, 'compara.db')
 
+/** Onde os arquivos de imagem enviados pelo formulario sao gravados. */
+export const UPLOAD_DIR = join(DATA_DIR, 'uploads')
+
 mkdirSync(DATA_DIR, { recursive: true })
+mkdirSync(UPLOAD_DIR, { recursive: true })
 
 export const db = new Database(DB_FILE)
 
@@ -61,6 +65,21 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_fluxos_empreendimento
     ON fluxos_pagamento(empreendimento_id);
+
+  -- Galeria: o arquivo em si fica em data/uploads; aqui guardamos so o nome
+  -- gerado, o nome original (para exibir) e a posicao. Ordem 0 = capa.
+  CREATE TABLE IF NOT EXISTS imagens (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    empreendimento_id INTEGER NOT NULL REFERENCES empreendimentos(id) ON DELETE CASCADE,
+    arquivo           TEXT NOT NULL,
+    nome_original     TEXT,
+    tamanho           INTEGER,
+    ordem             INTEGER NOT NULL DEFAULT 0,
+    criado_em         TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_imagens_empreendimento
+    ON imagens(empreendimento_id, ordem);
 `)
 
 /** Colunas gravaveis de cada tabela — a fonte da verdade para montar INSERT/UPDATE. */

@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { Empreendimento } from '../types'
 import { fmtArea, fmtEntrega, fmtFaixaMetragem, fmtInteiro, fmtMoeda, fmtTexto, TRACO } from '../lib/format'
 import { corDoStatus } from '../lib/opcoes'
+import { fotosDe } from '../lib/imagens'
 import { Icone, type NomeIcone } from './Icones'
 import { CartaoFluxo } from './CartaoFluxo'
+import { Galeria } from './Galeria'
 import { Selo } from './ui'
 
 function ItemFicha({ icone, rotulo, valor }: { icone: NomeIcone; rotulo: string; valor: string }) {
@@ -40,10 +42,11 @@ export function PainelDetalhe({
 }: Props) {
   const local = [e.bairro, e.cidade].filter(Boolean).join(', ')
 
-  // Um link de imagem quebrado nao pode levar o nome do empreendimento junto.
-  const [imagemFalhou, setImagemFalhou] = useState(false)
-  useEffect(() => setImagemFalhou(false), [e.id, e.imagem_url])
-  const temCapa = Boolean(e.imagem_url) && !imagemFalhou
+  const fotos = useMemo(() => fotosDe(e), [e])
+  // A galeria some quando todo link quebra; ai o nome volta para o cabecalho.
+  const [galeriaVazia, setGaleriaVazia] = useState(false)
+  useEffect(() => setGaleriaVazia(false), [e.id])
+  const temCapa = fotos.length > 0 && !galeriaVazia
 
   return (
     <>
@@ -63,19 +66,10 @@ export function PainelDetalhe({
       </div>
 
       <div className="painel__conteudo">
-        {/* Sem imagem (ou com link quebrado) nao vale gastar 190px com um
+        {/* Sem foto (ou com link quebrado) nao vale gastar 190px com um
             placeholder: o nome sobe para o cabecalho e o painel comeca no conteudo. */}
-        {temCapa && (
-          <div className="capa">
-            <img src={e.imagem_url as string} alt={e.nome} onError={() => setImagemFalhou(true)} />
-            <div className="capa__gradiente" />
-            <div className="capa__nome">{e.nome}</div>
-            {e.tipo && (
-              <span className="capa__selo">
-                <Selo cor="cinza">{e.tipo}</Selo>
-              </span>
-            )}
-          </div>
+        {fotos.length > 0 && (
+          <Galeria key={e.id} fotos={fotos} nome={e.nome} tipo={e.tipo} onVazia={setGaleriaVazia} />
         )}
 
         <div className="detalhe">

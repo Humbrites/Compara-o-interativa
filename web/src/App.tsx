@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { Empreendimento, EmpreendimentoInput, Filtros } from './types'
+import type { Empreendimento, EmpreendimentoInput, Filtros, ImagemEmpreendimento } from './types'
 import { FILTROS_VAZIOS } from './types'
 import { api } from './lib/api'
 import { aplicarFiltros, calcularIndicadores } from './lib/dashboard'
@@ -110,6 +110,11 @@ export default function App() {
 
   function irPara(id: number) {
     setSelecionadoA(id)
+  }
+
+  /** A galeria muda dentro do modal; o painel e as listas acompanham na hora. */
+  function atualizarImagens(id: number, imagens: ImagemEmpreendimento[]) {
+    setLista((atual) => atual.map((e) => (e.id === id ? { ...e, imagens } : e)))
   }
 
   /* --- Render ------------------------------------------------------------ */
@@ -236,6 +241,7 @@ export default function App() {
           }}
           onSalvar={salvarEmpreendimento}
           onMudouFluxos={() => void carregar()}
+          onMudouImagens={atualizarImagens}
           avisar={avisar}
         />
       )}

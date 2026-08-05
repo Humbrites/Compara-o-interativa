@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import type { Empreendimento } from '../types'
 import { fmtEntrega, fmtFaixaMetragem, fmtInteiro, fmtMoeda, fmtTexto, TRACO } from '../lib/format'
 import { corDoStatus, ordemDaEntrega, pesoDoStatus } from '../lib/opcoes'
+import { capaDe } from '../lib/imagens'
 import { Icone } from './Icones'
 import { Modal, Estado, Selo } from './ui'
 
@@ -186,10 +187,10 @@ export function ListaEmpreendimentos({
                 >
                   <td>
                     <div className="tabela-lista__emp">
-                      {e.imagem_url ? (
+                      {capaDe(e) ? (
                         <img
                           className="tabela-lista__foto"
-                          src={e.imagem_url}
+                          src={capaDe(e) as string}
                           alt=""
                           onError={(ev) => ev.currentTarget.remove()}
                         />

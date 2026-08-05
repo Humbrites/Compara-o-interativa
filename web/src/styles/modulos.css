@@ -494,11 +494,6 @@
   transform: scale(1.04);
 }
 
-/* Link de imagem quebrado: some com a capa em vez de deixar um buraco. */
-.capa--falhou {
-  display: none;
-}
-
 .capa__selo {
   position: absolute;
   left: var(--e4);
@@ -1284,6 +1279,384 @@
   font-variant-numeric: tabular-nums;
   color: var(--marca-700);
   white-space: nowrap;
+}
+
+/* ==========================================================================
+   Fotos — galeria do painel, visor ampliado e envio no formulario
+   ========================================================================== */
+
+/* --- Capa navegavel e tira de miniaturas --------------------------------- */
+
+.capa__abrir {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+}
+
+.capa__seta,
+.capa__contador {
+  position: absolute;
+  z-index: 1;
+  background: rgba(19, 26, 51, 0.55);
+  color: #fff;
+  backdrop-filter: blur(3px);
+}
+
+.capa__seta {
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: var(--raio-pill);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--transicao), background var(--transicao);
+}
+
+.capa:hover .capa__seta,
+.capa__seta:focus-visible {
+  opacity: 1;
+}
+
+.capa__seta:hover {
+  background: rgba(19, 26, 51, 0.8);
+}
+
+.capa__seta--esq {
+  left: var(--e2);
+}
+
+.capa__seta--dir {
+  right: var(--e2);
+}
+
+.capa__contador {
+  top: var(--e3);
+  right: var(--e3);
+  padding: 2px var(--e2);
+  border-radius: var(--raio-pill);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.tira {
+  display: flex;
+  gap: var(--e2);
+  padding: var(--e2) var(--e5);
+  overflow-x: auto;
+  background: var(--superficie-2);
+  border-bottom: 1px solid var(--borda);
+}
+
+.tira__item {
+  flex: 0 0 auto;
+  width: 56px;
+  height: 42px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: var(--raio-sm);
+  overflow: hidden;
+  cursor: pointer;
+  background: var(--superficie-3);
+  opacity: 0.65;
+  transition: opacity var(--transicao), border-color var(--transicao);
+}
+
+.tira__item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.tira__item:hover {
+  opacity: 1;
+}
+
+.tira__item--ativo {
+  opacity: 1;
+  border-color: var(--marca-500);
+}
+
+/* --- Visor em tela cheia -------------------------------------------------- */
+
+.visor {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: var(--e8);
+  background: rgba(10, 14, 28, 0.92);
+  animation: surgir var(--transicao) both;
+}
+
+.visor__img {
+  max-width: min(100%, 1400px);
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: var(--raio);
+  box-shadow: var(--sombra-xl);
+}
+
+.visor__fechar,
+.visor__seta {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--raio-pill);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  cursor: pointer;
+  transition: background var(--transicao);
+}
+
+.visor__fechar:hover,
+.visor__seta:hover {
+  background: rgba(255, 255, 255, 0.24);
+}
+
+.visor__fechar {
+  top: var(--e5);
+  right: var(--e5);
+  width: 40px;
+  height: 40px;
+}
+
+.visor__seta {
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+}
+
+.visor__seta--esq {
+  left: var(--e5);
+}
+
+.visor__seta--dir {
+  right: var(--e5);
+}
+
+.visor__contador {
+  position: absolute;
+  bottom: var(--e5);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: var(--e1) var(--e3);
+  border-radius: var(--raio-pill);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Envio de fotos no formulario ---------------------------------------- */
+
+.galeria-upload {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e3);
+}
+
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--e2);
+  padding: var(--e5);
+  border: 1.5px dashed var(--borda-forte);
+  border-radius: var(--raio);
+  background: var(--superficie-2);
+  color: var(--texto-3);
+  text-align: center;
+  transition: border-color var(--transicao), background var(--transicao);
+}
+
+.dropzone--ativa {
+  border-color: var(--marca-500);
+  background: var(--marca-50);
+  color: var(--marca-700);
+}
+
+.dropzone--ocupada {
+  opacity: 0.85;
+}
+
+.dropzone__titulo {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--texto-2);
+}
+
+.dropzone__dica {
+  font-size: 12px;
+}
+
+.galeria-upload__legenda {
+  margin: 0;
+}
+
+.miniaturas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: var(--e2);
+}
+
+.mini {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-sm);
+  overflow: hidden;
+  background: var(--superficie-3);
+  animation: surgir var(--transicao) both;
+}
+
+.mini[draggable='true'] {
+  cursor: grab;
+}
+
+.mini__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.mini--capa {
+  border-color: var(--marca-400);
+  box-shadow: 0 0 0 2px var(--marca-100);
+}
+
+.mini--pendente .mini__img {
+  opacity: 0.85;
+}
+
+.mini--arrastando {
+  opacity: 0.4;
+}
+
+.mini--alvo {
+  border-color: var(--marca-500);
+  box-shadow: 0 0 0 2px var(--marca-300);
+}
+
+.mini__selo {
+  position: absolute;
+  top: var(--e1);
+  left: var(--e1);
+  padding: 1px var(--e2);
+  border-radius: var(--raio-pill);
+  background: var(--marca-600);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.mini__selo--pendente {
+  background: var(--alerta);
+}
+
+.mini__acoes {
+  position: absolute;
+  top: var(--e1);
+  right: var(--e1);
+  display: flex;
+  gap: var(--e1);
+  opacity: 0;
+  transition: opacity var(--transicao);
+}
+
+.mini:hover .mini__acoes,
+.mini:focus-within .mini__acoes {
+  opacity: 1;
+}
+
+.mini__botao {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: var(--raio-pill);
+  background: rgba(19, 26, 51, 0.6);
+  color: #fff;
+  cursor: pointer;
+  transition: background var(--transicao);
+}
+
+.mini__botao:hover {
+  background: rgba(19, 26, 51, 0.85);
+}
+
+.mini__botao--perigo:hover {
+  background: var(--perigo);
+}
+
+.mini__rodape {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 2px var(--e2);
+  background: linear-gradient(to top, rgba(19, 26, 51, 0.7), transparent);
+  color: #fff;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* Confirmacao de remocao dentro do proprio card, sem pop-up do navegador. */
+.mini__confirma {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--e2);
+  padding: var(--e2);
+  background: rgba(19, 26, 51, 0.86);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.mini__confirma-botoes {
+  display: flex;
+  gap: var(--e1);
+}
+
+.mini__confirma .btn--fantasma {
+  color: #fff;
+}
+
+.mini__confirma .btn--fantasma:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.link-avulso {
+  padding-top: var(--e1);
+}
+
+.link-avulso__previa {
+  width: 100%;
+  max-height: 160px;
+  object-fit: cover;
+  border-radius: var(--raio);
+  border: 1px solid var(--borda);
 }
 
 /* ==========================================================================

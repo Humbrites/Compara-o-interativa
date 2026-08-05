@@ -12,6 +12,11 @@ export default defineConfig({
         target: 'http://127.0.0.1:3210',
         changeOrigin: true,
       },
+      // As fotos enviadas ficam no disco da API e sao servidas por ela.
+      '/uploads': {
+        target: 'http://127.0.0.1:3210',
+        changeOrigin: true,
+      },
     },
   },
 })

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import type { Empreendimento } from '../types'
 import { compararEmpreendimentos, compararFluxos, textosDoFluxo, type LinhaComparativo } from '../lib/comparar'
 import { fmtMoeda, fmtTexto } from '../lib/format'
+import { capaDe } from '../lib/imagens'
 import { Icone } from './Icones'
 import { Modal, Estado } from './ui'
 
@@ -95,8 +96,8 @@ function LadoVersus({
 
   return (
     <div className={`versus__lado versus__lado--${papel}`}>
-      {e.imagem_url ? (
-        <img className="versus__foto" src={e.imagem_url} alt="" onError={(ev) => ev.currentTarget.remove()} />
+      {capaDe(e) ? (
+        <img className="versus__foto" src={capaDe(e) as string} alt="" onError={(ev) => ev.currentTarget.remove()} />
       ) : (
         <div className="versus__foto versus__foto--vazia">
           <Icone nome="predio" tamanho={22} />
@@ -173,8 +174,8 @@ function SeletorLateral({
         <div className="lista-escolha">
           {candidatos.map((e) => (
             <button key={e.id} type="button" className="escolha" onClick={() => onEscolher(e.id)}>
-              {e.imagem_url ? (
-                <img className="escolha__foto" src={e.imagem_url} alt="" onError={(ev) => ev.currentTarget.remove()} />
+              {capaDe(e) ? (
+                <img className="escolha__foto" src={capaDe(e) as string} alt="" onError={(ev) => ev.currentTarget.remove()} />
               ) : (
                 <div className="escolha__foto" style={{ display: 'grid', placeItems: 'center', color: 'var(--texto-3)' }}>
                   <Icone nome="predio" tamanho={18} />
