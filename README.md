@@ -101,9 +101,17 @@ lateral, esquina), metragem privativa e total, dormitórios, suítes, banheiros,
 valor do m² e situação (disponível, reservada, vendida). **Cada unidade tem os próprios fluxos
 de pagamento**, abertos dentro do cartão dela.
 
-> O valor do m² da unidade é calculado a partir do preço e da metragem privativa — informe
-> só se quiser sobrescrever. Com unidades cadastradas, o painel passa a mostrar a **faixa**
-> delas (metragem, dormitórios e vagas) no lugar dos campos gerais.
+> **O valor do m² se preenche sozinho.** Assim que a **metragem total** e o **valor** estão
+> na tela, o campo aparece calculado (`valor ÷ metragem total`) e é esse número que fica
+> gravado. Sem metragem total, a conta usa a privativa — e a dica do campo diz qual base
+> entrou. O preço vem do **valor da unidade**; se ele estiver em branco, vale o valor do
+> imóvel que a **tabela de pagamento** guardou (o que a calculadora do CUB grava ao gerar o
+> fluxo). Digitar outro número ali assume o comando — a dica vira "informado à mão" e
+> aparece um **"Voltar ao cálculo automático"**. Reabrindo a unidade, um m² que bate com a
+> conta continua acompanhando o valor; um que foi ajustado à mão é preservado.
+>
+> Com unidades cadastradas, o painel passa a mostrar a **faixa** delas (metragem,
+> dormitórios e vagas) no lugar dos campos gerais.
 
 **3. Fluxos de pagamento** — as tabelas que valem para o **empreendimento inteiro**.
 Um empreendimento pode ter **vários** (tabela padrão, plano obra, à vista…), cada um com

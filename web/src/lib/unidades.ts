@@ -1,4 +1,4 @@
-import type { Unidade } from '../types'
+import type { FluxoPagamento, Unidade } from '../types'
 
 /**
  * Como a unidade e chamada na tela. Cai para o numero, depois para a torre e,
@@ -32,17 +32,50 @@ export function posicaoUnidade(unidade: Unidade): string {
 }
 
 /**
+ * Valor do m²: preco dividido pela metragem. A base e a metragem TOTAL, que e
+ * a area que o cliente compra; a privativa so entra quando a total nao foi
+ * informada — melhor um m² pela privativa do que campo vazio.
+ *
+ * A mesma regra vale no formulario (que preenche o campo enquanto se digita) e
+ * aqui, para uma unidade gravada antes disso mostrar o mesmo numero.
+ */
+export function calcularValorM2(
+  valor: number | null,
+  metragemTotal: number | null,
+  metragemPrivativa: number | null = null,
+): number | null {
+  if (valor === null || !Number.isFinite(valor) || valor <= 0) return null
+
+  const base = [metragemTotal, metragemPrivativa].find(
+    (m): m is number => m !== null && Number.isFinite(m) && m > 0,
+  )
+  return base === undefined ? null : valor / base
+}
+
+/**
+ * O valor do imovel que ficou gravado na tabela de pagamento da unidade — e o
+ * que a calculadora do CUB guarda ao gerar o fluxo. Serve de preco quando a
+ * unidade em si nao tem valor digitado.
+ */
+export function valorNoFluxo(fluxos: FluxoPagamento[] | undefined): number | null {
+  const comValor = (fluxos ?? []).find(
+    (f) => f.cub_valor_imovel !== null && Number.isFinite(f.cub_valor_imovel) && f.cub_valor_imovel > 0,
+  )
+  return comValor?.cub_valor_imovel ?? null
+}
+
+/**
  * Valor do m² da unidade: o informado a mao vence; sem ele, deriva do preco
- * total dividido pela metragem privativa.
+ * (o da unidade ou o da tabela de pagamento) pela metragem.
  */
 export function valorM2Da(unidade: Unidade): number | null {
   if (unidade.valor_m2 !== null && Number.isFinite(unidade.valor_m2)) return unidade.valor_m2
 
-  const { valor, metragem } = unidade
-  if (valor === null || metragem === null || !Number.isFinite(valor) || !Number.isFinite(metragem) || metragem <= 0) {
-    return null
-  }
-  return valor / metragem
+  return calcularValorM2(
+    unidade.valor ?? valorNoFluxo(unidade.fluxos),
+    unidade.metragem_total,
+    unidade.metragem,
+  )
 }
 
 interface Faixa {
