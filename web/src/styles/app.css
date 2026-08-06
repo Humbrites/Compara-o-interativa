@@ -394,6 +394,12 @@ select.entrada {
   border-color: var(--perigo);
 }
 
+/* Valor que o proprio formulario deduziu — segue editavel, so avisa a origem. */
+.entrada--calculada {
+  background: var(--marca-50);
+  border-style: dashed;
+}
+
 .campo__erro {
   font-size: 11.5px;
   color: var(--perigo);

@@ -1,6 +1,7 @@
 import type { Simulacao } from './cub'
 import { fmtPercentual } from './cub'
-import { fmtMoeda } from './format'
+import { fmtMoeda, TRACO } from './format'
+import { textoDoPrazo, type ResultadoInvestimento } from './investimento'
 
 /**
  * Exportacoes sem biblioteca externa:
@@ -25,6 +26,15 @@ function baixar(conteudo: BlobPart, nomeArquivo: string, tipo: string) {
 /** Numero em pt-BR sem simbolo, para a celula ficar numerica no Excel. */
 function numero(valor: number, casas = 2): string {
   return valor.toFixed(casas).replace('.', ',')
+}
+
+/** Texto do usuario dentro do HTML da folha impressa. */
+function esc(texto: string): string {
+  return texto
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
 }
 
 function nomeBase(titulo: string): string {
@@ -95,6 +105,27 @@ const ESTILO_IMPRESSAO = `
   tfoot td { font-weight: 700; border-top: 2px solid #cfd7e5; }
   @page { margin: 14mm; }
   @media print { thead { display: table-header-group; } tr { break-inside: avoid; } }
+
+  /* Blocos da apresentacao de investimento. */
+  h2 { font-size: 15px; margin: 0 0 2px; }
+  .secao { margin-bottom: 18px; break-inside: avoid; }
+  .secao__titulo { font-size: 10px; text-transform: uppercase; letter-spacing: .06em;
+                   color: #7b8599; font-weight: 700; margin: 0 0 8px;
+                   border-bottom: 1px solid #e3e8f0; padding-bottom: 4px; }
+  .imovel { border: 1px solid #e3e8f0; border-left: 3px solid #2f6df6; border-radius: 8px;
+            padding: 10px 12px; margin-bottom: 18px; }
+  .imovel__linha { color: #4d5871; font-size: 11.5px; margin-bottom: 8px; }
+  .imovel .resumo { grid-template-columns: repeat(4, 1fr); margin: 0; gap: 8px; }
+  .hero { display: grid; grid-template-columns: 2fr 1fr; gap: 10px; margin-bottom: 18px; }
+  .hero__principal, .hero__lado { border-radius: 8px; padding: 12px 14px; }
+  .hero__principal { background: #1b3a7a; color: #fff; }
+  .hero__lado { border: 1px solid #bfe3c9; background: #f0faf3; color: #1d6b3a; }
+  .hero__rotulo { font-size: 9px; text-transform: uppercase; letter-spacing: .05em; opacity: .85; }
+  .hero__valor { font-size: 24px; font-weight: 700; line-height: 1.2; }
+  .hero__valor--menor { font-size: 19px; }
+  .hero__dica { font-size: 10.5px; opacity: .9; }
+  .nota { color: #7b8599; font-size: 10px; line-height: 1.5; margin-top: 14px;
+          border-top: 1px solid #e3e8f0; padding-top: 8px; }
 `
 
 export function exportarPdf(simulacao: Simulacao, titulo: string) {
@@ -107,12 +138,12 @@ export function exportarPdf(simulacao: Simulacao, titulo: string) {
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8">
-  <title>${titulo} — simulação CUB</title>
+  <title>${esc(titulo)} — simulação CUB</title>
   <style>${ESTILO_IMPRESSAO}</style>
 </head>
 <body>
   <h1>Simulação de reajuste pelo CUB</h1>
-  <div class="sub">${titulo} · ${resumo.fonte} · ${resumo.meses} meses de obra${
+  <div class="sub">${esc(titulo)} · ${resumo.fonte} · ${resumo.meses} meses de obra${
     resumo.entrada > 0 ? ` · entrada de ${fmtMoeda(resumo.entrada)}` : ''
   }</div>
 
@@ -163,6 +194,11 @@ export function exportarPdf(simulacao: Simulacao, titulo: string) {
 </body>
 </html>`
 
+  return imprimir(html)
+}
+
+/** Abre a folha em outra aba e chama a impressao. false = pop-up bloqueado. */
+function imprimir(html: string): boolean {
   const janela = window.open('', '_blank')
   if (!janela) return false
 
@@ -174,4 +210,165 @@ export function exportarPdf(simulacao: Simulacao, titulo: string) {
     janela.print()
   })
   return true
+}
+
+/**
+ * Dados do imovel que abrem a apresentacao do investimento. Chegam prontos em
+ * texto: quem monta e a tela, que sabe se o numero veio da unidade escolhida
+ * ou da faixa das unidades do empreendimento. Sem imovel escolhido (simulacao
+ * livre), o PDF sai so com os numeros.
+ */
+export interface ImovelDaSimulacao {
+  nome: string
+  /** Construtora, cidade e bairro em uma linha. */
+  subtitulo?: string | null
+  unidade?: string | null
+  metragem?: string | null
+  dormitorios?: string | null
+  suites?: string | null
+  vagas?: string | null
+  valorM2?: string | null
+  entrega?: string | null
+  status?: string | null
+}
+
+/** Uma linha da grade so aparece quando tem dado — celula vazia nao informa nada. */
+function itensPreenchidos(pares: [string, string | null | undefined][]): string {
+  return pares
+    .filter(([, valor]) => valor && valor.trim() && valor !== TRACO)
+    .map(
+      ([rotulo, valor]) =>
+        `<div class="item"><div class="rotulo">${esc(rotulo)}</div><div class="valor">${esc(valor as string)}</div></div>`,
+    )
+    .join('')
+}
+
+function blocoDoImovel(imovel: ImovelDaSimulacao | null): string {
+  if (!imovel) return ''
+
+  const itens = itensPreenchidos([
+    ['Unidade', imovel.unidade],
+    ['Metragem', imovel.metragem],
+    ['Dormitórios', imovel.dormitorios],
+    ['Suítes', imovel.suites],
+    ['Vagas', imovel.vagas],
+    ['Valor do m²', imovel.valorM2],
+    ['Entrega prevista', imovel.entrega],
+    ['Status da obra', imovel.status],
+  ])
+
+  return `<div class="imovel">
+    <h2>${esc(imovel.nome)}</h2>
+    ${imovel.subtitulo ? `<div class="imovel__linha">${esc(imovel.subtitulo)}</div>` : ''}
+    ${itens ? `<div class="resumo">${itens}</div>` : ''}
+  </div>`
+}
+
+/**
+ * Apresentacao da simulacao de investimento para levar ao cliente: o imovel
+ * primeiro (nome, metragem, dormitorios), depois o que foi simulado e o que a
+ * projecao devolve. Mesma mecanica do PDF do CUB — a folha de impressao do
+ * navegador, sem biblioteca.
+ */
+export function exportarPdfInvestimento(
+  resultado: ResultadoInvestimento,
+  imovel: ImovelDaSimulacao | null = null,
+): boolean {
+  const titulo = imovel?.nome ?? 'Simulação de investimento'
+
+  const investido = itensPreenchidos([
+    ['Valor de compra', fmtMoeda(resultado.valorCompra)],
+    ['Entrada', resultado.entrada > 0 ? fmtMoeda(resultado.entrada) : null],
+    ['Valor já pago', resultado.valorInvestido > 0 ? fmtMoeda(resultado.valorInvestido) : null],
+    ['Saldo devedor', resultado.saldoDevedor > 0 ? fmtMoeda(resultado.saldoDevedor) : 'quitado'],
+    ['Prazo até a entrega', textoDoPrazo(resultado.meses)],
+    ['Valorização considerada', `${fmtPercentual(resultado.valorizacaoAnual, 2)} ao ano`],
+  ])
+
+  const projecao = itensPreenchidos([
+    ['Ganho patrimonial', fmtMoeda(resultado.ganhoPatrimonialBruto)],
+    ['Patrimônio líquido', fmtMoeda(resultado.patrimonioLiquido)],
+    ['Lucro potencial', fmtMoeda(resultado.lucroPotencial)],
+    ['Rentabilidade', resultado.rentabilidade === null ? null : fmtPercentual(resultado.rentabilidade, 2)],
+    ['Valorização no período', fmtPercentual(resultado.valorizacaoTotal, 2)],
+  ])
+
+  const linhas = resultado.evolucao
+    .map((ponto) => {
+      const acumulada = resultado.valorCompra > 0 ? (ponto.valor / resultado.valorCompra - 1) * 100 : 0
+      return `<tr>
+      <td>${ponto.mes === 0 ? 'Hoje' : `Mês ${ponto.mes}`}</td>
+      <td>${fmtMoeda(ponto.valor)}</td>
+      <td>${fmtPercentual(acumulada, 2)}</td>
+      <td>${fmtMoeda(ponto.valor - resultado.valorCompra)}</td>
+    </tr>`
+    })
+    .join('')
+
+  const html = `<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>${esc(titulo)} — simulação de investimento</title>
+  <style>${ESTILO_IMPRESSAO}</style>
+</head>
+<body>
+  <h1>Simulação de investimento</h1>
+  <div class="sub">Projeção de valorização até a entrega${
+    resultado.meses > 0 ? ` · ${textoDoPrazo(resultado.meses)}` : ''
+  } · ${fmtPercentual(resultado.valorizacaoAnual, 2)} ao ano</div>
+
+  ${blocoDoImovel(imovel)}
+
+  <div class="hero">
+    <div class="hero__principal">
+      <div class="hero__rotulo">Valor estimado na entrega</div>
+      <div class="hero__valor">${fmtMoeda(resultado.valorEstimadoEntrega)}</div>
+      <div class="hero__dica">${fmtMoeda(resultado.valorCompra)} hoje · ${fmtPercentual(
+        resultado.valorizacaoTotal,
+        2,
+      )} de valorização no período</div>
+    </div>
+    ${
+      resultado.multiplicador !== null
+        ? `<div class="hero__lado">
+      <div class="hero__rotulo">ROI</div>
+      <div class="hero__valor hero__valor--menor">${fmtMoeda(resultado.multiplicador, true)}</div>
+      <div class="hero__dica">de patrimônio para cada R$ 1,00 investido${
+        resultado.rentabilidade !== null ? ` · ${fmtPercentual(resultado.rentabilidade, 2)} de retorno` : ''
+      }</div>
+    </div>`
+        : ''
+    }
+  </div>
+
+  <div class="secao">
+    <div class="secao__titulo">O investimento</div>
+    <div class="resumo">${investido}</div>
+  </div>
+
+  <div class="secao">
+    <div class="secao__titulo">Projeção na entrega</div>
+    <div class="resumo">${projecao}</div>
+  </div>
+
+  <div class="secao">
+    <div class="secao__titulo">Valorização até a entrega</div>
+    <table>
+      <thead>
+        <tr><th>Período</th><th>Valor estimado</th><th>Valorização acumulada</th><th>Ganho sobre a compra</th></tr>
+      </thead>
+      <tbody>${linhas}</tbody>
+    </table>
+  </div>
+
+  <div class="nota">
+    Projeção baseada na expectativa de valorização de ${fmtPercentual(resultado.valorizacaoAnual, 2)} ao ano informada
+    na simulação — é uma estimativa, não uma garantia de rentabilidade. O <strong>lucro potencial</strong> não desconta
+    o saldo devedor; o número já sem a dívida é o <strong>patrimônio líquido</strong>.
+  </div>
+</body>
+</html>`
+
+  return imprimir(html)
 }

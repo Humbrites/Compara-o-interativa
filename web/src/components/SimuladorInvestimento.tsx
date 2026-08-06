@@ -1,14 +1,26 @@
 import { useMemo, useState } from 'react'
 import type { Empreendimento, Unidade } from '../types'
 import { lerNumero, fmtPercentual } from '../lib/cub'
-import { fmtMoeda, fmtMoedaCurta, TRACO } from '../lib/format'
+import {
+  fmtArea,
+  fmtEntrega,
+  fmtFaixaInteiro,
+  fmtFaixaMetragem,
+  fmtInteiro,
+  fmtMoeda,
+  fmtMoedaCurta,
+  TRACO,
+} from '../lib/format'
 import {
   mesesAteAEntrega,
+  saldoDevedorSugerido,
   simularInvestimento,
+  textoDoPrazo,
   type ResultadoInvestimento,
   type UnidadePrazo,
 } from '../lib/investimento'
-import { rotuloUnidade, valorM2Da } from '../lib/unidades'
+import { exportarPdfInvestimento, type ImovelDaSimulacao } from '../lib/exportarSimulacao'
+import { resumoUnidades, rotuloUnidade, valorM2Da } from '../lib/unidades'
 import { Campo, Modal } from './ui'
 import { Icone, type NomeIcone } from './Icones'
 import { GraficoLinha } from './GraficoSvg'
@@ -108,15 +120,49 @@ function Cartao({
   )
 }
 
-function textoDoPrazo(resultado: ResultadoInvestimento): string {
-  const { meses } = resultado
-  if (meses === 0) return 'entrega imediata'
-  const anos = Math.floor(meses / 12)
-  const resto = meses % 12
-  const partes: string[] = []
-  if (anos > 0) partes.push(`${anos} ${anos === 1 ? 'ano' : 'anos'}`)
-  if (resto > 0) partes.push(`${resto} ${resto === 1 ? 'mês' : 'meses'}`)
-  return partes.join(' e ')
+/** Numero no formato que o campo aceita de volta: "300.000,00". */
+function textoDoValor(valor: number): string {
+  return valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+/**
+ * Os dados do imovel que abrem o PDF. Com unidade escolhida, os numeros sao os
+ * dela; sem unidade, valem as faixas das unidades cadastradas e, na falta
+ * delas, os campos gerais do empreendimento — a mesma leitura do painel.
+ */
+function imovelParaPdf(empreendimento: Empreendimento | null, unidade: Unidade | null): ImovelDaSimulacao | null {
+  if (!empreendimento) return null
+
+  const resumo = resumoUnidades(empreendimento.unidades)
+  const temUnidades = empreendimento.unidades.length > 0
+  const localizacao = [empreendimento.bairro, empreendimento.cidade].filter((p) => p && p.trim()).join(', ')
+
+  return {
+    nome: empreendimento.nome,
+    subtitulo: [empreendimento.construtora, localizacao, empreendimento.tipo]
+      .filter((p) => p && p.trim())
+      .join(' · '),
+    unidade: unidade ? rotuloUnidade(unidade) : null,
+    metragem: unidade
+      ? fmtArea(unidade.metragem)
+      : temUnidades
+        ? fmtFaixaMetragem(resumo.metragem.min, resumo.metragem.max)
+        : fmtFaixaMetragem(empreendimento.metragem_min, empreendimento.metragem_max),
+    dormitorios: unidade
+      ? fmtInteiro(unidade.dormitorios)
+      : temUnidades
+        ? fmtFaixaInteiro(resumo.dormitorios.min, resumo.dormitorios.max)
+        : fmtInteiro(empreendimento.dormitorios),
+    suites: unidade ? fmtInteiro(unidade.suites) : fmtInteiro(empreendimento.suites),
+    vagas: unidade
+      ? fmtInteiro(unidade.vagas)
+      : temUnidades
+        ? fmtFaixaInteiro(resumo.vagas.min, resumo.vagas.max)
+        : fmtInteiro(empreendimento.vagas),
+    valorM2: unidade ? fmtMoeda(valorM2Da(unidade)) : fmtMoeda(empreendimento.valor_m2),
+    entrega: fmtEntrega(empreendimento.entrega),
+    status: empreendimento.status_obra,
+  }
 }
 
 /**
@@ -181,6 +227,8 @@ export function SimuladorInvestimento({
   const [resultado, setResultado] = useState<ResultadoInvestimento | null>(null)
   const [empreendimentoId, setEmpreendimentoId] = useState<number | null>(empreendimentoInicial)
   const [unidadeId, setUnidadeId] = useState<number | null>(null)
+  // O saldo devedor sai da conta sozinho ate alguem digitar outro valor ali.
+  const [saldoManual, setSaldoManual] = useState(false)
 
   const empreendimento = useMemo(
     () => lista.find((e) => e.id === empreendimentoId) ?? null,
@@ -214,8 +262,36 @@ export function SimuladorInvestimento({
     if (erros[campo]) setErros((atual) => ({ ...atual, [campo]: '' }))
   }
 
+  /** O que falta pagar da compra — enquanto ninguem sobrescreve o campo. */
+  const saldoAutomatico = useMemo(
+    () => saldoDevedorSugerido(lerNumero(form.valorCompra), lerNumero(form.valorPago)),
+    [form.valorCompra, form.valorPago],
+  )
+  const saldoNoCampo = saldoManual
+    ? form.saldoDevedor
+    : saldoAutomatico !== null
+      ? textoDoValor(saldoAutomatico)
+      : ''
+  // O calculo automatico so vale se o "ja pago" tiver mesmo somado a entrada.
+  const entradaDigitada = lerNumero(form.entrada)
+  const pagoDigitado = lerNumero(form.valorPago)
+  const entradaForaDoPago =
+    !saldoManual && entradaDigitada !== null && pagoDigitado !== null && entradaDigitada > pagoDigitado
+
+  function mudarSaldo(valor: string) {
+    setSaldoManual(true)
+    mudar('saldoDevedor', valor)
+  }
+
+  function voltarAoSaldoAutomatico() {
+    setSaldoManual(false)
+    setForm((atual) => ({ ...atual, saldoDevedor: '' }))
+    setErros((atual) => ({ ...atual, saldoDevedor: '' }))
+  }
+
   function aoSimular() {
-    const { erros: novosErros, entrada } = validar(form)
+    // O campo do saldo pode estar so na tela (calculado) — a simulacao usa o que se ve.
+    const { erros: novosErros, entrada } = validar({ ...form, saldoDevedor: saldoNoCampo })
     setErros(novosErros)
     if (!entrada) {
       setResultado(null)
@@ -229,6 +305,13 @@ export function SimuladorInvestimento({
     setForm(VAZIO)
     setErros({})
     setResultado(null)
+    setSaldoManual(false)
+  }
+
+  function aoExportarPdf() {
+    if (!resultado) return
+    const abriu = exportarPdfInvestimento(resultado, imovelParaPdf(empreendimento, unidade))
+    if (!abriu) avisar('O navegador bloqueou a janela de impressão — libere os pop-ups do site', 'erro')
   }
 
   const pontos = useMemo(
@@ -269,6 +352,16 @@ export function SimuladorInvestimento({
             Limpar
           </button>
           <div className="direita">
+            <button
+              type="button"
+              className="btn btn--fantasma"
+              onClick={aoExportarPdf}
+              disabled={!resultado}
+              title={resultado ? 'Abre a folha de impressão para salvar em PDF' : 'Simule primeiro'}
+            >
+              <Icone nome="lista" tamanho={15} />
+              Exportar PDF
+            </button>
             <button type="button" className="btn btn--primario" onClick={aoSimular}>
               <Icone nome="grafico" tamanho={15} />
               Simular
@@ -326,8 +419,8 @@ export function SimuladorInvestimento({
                       valorM2Da(unidade) !== null ? `, ${fmtMoeda(valorM2Da(unidade))}/m²` : ''
                     })`
                   : ''}
-                {mesesAteAEntrega(empreendimento.entrega) !== null ? ' e o prazo até a entrega prevista' : ''}. O que
-                já foi pago e o saldo devedor continuam com você.
+                {mesesAteAEntrega(empreendimento.entrega) !== null ? ' e o prazo até a entrega prevista' : ''}. O que já
+                foi pago e a valorização esperada continuam com você — o saldo devedor sai da conta sozinho.
               </p>
             )}
           </div>
@@ -346,8 +439,20 @@ export function SimuladorInvestimento({
             {entradaMonetaria('valorPago', '150.000,00')}
           </Campo>
 
-          <Campo rotulo="Saldo devedor" dica="0 se quitado" erro={erros.saldoDevedor}>
-            {entradaMonetaria('saldoDevedor', '300.000,00')}
+          <Campo
+            rotulo="Saldo devedor"
+            dica={saldoManual ? 'informado à mão' : 'valor de compra − valor já pago'}
+            erro={erros.saldoDevedor}
+          >
+            <input
+              className={`entrada${erros.saldoDevedor ? ' entrada--erro' : ''}${
+                saldoManual ? '' : ' entrada--calculada'
+              }`}
+              value={saldoNoCampo}
+              onChange={(e) => mudarSaldo(e.target.value)}
+              placeholder="300.000,00"
+              inputMode="decimal"
+            />
           </Campo>
 
           <Campo rotulo="Tempo até a entrega" obrigatorio erro={erros.prazo}>
@@ -375,6 +480,22 @@ export function SimuladorInvestimento({
             {entradaMonetaria('valorizacao', '10')}
           </Campo>
         </div>
+
+        {saldoManual && (
+          <p className="campo__dica linha-calculo">
+            <Icone nome="lapis" tamanho={12} /> Saldo devedor informado à mão.
+            <button type="button" className="link-acao" onClick={voltarAoSaldoAutomatico}>
+              Voltar ao cálculo automático
+            </button>
+          </p>
+        )}
+
+        {entradaForaDoPago && (
+          <p className="campo__dica linha-calculo linha-calculo--alerta">
+            <Icone nome="alerta" tamanho={12} /> A entrada está maior que o valor já pago — some a entrada ali, senão o
+            saldo devedor calculado fica maior que o real.
+          </p>
+        )}
 
         <div className="atalhos-cub">
           <span className="campo__dica">Usar:</span>
@@ -411,7 +532,7 @@ export function SimuladorInvestimento({
                 <span className="inv-hero__valor">{fmtMoeda(resultado.valorEstimadoEntrega)}</span>
                 <span className="inv-hero__dica">
                   {fmtMoeda(resultado.valorCompra)} hoje · {fmtPercentual(resultado.valorizacaoAnual, 2)} ao ano por{' '}
-                  {textoDoPrazo(resultado)} · {fmtPercentual(resultado.valorizacaoTotal, 2)} no período
+                  {textoDoPrazo(resultado.meses)} · {fmtPercentual(resultado.valorizacaoTotal, 2)} no período
                 </span>
               </div>
 

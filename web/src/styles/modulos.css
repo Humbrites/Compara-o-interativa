@@ -1608,6 +1608,41 @@
   background-color: var(--superficie-2);
 }
 
+/* Aviso de onde saiu o saldo devedor, logo abaixo da grade de campos. */
+.linha-calculo {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--e1) var(--e2);
+  margin-top: var(--e3);
+}
+
+.linha-calculo--alerta {
+  color: var(--alerta);
+}
+
+.link-acao {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--marca-500);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.link-acao:hover {
+  color: var(--marca-600);
+}
+
+.link-acao:focus-visible {
+  outline: none;
+  box-shadow: var(--foco);
+  border-radius: var(--raio-sm);
+}
+
 /* O numero que responde a pergunta vem primeiro e maior. */
 .inv-hero {
   display: grid;

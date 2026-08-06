@@ -63,6 +63,25 @@ export interface ResultadoInvestimento {
   evolucao: PontoValorizacao[]
 }
 
+/**
+ * O saldo devedor que o proprio formulario consegue deduzir: o que falta pagar
+ * do valor de compra. O "valor ja pago" ja inclui a entrada (e a soma de tudo
+ * que saiu do bolso), entao a conta e compra − pago, com piso em zero — pagar
+ * mais que o combinado nao vira divida negativa.
+ *
+ * Devolve null quando nao da para deduzir (sem valor de compra), e ai o campo
+ * fica com o usuario.
+ */
+export function saldoDevedorSugerido(
+  valorCompra: number | null | undefined,
+  valorPago: number | null | undefined,
+): number | null {
+  if (valorCompra === null || valorCompra === undefined || !Number.isFinite(valorCompra) || valorCompra <= 0) {
+    return null
+  }
+  return Math.max(0, valorCompra - ou(valorPago))
+}
+
 /** Numero valido e positivo, ou o padrao. */
 function ou(valor: number | null | undefined, padrao = 0): number {
   return valor !== null && valor !== undefined && Number.isFinite(valor) ? valor : padrao
@@ -95,6 +114,17 @@ export function mesesAteAEntrega(entrega: string | null | undefined, hoje = new 
 
   const diferenca = (ano - hoje.getFullYear()) * 12 + (mes - (hoje.getMonth() + 1))
   return Math.max(0, diferenca)
+}
+
+/** O prazo por extenso: "3 anos e 6 meses". */
+export function textoDoPrazo(meses: number): string {
+  if (meses === 0) return 'entrega imediata'
+  const anos = Math.floor(meses / 12)
+  const resto = meses % 12
+  const partes: string[] = []
+  if (anos > 0) partes.push(`${anos} ${anos === 1 ? 'ano' : 'anos'}`)
+  if (resto > 0) partes.push(`${resto} ${resto === 1 ? 'mês' : 'meses'}`)
+  return partes.join(' e ')
 }
 
 /** Quantos pontos desenhar na curva sem virar uma nuvem de dados. */

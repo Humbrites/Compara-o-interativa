@@ -64,7 +64,8 @@ metragem, mais barato e mais caro (esses dois são clicáveis e levam ao empreen
 a evolução das parcelas até o fim da obra e vira um fluxo de pagamento pronto.
 
 **Simulador de investimento** — o botão **Investimento** (no topo) e **Simular investimento**
-(no painel do imóvel) projetam quanto o imóvel pode render até a entrega.
+(no painel do imóvel) projetam quanto o imóvel pode render até a entrega, e exportam a
+**apresentação em PDF** com os dados do empreendimento e os números da simulação.
 
 ---
 
@@ -186,9 +187,15 @@ expectativa de valorização continuam por sua conta. O painel do imóvel tem o 
 modo livre a qualquer momento.
 
 **O que você informa:** valor de compra (obrigatório), entrada, **valor já pago** (entrada
-+ parcelas + reforços + balões — é o que define a rentabilidade), saldo devedor (0 se
-quitado), tempo até a entrega (em **meses ou anos**) e a valorização anual esperada, com
-atalhos de 5% a 20%.
++ parcelas + reforços + balões — é o que define a rentabilidade), tempo até a entrega (em
+**meses ou anos**) e a valorização anual esperada, com atalhos de 5% a 20%.
+
+O **saldo devedor sai da conta sozinho**: `valor de compra − valor já pago`, com piso em
+zero (pagar mais que o combinado não vira dívida negativa). Ele acompanha o que você
+digita, e o campo continua editável — escrever outro valor ali assume o comando e aparece
+um **"Voltar ao cálculo automático"** para desfazer. Como o *valor já pago* soma a entrada,
+uma entrada maior que ele é sinal de conta pela metade: a tela avisa, porque nesse caso o
+saldo calculado sairia maior que o real.
 
 **A conta:** valorização composta sobre o valor de compra —
 `valor na entrega = compra × (1 + valorização)^anos`, com o prazo convertido para anos
@@ -210,6 +217,27 @@ atalhos de 5% a 20%.
 
 Sem informar o valor já pago, rentabilidade e ROI aparecem como "—" em vez de inventar
 divisão por zero. O gráfico mostra a curva de valorização até a entrega.
+
+### Exportar PDF (a apresentação para o cliente)
+
+O botão **Exportar PDF**, no rodapé do simulador, abre a folha de impressão do navegador
+(mesma mecânica do PDF do CUB — é só escolher "Salvar como PDF"; se o navegador bloquear
+pop-up, a tela avisa). A folha vem na ordem da conversa de venda:
+
+1. **O imóvel** — nome, construtora, cidade e bairro, e a grade com unidade escolhida,
+   metragem, dormitórios, suítes, vagas, valor do m², entrega prevista e status da obra.
+   Com uma unidade escolhida os números são os dela; sem unidade valem as faixas das
+   unidades cadastradas e, na falta delas, os campos gerais do empreendimento. **Campo
+   vazio não vira célula** — o que não foi cadastrado simplesmente não aparece.
+2. **Valor estimado na entrega** em destaque, com o **ROI** ao lado.
+3. **O investimento** (o que foi simulado) e a **projeção na entrega** (ganho patrimonial,
+   patrimônio líquido, lucro potencial, rentabilidade e valorização do período).
+4. A **tabela de valorização** até a entrega e a nota de que a projeção é uma estimativa,
+   não garantia de rentabilidade — com o lembrete de que o lucro potencial não desconta o
+   saldo devedor.
+
+Simulação sem imóvel escolhido gera o mesmo PDF **sem o bloco do imóvel** — o simulador
+segue servindo para um imóvel que nem está cadastrado aqui.
 
 ---
 
