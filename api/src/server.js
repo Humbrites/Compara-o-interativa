@@ -411,8 +411,12 @@ const indicadores = criarServicoIndicadores({ dataDir: PASTA_DADOS, log: app.log
 // no navegador. `?forcar=1` fura o cache (o botao "atualizar" da tela).
 app.get('/api/indicadores', async (req, reply) => {
   const dados = await indicadores.obter({ forcar: req.query?.forcar === '1' })
-  // Meia hora no navegador; o servidor decide quando vale buscar de novo.
-  reply.header('cache-control', 'public, max-age=1800')
+  // ⚠️ SEM cache no navegador. Quem decide quando vale consultar o Banco
+  // Central e o cache DAQUI (TTL de 6h, 20 min quando falta alguma série).
+  // Um `max-age` aqui congelava a resposta na aba aberta: uma leitura sem a
+  // Selic ficou meia hora na tela do usuário mesmo com o servidor já correto,
+  // porque o Chrome nem chegava a perguntar.
+  reply.header('cache-control', 'no-store')
   return dados
 })
 

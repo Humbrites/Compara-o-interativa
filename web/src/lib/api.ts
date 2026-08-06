@@ -107,9 +107,13 @@ export const api = {
   /**
    * Indicadores de mercado. O cache mora na API (uma consulta ao Banco Central
    * serve todas as abas); `forcar` e o botao de atualizar da tela.
+   *
+   * `no-store` de proposito: o cache do NAVEGADOR aqui so atrapalha — ele
+   * chegou a servir uma leitura antiga (sem a Selic) por meia hora, sem nem
+   * perguntar ao servidor que ja tinha o dado certo.
    */
   indicadores: (forcar = false) =>
-    request<RespostaIndicadores>(`/api/indicadores${forcar ? '?forcar=1' : ''}`),
+    request<RespostaIndicadores>(`/api/indicadores${forcar ? '?forcar=1' : ''}`, { cache: 'no-store' }),
 
   /** Os ids na ordem desejada; o primeiro vira a capa. */
   reordenarImagens: (empreendimentoId: number, ids: number[]) =>
