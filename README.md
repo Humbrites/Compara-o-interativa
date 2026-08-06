@@ -89,6 +89,12 @@ funciona: elas sobem assim que o cadastro é criado. Os arquivos ficam em
 `api/data/uploads/` (fora do Git, como o banco) e são servidos em `/uploads/<arquivo>`.
 Excluir a foto — ou o empreendimento inteiro — apaga o arquivo do disco.
 
+> **Foto é opcional.** Dá para cadastrar sem nenhuma e enviar depois — no painel, o
+> empreendimento sem foto mostra *"Não há fotos disponíveis no momento"* no lugar da capa.
+> Se o envio falhar, o cadastro já está salvo: as fotos ficam na fila para tentar de novo e
+> as etapas do topo seguem liberadas. Lotes grandes vão de 20 em 20 (o teto da API por
+> requisição), então mandar 50 fotos de uma vez funciona.
+
 **2. Unidades** — as plantas que o corretor vende. Cada uma tem identificação, torre/bloco,
 andar e número, posição solar (Norte, Sul, Leste, Oeste e as diagonais) e face (frente, fundos,
 lateral, esquina), metragem privativa e total, dormitórios, suítes, banheiros, vagas, valor,

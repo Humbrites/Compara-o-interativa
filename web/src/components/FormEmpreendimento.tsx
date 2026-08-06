@@ -176,8 +176,10 @@ export function FormEmpreendimento({
           if (recusadas.length > 0) avisar(`${recusadas[0].nome}: ${recusadas[0].motivo}`, 'erro')
           else avisar(pendentes.length === 1 ? 'Foto enviada' : `${pendentes.length} fotos enviadas`)
         } catch (erro) {
-          // O cadastro ja foi salvo: as fotos continuam na lista para tentar de novo.
-          avisar(erro instanceof Error ? erro.message : 'Cadastro salvo, mas as fotos não subiram', 'erro')
+          // O cadastro ja foi salvo: as fotos continuam na lista para tentar de
+          // novo, e as etapas do topo ja estao liberadas para seguir sem elas.
+          const motivo = erro instanceof Error ? erro.message : 'as fotos não subiram'
+          avisar(`Empreendimento salvo, mas ${motivo}. Dá para seguir e enviar as fotos depois`, 'erro')
           return
         }
       }
@@ -368,6 +370,7 @@ export function FormEmpreendimento({
             <h3 className="form-secao__titulo">
               <Icone nome="imagem" tamanho={13} />
               Fotos
+              <span className="form-secao__opcional">— opcional, dá para enviar depois</span>
             </h3>
 
             <GaleriaUpload

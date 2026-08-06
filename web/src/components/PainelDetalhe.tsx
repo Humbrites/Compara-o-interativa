@@ -86,10 +86,18 @@ export function PainelDetalhe({
       </div>
 
       <div className="painel__conteudo">
-        {/* Sem foto (ou com link quebrado) nao vale gastar 190px com um
-            placeholder: o nome sobe para o cabecalho e o painel comeca no conteudo. */}
         {fotos.length > 0 && (
           <Galeria key={e.id} fotos={fotos} nome={e.nome} tipo={e.tipo} onVazia={setGaleriaVazia} />
+        )}
+
+        {/* Sem foto — ou com todos os links quebrados — o lugar da capa avisa em
+            vez de sumir, senao parece que o painel carregou pela metade. A faixa
+            e mais baixa que a capa e nao repete o nome: ele volta para o cabecalho. */}
+        {!temCapa && (
+          <div className="capa-vazia">
+            <Icone nome="imagem" tamanho={20} />
+            <span>Não há fotos disponíveis no momento</span>
+          </div>
         )}
 
         <div className="detalhe">

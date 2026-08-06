@@ -795,6 +795,15 @@ select.entrada {
   border-bottom: 1px solid var(--borda);
 }
 
+/* "opcional" ao lado do titulo: some do caixa-alta para nao virar ordem. */
+.form-secao__opcional {
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--texto-3);
+  opacity: 0.8;
+}
+
 .grade {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));

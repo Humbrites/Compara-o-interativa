@@ -490,6 +490,20 @@
   transition: transform var(--transicao-lenta);
 }
 
+/* Lugar da capa quando o empreendimento nao tem foto. */
+.capa-vazia {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--e2);
+  height: 112px;
+  background: var(--superficie-3);
+  border-bottom: 1px solid var(--borda);
+  color: var(--texto-3);
+  font-size: 13px;
+}
+
 .capa:hover img {
   transform: scale(1.04);
 }
