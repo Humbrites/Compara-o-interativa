@@ -49,38 +49,10 @@ export function aplicarFiltros(lista: Empreendimento[], filtros: Filtros): Empre
   })
 }
 
-export interface Indicadores {
-  total: number
-  precoMedioM2: number | null
-  maiorMetragem: number | null
-  menorMetragem: number | null
-  maisBarato: Empreendimento | null
-  maisCaro: Empreendimento | null
-}
-
-export function calcularIndicadores(lista: Empreendimento[]): Indicadores {
-  const comValor = lista.filter((e) => e.valor_m2 !== null && Number.isFinite(e.valor_m2))
-  const metragens = lista.flatMap((e) =>
-    [e.metragem_min, e.metragem_max].filter((m): m is number => m !== null && Number.isFinite(m)),
-  )
-
-  const precoMedioM2 = comValor.length
-    ? comValor.reduce((soma, e) => soma + (e.valor_m2 as number), 0) / comValor.length
-    : null
-
-  // O "mais barato/caro" e sempre pelo valor do m², o indicador comparavel
-  // entre empreendimentos de portes diferentes.
-  const ordenadosPorValor = [...comValor].sort((a, b) => (a.valor_m2 as number) - (b.valor_m2 as number))
-
-  return {
-    total: lista.length,
-    precoMedioM2,
-    maiorMetragem: metragens.length ? Math.max(...metragens) : null,
-    menorMetragem: metragens.length ? Math.min(...metragens) : null,
-    maisBarato: ordenadosPorValor[0] ?? null,
-    maisCaro: ordenadosPorValor[ordenadosPorValor.length - 1] ?? null,
-  }
-}
+/* Os cartoes de indicador do dashboard (preco medio do m², maior/menor
+   metragem, mais barato/caro) sairam do topo em 06/08 — o lugar deles agora e
+   dos indicadores de mercado. O calculo foi junto: a lista de empreendimentos
+   ja ordena por valor do m², que era o uso real daqueles numeros. */
 
 /** Valores distintos de um campo, para alimentar os selects de filtro. */
 export function opcoesDe(lista: Empreendimento[], campo: keyof Empreendimento): string[] {

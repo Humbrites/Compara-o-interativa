@@ -7,7 +7,16 @@ import { createWriteStream } from 'node:fs'
 import { unlink } from 'node:fs/promises'
 import { pipeline } from 'node:stream/promises'
 import { extname, join } from 'node:path'
-import { db, CAMPOS_EMPREENDIMENTO, CAMPOS_FLUXO, CAMPOS_UNIDADE, sanitizar, UPLOAD_DIR } from './db.js'
+import {
+  db,
+  CAMPOS_EMPREENDIMENTO,
+  CAMPOS_FLUXO,
+  CAMPOS_UNIDADE,
+  sanitizar,
+  PASTA_DADOS,
+  UPLOAD_DIR,
+} from './db.js'
+import { criarServicoIndicadores } from './indicadores.js'
 
 const app = Fastify({ logger: true })
 
@@ -392,8 +401,25 @@ app.get('/api/health', () => ({
   empreendimentos: db.prepare('SELECT COUNT(*) AS total FROM empreendimentos').get().total,
 }))
 
+/* ------------------------------------------------------------------ */
+/* Indicadores de mercado                                              */
+/* ------------------------------------------------------------------ */
+
+const indicadores = criarServicoIndicadores({ dataDir: PASTA_DADOS, log: app.log })
+
+// Uma consulta ao Banco Central serve todas as abas: o cache vive aqui, nao
+// no navegador. `?forcar=1` fura o cache (o botao "atualizar" da tela).
+app.get('/api/indicadores', async (req, reply) => {
+  const dados = await indicadores.obter({ forcar: req.query?.forcar === '1' })
+  // Meia hora no navegador; o servidor decide quando vale buscar de novo.
+  reply.header('cache-control', 'public, max-age=1800')
+  return dados
+})
+
 try {
   await app.listen({ port: PORT, host: '127.0.0.1' })
+  // Aquece o cache sem segurar o boot — o primeiro acesso do dia ja abre cheio.
+  void indicadores.obter().catch(() => {})
 } catch (err) {
   app.log.error(err)
   process.exit(1)

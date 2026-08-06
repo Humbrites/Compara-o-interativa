@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Empreendimento, EmpreendimentoInput, Filtros, ImagemEmpreendimento, Unidade } from './types'
 import { FILTROS_VAZIOS } from './types'
 import { api } from './lib/api'
-import { aplicarFiltros, calcularIndicadores } from './lib/dashboard'
+import { aplicarFiltros } from './lib/dashboard'
 import { Mapa } from './components/Mapa'
-import { Kpis } from './components/Kpis'
+import { IndicadoresMercado } from './components/IndicadoresMercado'
 import { BarraFiltros } from './components/BarraFiltros'
 import { PainelDetalhe } from './components/PainelDetalhe'
 import { FormEmpreendimento } from './components/FormEmpreendimento'
@@ -65,7 +65,6 @@ export default function App() {
 
   /* --- Derivados --------------------------------------------------------- */
   const filtrados = useMemo(() => aplicarFiltros(lista, filtros), [lista, filtros])
-  const indicadores = useMemo(() => calcularIndicadores(filtrados), [filtrados])
 
   const empreendimentoA = useMemo(
     () => lista.find((e) => e.id === selecionadoA) ?? null,
@@ -113,10 +112,6 @@ export default function App() {
     }
   }
 
-  function irPara(id: number) {
-    setSelecionadoA(id)
-  }
-
   /** A galeria muda dentro do modal; o painel e as listas acompanham na hora. */
   function atualizarImagens(id: number, imagens: ImagemEmpreendimento[]) {
     setLista((atual) => atual.map((e) => (e.id === id ? { ...e, imagens } : e)))
@@ -130,58 +125,52 @@ export default function App() {
   /* --- Render ------------------------------------------------------------ */
   return (
     <div className="app">
+      {/* Topo enxuto: a marca, o caminho para os empreendimentos, o cadastro
+          e os indicadores de mercado. Comparar e simular investimento moram
+          no painel do imovel — e la que a decisao acontece. */}
       <header className="topo">
-        <div className="topo__marca">
-          <div className="topo__logo">
-            <Icone nome="camadas" tamanho={19} espessura={2} />
+        <div className="topo__linha">
+          <div className="topo__marca">
+            <div className="topo__logo">
+              <Icone nome="camadas" tamanho={19} espessura={2} />
+            </div>
+            <div>
+              <div className="topo__titulo">Compara Interativa</div>
+              <div className="topo__sub">Empreendimentos no mapa · comercial e marketing</div>
+            </div>
           </div>
-          <div>
-            <div className="topo__titulo">Compara Interativa</div>
-            <div className="topo__sub">Empreendimentos no mapa · comercial e marketing</div>
-          </div>
-        </div>
 
-        <div className="topo__acoes">
-          <button
-            type="button"
-            className="btn btn--secundario"
-            onClick={() => setSimulandoInvestimento(null)}
-            title="Simular o retorno de um investimento imobiliário"
-          >
-            <Icone nome="grafico" tamanho={15} />
-            <span>Investimento</span>
-          </button>
-
-          {empreendimentoA && lista.length > 1 && (
+          <div className="topo__acoes">
             <button
               type="button"
               className="btn btn--secundario"
-              onClick={() => setComparando(true)}
-              title="Comparar o empreendimento selecionado com outro"
+              onClick={() => setVendoLista(true)}
+              title="Abrir a lista de empreendimentos cadastrados"
             >
-              <Icone nome="balanca" tamanho={15} />
-              <span>Comparar</span>
+              <Icone nome="predio" tamanho={15} />
+              <span>Empreendimentos</span>
+              {lista.length > 0 && <span className="btn__contador">{lista.length}</span>}
             </button>
-          )}
-          <button
-            type="button"
-            className="btn btn--primario"
-            onClick={() => setForm({ empreendimento: null })}
-            title="Adicionar empreendimento"
-          >
-            <Icone nome="mais" tamanho={16} />
-            <span>Adicionar empreendimento</span>
-          </button>
+
+            <button
+              type="button"
+              className="btn btn--primario"
+              onClick={() => setForm({ empreendimento: null })}
+              title="Adicionar empreendimento"
+            >
+              <Icone nome="mais" tamanho={16} />
+              <span>Adicionar empreendimento</span>
+            </button>
+          </div>
         </div>
+
+        <IndicadoresMercado />
       </header>
 
       <div className="corpo">
         <div className="coluna-mapa">
           {!carregando && !erroCarga && lista.length > 0 && (
-            <>
-              <Kpis indicadores={indicadores} onIrPara={irPara} onVerLista={() => setVendoLista(true)} />
-              <BarraFiltros filtros={filtros} onMudar={setFiltros} lista={lista} totalFiltrado={filtrados.length} />
-            </>
+            <BarraFiltros filtros={filtros} onMudar={setFiltros} lista={lista} totalFiltrado={filtrados.length} />
           )}
 
           {carregando ? (

@@ -2,11 +2,15 @@ node_modules/
 dist/
 *.local
 
-# Dados locais (banco e imagens enviadas) — nao versionar
+# Dados locais (banco, imagens enviadas e caches) — nao versionar
 api/data/*.db
 api/data/*.db-shm
 api/data/*.db-wal
 api/data/uploads/
+api/data/indicadores.json
+
+# Config da instancia de teste isolada (porta e banco proprios)
+web/vite.teste.config.ts
 
 # Logs e temporarios
 *.log

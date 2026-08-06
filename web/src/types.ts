@@ -106,6 +106,45 @@ export type EmpreendimentoInput = Partial<Record<keyof Omit<Empreendimento, 'id'
 
 export type FluxoInput = Partial<Record<keyof Omit<FluxoPagamento, 'id' | 'criado_em' | 'atualizado_em'>, string | number | null>>
 
+/**
+ * Indicador economico do cabecalho. Vem pronto da API — o navegador nao fala
+ * com o Banco Central direto.
+ */
+export interface IndicadorMercado {
+  chave: string
+  nome: string
+  descricao: string
+  valor: number
+  /** Como exibir o numero. */
+  formato: 'percentual' | 'moeda'
+  /** O periodo/base do numero: "a.a.", "no mês", "USD/BRL". */
+  unidade: string
+  /** Data da leitura, em dd/mm/aaaa. */
+  referencia: string
+  /** Diferenca para a leitura anterior; null quando nao ha com o que comparar. */
+  variacao: number | null
+  /** 'pontos' = diferenca em p.p.; 'percentual' = variacao relativa. */
+  variacaoEm: 'pontos' | 'percentual'
+  comparadoCom: string | null
+  tendencia: 'alta' | 'baixa' | 'estavel'
+  /** Acumulado de 12 meses, para os indices mensais. */
+  acumulado12: number | null
+  /** Codigo da serie no SGS do Banco Central. */
+  serie: number
+}
+
+export interface RespostaIndicadores {
+  atualizadoEm: string | null
+  fonte?: string
+  indicadores: IndicadorMercado[]
+  /** Series que nao responderam nesta consulta. */
+  falhas?: { chave: string; motivo: string }[]
+  /** true = a consulta falhou e isto e o ultimo dado bom guardado. */
+  stale?: boolean
+  doCache?: boolean
+  erro?: string
+}
+
 export interface Filtros {
   busca: string
   cidade: string

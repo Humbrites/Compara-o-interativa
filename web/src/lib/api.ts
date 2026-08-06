@@ -4,6 +4,7 @@ import type {
   FluxoPagamento,
   FluxoInput,
   ImagemEmpreendimento,
+  RespostaIndicadores,
   Unidade,
   UnidadeInput,
 } from '../types'
@@ -102,6 +103,13 @@ export const api = {
   },
 
   excluirImagem: (id: number) => request<RespostaImagens>(`/api/imagens/${id}`, { method: 'DELETE' }),
+
+  /**
+   * Indicadores de mercado. O cache mora na API (uma consulta ao Banco Central
+   * serve todas as abas); `forcar` e o botao de atualizar da tela.
+   */
+  indicadores: (forcar = false) =>
+    request<RespostaIndicadores>(`/api/indicadores${forcar ? '?forcar=1' : ''}`),
 
   /** Os ids na ordem desejada; o primeiro vira a capa. */
   reordenarImagens: (empreendimentoId: number, ids: number[]) =>
