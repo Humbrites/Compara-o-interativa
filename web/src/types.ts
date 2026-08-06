@@ -12,6 +12,8 @@ export interface FluxoPagamento {
   reforco_valor: number | null
   chaves_pct: number | null
   financiamento_pct: number | null
+  /** Saldo do banco em R$: o que sobra depois de entrada, parcelas, reforços e chaves. */
+  financiamento_valor: number | null
   descricao: string | null
   observacoes: string | null
   /** Parametros da simulacao do CUB que gerou o fluxo (null se veio da mao). */

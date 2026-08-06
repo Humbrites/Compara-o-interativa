@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import type { FluxoInput, FluxoPagamento } from '../types'
 import { api } from '../lib/api'
+import { lerNumero } from '../lib/cub'
+import { totalizarFluxo, type NumerosDoFluxo } from '../lib/fluxos'
+import { fmtMoeda } from '../lib/format'
 import { Campo, Estado } from './ui'
 import { Icone } from './Icones'
 import { CartaoFluxo } from './CartaoFluxo'
@@ -16,7 +19,7 @@ export type FormularioFluxo = Record<string, string>
  */
 export const CAMPOS_FLUXO = [
   'nome', 'cub_valor_imovel', 'entrada_pct', 'entrada_valor', 'parcelas', 'parcela_valor',
-  'reforcos_qtd', 'reforco_valor', 'chaves_pct', 'financiamento_pct',
+  'reforcos_qtd', 'reforco_valor', 'chaves_pct', 'financiamento_pct', 'financiamento_valor',
   'descricao', 'observacoes',
 ]
 
@@ -29,7 +32,12 @@ export function fluxoParaFormulario(fluxo: FluxoPagamento): FormularioFluxo {
     const valor = (fluxo as unknown as Record<string, unknown>)[campo]
     form[campo] = valor === null || valor === undefined ? '' : String(valor)
   }
-  return form
+  // Tabela gravada antes do saldo automatico abre com ele ja calculado, para
+  // o campo nao aparecer vazio. O que ja tem saldo gravado fica como esta:
+  // o da calculadora do CUB sai de parcelas corrigidas mes a mes, mais fiel
+  // que a conta simples daqui — e qualquer tecla na tabela refaz os dois.
+  const temSaldo = form.financiamento_pct.trim() !== '' || form.financiamento_valor.trim() !== ''
+  return temSaldo ? form : recalcularFinanciamento(form)
 }
 
 /** Verdadeiro quando ha algo digitado — evita gravar um fluxo em branco. */
@@ -40,6 +48,108 @@ export function fluxoPreenchido(form: FormularioFluxo): boolean {
 /** So os numeros do fluxo; nome sozinho nao descreve tabela de venda nenhuma. */
 export function fluxoTemNumeros(form: FormularioFluxo): boolean {
   return CAMPOS_FLUXO.filter((c) => c !== 'nome').some((campo) => (form[campo] || '').trim() !== '')
+}
+
+/** Numero de verdade digitado no campo: "," ou "R$" sozinhos nao contam. */
+function numeroDoCampo(texto: string | undefined): number | null {
+  return texto && /\d/.test(texto) ? lerNumero(texto) : null
+}
+
+/** O numero calculado de volta para o campo, em pt-BR e sem zeros sobrando. */
+function paraCampo(valor: number, casas: number): string {
+  return valor.toLocaleString('pt-BR', { maximumFractionDigits: casas })
+}
+
+/** Os numeros do formulario, prontos para a conta de `totalizarFluxo`. */
+export function numerosDoFormulario(form: FormularioFluxo): NumerosDoFluxo {
+  return {
+    base: numeroDoCampo(form.cub_valor_imovel),
+    entradaValor: numeroDoCampo(form.entrada_valor),
+    entradaPct: numeroDoCampo(form.entrada_pct),
+    parcelas: numeroDoCampo(form.parcelas),
+    parcelaValor: numeroDoCampo(form.parcela_valor),
+    reforcosQtd: numeroDoCampo(form.reforcos_qtd),
+    reforcoValor: numeroDoCampo(form.reforco_valor),
+    chavesPct: numeroDoCampo(form.chaves_pct),
+  }
+}
+
+/**
+ * Entrada em R$ e entrada em % sao o MESMO numero dito de dois jeitos: digitar
+ * um lado preenche o outro na hora, sempre sobre o valor total do imovel.
+ */
+function espelharEntrada(form: FormularioFluxo, campo: string, valor: string): FormularioFluxo {
+  const proximo = { ...form }
+  const base = numeroDoCampo(proximo.cub_valor_imovel)
+
+  if (campo === 'entrada_valor' || campo === 'entrada_pct') {
+    const espelho = campo === 'entrada_valor' ? 'entrada_pct' : 'entrada_valor'
+    // Apagar um lado apaga o outro: sobrando sozinho, o espelho ressuscitaria
+    // o campo limpo na proxima tecla do valor do imovel.
+    if (valor.trim() === '') {
+      proximo[espelho] = ''
+      return proximo
+    }
+    const digitado = numeroDoCampo(valor)
+    if (digitado === null || base === null || base <= 0) return proximo
+    proximo[espelho] =
+      campo === 'entrada_valor' ? paraCampo((digitado / base) * 100, 4) : paraCampo((base * digitado) / 100, 2)
+    return proximo
+  }
+
+  // Mudou o valor do imovel: a % manda, porque ela e a condicao comercial
+  // ("20% de entrada") e o R$ e consequencia dela.
+  if (base === null || base <= 0) return proximo
+  const pct = numeroDoCampo(proximo.entrada_pct)
+  if (pct !== null) {
+    proximo.entrada_valor = paraCampo((base * pct) / 100, 2)
+    return proximo
+  }
+  const entrada = numeroDoCampo(proximo.entrada_valor)
+  if (entrada !== null) proximo.entrada_pct = paraCampo((entrada / base) * 100, 4)
+  return proximo
+}
+
+/**
+ * O financiamento e o RESTO: o que sobra do valor do imovel depois da entrada,
+ * das parcelas, dos reforcos e das chaves. Ninguem digita esses dois campos —
+ * eles se refazem a cada tecla em qualquer parte da tabela.
+ *
+ * Sem valor total do imovel nao ha resto que se calcule (uma tabela geral do
+ * empreendimento pode ser so "20% de entrada, 80% financiado"): ali os campos
+ * continuam sendo de quem cadastra.
+ */
+function recalcularFinanciamento(form: FormularioFluxo): FormularioFluxo {
+  const { saldo, saldoPct } = totalizarFluxo(numerosDoFormulario(form))
+  if (saldo === null || saldoPct === null) return form
+
+  // Tabela que ja passou do valor do imovel zera o saldo: financiamento
+  // negativo nao existe, e o quanto passou vira aviso na tela.
+  return {
+    ...form,
+    financiamento_valor: paraCampo(Math.max(0, saldo), 2),
+    financiamento_pct: paraCampo(Math.max(0, saldoPct), 4),
+  }
+}
+
+/** Campos que entram na conta do saldo — mexer neles refaz o financiamento. */
+const CAMPOS_DA_CONTA = new Set([
+  'cub_valor_imovel', 'entrada_pct', 'entrada_valor',
+  'parcelas', 'parcela_valor', 'reforcos_qtd', 'reforco_valor', 'chaves_pct',
+])
+
+/**
+ * Uma tecla no formulario do fluxo: alem de guardar o que foi digitado, refaz
+ * o que aquele campo implica — o espelho da entrada e o saldo a financiar.
+ * Ninguem deveria abrir a calculadora do celular para cadastrar uma tabela.
+ */
+export function mudarCampoFluxo(form: FormularioFluxo, campo: string, valor: string): FormularioFluxo {
+  let proximo = { ...form, [campo]: valor }
+  if (CAMPOS_DA_CONTA.has(campo)) {
+    proximo = espelharEntrada(proximo, campo, valor)
+    proximo = recalcularFinanciamento(proximo)
+  }
+  return proximo
 }
 
 /** Monta o corpo do POST/PUT a partir do formulario. */
@@ -69,6 +179,12 @@ interface CamposProps {
  * cadastro de unidade monta o primeiro fluxo dentro do proprio formulario.
  */
 export function CamposFluxo({ form, mudar, daUnidade = false, autoFocus = false }: CamposProps) {
+  // Com valor total do imovel o financiamento vira conta, nao campo: e o que
+  // sobra depois de entrada, parcelas, reforcos e chaves.
+  const { saldo } = totalizarFluxo(numerosDoFormulario(form))
+  const calculado = saldo !== null
+  const estouro = saldo !== null && saldo < -0.005 ? -saldo : null
+
   return (
     <div className="grade">
       <Campo rotulo="Nome do fluxo" className="col-inteira" dica={daUnidade ? 'ajuda a achar depois' : 'como a construtora chama a tabela'}>
@@ -102,7 +218,9 @@ export function CamposFluxo({ form, mudar, daUnidade = false, autoFocus = false 
         />
       </Campo>
 
-      <Campo rotulo="Entrada" dica="%">
+      {/* Os dois lados da mesma entrada: digitar um preenche o outro pelo
+          valor total do imovel, que fica logo acima. */}
+      <Campo rotulo="Entrada" dica="% do valor total">
         <input
           className="entrada"
           value={form.entrada_pct}
@@ -111,7 +229,7 @@ export function CamposFluxo({ form, mudar, daUnidade = false, autoFocus = false 
           inputMode="decimal"
         />
       </Campo>
-      <Campo rotulo="Entrada" dica="R$">
+      <Campo rotulo="Entrada" dica="R$ — um lado preenche o outro">
         <input
           className="entrada"
           value={form.entrada_valor}
@@ -168,13 +286,39 @@ export function CamposFluxo({ form, mudar, daUnidade = false, autoFocus = false 
           inputMode="decimal"
         />
       </Campo>
-      <Campo rotulo="Financiamento" dica="%">
+      {/* O saldo do banco: o que sobra depois de tudo que o cliente paga
+          direto. Com valor total do imovel os dois campos viram resultado —
+          so leitura, refeitos a cada tecla na tabela. */}
+      <Campo rotulo="Financiamento" dica={calculado ? '% — o que sobra' : '%'}>
         <input
-          className="entrada"
+          className={`entrada${calculado ? ' entrada--calculada' : ''}`}
           value={form.financiamento_pct}
           onChange={(e) => mudar('financiamento_pct', e.target.value)}
           placeholder="80"
           inputMode="decimal"
+          readOnly={calculado}
+          tabIndex={calculado ? -1 : undefined}
+          title={calculado ? 'Calculado: o que falta para fechar o valor do imóvel' : undefined}
+        />
+      </Campo>
+      <Campo
+        rotulo="Saldo a financiar"
+        dica={calculado ? 'R$ — calculado' : 'R$'}
+        erro={
+          estouro !== null
+            ? `Entrada, parcelas, reforços e chaves já passam ${fmtMoeda(estouro, true)} do valor do imóvel`
+            : undefined
+        }
+      >
+        <input
+          className={`entrada${calculado ? ' entrada--calculada' : ''}`}
+          value={form.financiamento_valor}
+          onChange={(e) => mudar('financiamento_valor', e.target.value)}
+          placeholder="640.000,00"
+          inputMode="decimal"
+          readOnly={calculado}
+          tabIndex={calculado ? -1 : undefined}
+          title={calculado ? 'Valor total − entrada − parcelas − reforços − chaves' : undefined}
         />
       </Campo>
 
@@ -271,7 +415,7 @@ export function FluxosDoEmpreendimento({
   }
 
   function mudar(campo: string, valor: string) {
-    setForm((atual) => (atual ? { ...atual, [campo]: valor } : atual))
+    setForm((atual) => (atual ? mudarCampoFluxo(atual, campo, valor) : atual))
   }
 
   async function salvar() {

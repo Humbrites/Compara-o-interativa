@@ -33,6 +33,18 @@ function celulaReforcos(f: FluxoPagamento): Celula {
   return { principal: TRACO, complemento: null }
 }
 
+/** O saldo do banco: a % manda e o R$ dela vem embaixo, como na entrada. */
+function celulaFinanciamento(f: FluxoPagamento): Celula {
+  if (num(f.financiamento_pct)) {
+    return {
+      principal: fmtPct(f.financiamento_pct),
+      complemento: num(f.financiamento_valor) ? fmtMoeda(f.financiamento_valor) : null,
+    }
+  }
+  if (num(f.financiamento_valor)) return { principal: fmtMoeda(f.financiamento_valor), complemento: null }
+  return { principal: TRACO, complemento: null }
+}
+
 function CelulaFluxo({ rotulo, celula }: { rotulo: string; celula: Celula }) {
   return (
     <div className="fluxo__celula">
@@ -102,7 +114,7 @@ export function CartaoFluxo({ fluxo, indice, onEditar, onExcluir, valorDaUnidade
           <CelulaFluxo rotulo="Parcelas" celula={celulaParcelas(fluxo)} />
           <CelulaFluxo rotulo="Reforços" celula={celulaReforcos(fluxo)} />
           <CelulaFluxo rotulo="Chaves" celula={{ principal: fmtPct(fluxo.chaves_pct), complemento: null }} />
-          <CelulaFluxo rotulo="Financ." celula={{ principal: fmtPct(fluxo.financiamento_pct), complemento: null }} />
+          <CelulaFluxo rotulo="Financ." celula={celulaFinanciamento(fluxo)} />
         </div>
 
         <span className="fluxo__chamada">

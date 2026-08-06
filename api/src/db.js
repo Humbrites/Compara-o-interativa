@@ -60,6 +60,7 @@ db.exec(`
     reforco_valor     REAL,
     chaves_pct        REAL,
     financiamento_pct REAL,
+    financiamento_valor REAL,
     descricao         TEXT,
     observacoes       TEXT,
     criado_em         TEXT NOT NULL DEFAULT (datetime('now')),
@@ -130,7 +131,13 @@ db.exec('CREATE INDEX IF NOT EXISTS idx_fluxos_unidade ON fluxos_pagamento(unida
 // reabrir a calculadora com os mesmos numeros (e, no futuro, refazer a conta
 // com a tabela oficial de indices).
 const COLUNAS_CUB = ['cub_percentual', 'cub_meses', 'cub_valor_imovel', 'cub_parcela_inicial', 'cub_entrada']
-for (const coluna of COLUNAS_CUB) {
+
+// O saldo a financiar em R$ passou a ser gravado junto do percentual: ele e o
+// resto da tabela (valor do imovel menos entrada, parcelas, reforcos e
+// chaves), e guardar so a % obrigaria a refazer a conta em cada leitura.
+const COLUNAS_NOVAS = [...COLUNAS_CUB, 'financiamento_valor']
+
+for (const coluna of COLUNAS_NOVAS) {
   const existentes = db.prepare('PRAGMA table_info(fluxos_pagamento)').all()
   if (!existentes.some((c) => c.name === coluna)) {
     db.exec(`ALTER TABLE fluxos_pagamento ADD COLUMN ${coluna} REAL;`)
@@ -150,7 +157,7 @@ export const CAMPOS_FLUXO = [
   'entrada_pct', 'entrada_valor',
   'parcelas', 'parcela_valor',
   'reforcos_qtd', 'reforco_valor',
-  'chaves_pct', 'financiamento_pct',
+  'chaves_pct', 'financiamento_pct', 'financiamento_valor',
   'descricao', 'observacoes',
   'cub_percentual', 'cub_meses', 'cub_valor_imovel', 'cub_parcela_inicial', 'cub_entrada',
 ]
@@ -167,7 +174,7 @@ const NUMERICOS = new Set([
   'dormitorios', 'suites', 'banheiros', 'vagas',
   'empreendimento_id', 'unidade_id', 'entrada_pct', 'entrada_valor', 'parcelas',
   'parcela_valor', 'reforcos_qtd', 'reforco_valor', 'chaves_pct',
-  'financiamento_pct',
+  'financiamento_pct', 'financiamento_valor',
   'andar', 'metragem', 'metragem_total', 'valor',
   'cub_percentual', 'cub_meses', 'cub_valor_imovel', 'cub_parcela_inicial', 'cub_entrada',
 ])

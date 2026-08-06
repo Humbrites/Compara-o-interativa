@@ -400,10 +400,21 @@ select.entrada {
   border-color: var(--perigo);
 }
 
-/* Valor que o proprio formulario deduziu — segue editavel, so avisa a origem. */
+/* Valor que o proprio formulario deduziu. Em geral segue editavel e a borda
+   tracejada so avisa a origem; quando o numero e resultado puro de outros
+   campos (o saldo a financiar), vem com readonly e o cursor acompanha. */
 .entrada--calculada {
   background: var(--marca-50);
   border-style: dashed;
+}
+
+.entrada--calculada[readonly] {
+  cursor: default;
+  color: var(--texto-2);
+}
+
+.entrada--calculada[readonly]:hover {
+  border-color: var(--borda-forte);
 }
 
 .campo__erro {

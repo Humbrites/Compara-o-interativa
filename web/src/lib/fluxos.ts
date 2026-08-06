@@ -60,6 +60,55 @@ function percentualDe(base: number | null, valor: number | null): number | null 
   return (valor / base) * 100
 }
 
+/** Os números crus de uma tabela de venda, já convertidos de texto. */
+export interface NumerosDoFluxo {
+  /** Valor total do imóvel — sem ele não há saldo nenhum a calcular. */
+  base: number | null
+  entradaValor: number | null
+  entradaPct: number | null
+  parcelas: number | null
+  parcelaValor: number | null
+  reforcosQtd: number | null
+  reforcoValor: number | null
+  chavesPct: number | null
+}
+
+export interface TotaisDoFluxo {
+  entrada: number | null
+  /** Já multiplicado: nº de parcelas × valor da parcela. */
+  parcelas: number | null
+  reforcos: number | null
+  chaves: number | null
+  /**
+   * O que sobra para o banco: base − entrada − parcelas − reforços − chaves.
+   * Negativo = a tabela já passou do valor do imóvel. null sem base.
+   */
+  saldo: number | null
+  saldoPct: number | null
+}
+
+/**
+ * A composição da tabela e o saldo que sobra dela.
+ *
+ * O financiamento é sempre o RESTO: o que o cliente não pagou de entrada, nas
+ * parcelas, nos reforços e nas chaves é o que o banco cobre. Uma função só
+ * para o formulário (que soma texto sendo digitado) e para o detalhe (que soma
+ * o que está gravado) — duas contas dessas divergiriam no primeiro ajuste.
+ */
+export function totalizarFluxo(n: NumerosDoFluxo): TotaisDoFluxo {
+  const entrada = n.entradaValor ?? daBase(n.base, n.entradaPct)
+  // Sem a quantidade, o valor unitário ainda diz algo (uma parcela, um reforço).
+  const parcelas = n.parcelas !== null && n.parcelaValor !== null ? n.parcelas * n.parcelaValor : n.parcelaValor
+  const reforcos =
+    n.reforcosQtd !== null && n.reforcoValor !== null ? n.reforcosQtd * n.reforcoValor : n.reforcoValor
+  const chaves = daBase(n.base, n.chavesPct)
+
+  const saldo =
+    n.base === null ? null : n.base - (entrada ?? 0) - (parcelas ?? 0) - (reforcos ?? 0) - (chaves ?? 0)
+
+  return { entrada, parcelas, reforcos, chaves, saldo, saldoPct: percentualDe(n.base, saldo) }
+}
+
 /**
  * @param valorDaUnidade preço da unidade, usado quando a tabela não guardou o
  *   valor do imóvel — sem isso metade das contas ficaria em branco.
@@ -72,16 +121,38 @@ export function detalharFluxo(fluxo: FluxoPagamento, valorDaUnidade: number | nu
   const entradaValor = num(fluxo.entrada_valor) ?? daBase(base, num(fluxo.entrada_pct))
   const entradaPct = num(fluxo.entrada_pct) ?? percentualDe(base, entradaValor)
 
+  // O formulario mantem % e R$ da entrada em sincronia, entao os dois
+  // cadastrados so merecem nota quando NAO batem (tabela antiga, ou base
+  // trocada depois): ai o R$ vence e a nota conta o que ficou de fora.
+  const pctCadastrado = num(fluxo.entrada_pct)
+  const pctDoValorCadastrado = percentualDe(base, num(fluxo.entrada_valor))
+  const entradaDivergente =
+    pctCadastrado !== null && pctDoValorCadastrado !== null && Math.abs(pctCadastrado - pctDoValorCadastrado) > 0.01
+
   const parcelas = num(fluxo.parcelas)
   const parcelaValor = num(fluxo.parcela_valor)
-  const totalParcelas = parcelas !== null && parcelaValor !== null ? parcelas * parcelaValor : parcelaValor
-
   const reforcos = num(fluxo.reforcos_qtd)
   const reforcoValor = num(fluxo.reforco_valor)
-  const totalReforcos = reforcos !== null && reforcoValor !== null ? reforcos * reforcoValor : reforcoValor
 
-  const chaves = daBase(base, num(fluxo.chaves_pct))
-  const financiamento = daBase(base, num(fluxo.financiamento_pct))
+  const totais = totalizarFluxo({
+    base,
+    entradaValor: num(fluxo.entrada_valor),
+    entradaPct: num(fluxo.entrada_pct),
+    parcelas,
+    parcelaValor,
+    reforcosQtd: reforcos,
+    reforcoValor,
+    chavesPct: num(fluxo.chaves_pct),
+  })
+  const totalParcelas = totais.parcelas
+  const totalReforcos = totais.reforcos
+  const chaves = totais.chaves
+
+  // Financiamento: o R$ gravado vence, como na entrada. Ele é o saldo que
+  // sobrou quando a tabela foi cadastrada; na falta dele (fluxo antigo, ou
+  // vindo da calculadora do CUB) o percentual ainda responde.
+  const financiamento = num(fluxo.financiamento_valor) ?? daBase(base, num(fluxo.financiamento_pct))
+  const financiamentoPct = num(fluxo.financiamento_pct) ?? percentualDe(base, financiamento)
 
   const moeda = (valor: number) => valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
@@ -91,10 +162,7 @@ export function detalharFluxo(fluxo: FluxoPagamento, valorDaUnidade: number | nu
       rotulo: 'Entrada',
       valor: entradaValor,
       percentual: entradaPct,
-      detalhe:
-        num(fluxo.entrada_pct) !== null && num(fluxo.entrada_valor) !== null
-          ? `${fluxo.entrada_pct}% cadastrados`
-          : null,
+      detalhe: entradaDivergente ? `${fluxo.entrada_pct}% cadastrados` : null,
     },
     {
       chave: 'parcelas',
@@ -131,8 +199,8 @@ export function detalharFluxo(fluxo: FluxoPagamento, valorDaUnidade: number | nu
       chave: 'financiamento',
       rotulo: 'Financiamento',
       valor: financiamento,
-      percentual: num(fluxo.financiamento_pct),
-      detalhe: num(fluxo.financiamento_pct) !== null ? `${fluxo.financiamento_pct}% do valor` : null,
+      percentual: financiamentoPct,
+      detalhe: financiamento !== null ? 'saldo do valor do imóvel' : null,
     },
   ]
 

@@ -172,6 +172,9 @@ export function CalculadoraCub({ titulo, valorSugerido, onFechar, onGerarFluxo, 
     const { resumo } = simulacao
 
     const percentualInformado = lerNumero(form.percentual) ?? 0
+    // Saldo negativo = as parcelas ja passaram do valor do imovel; nada a financiar.
+    const saldoDaObra =
+      resumo.saldoAoFimDaObra !== null && resumo.saldoAoFimDaObra > 0 ? resumo.saldoAoFimDaObra : null
 
     setGerando(true)
     try {
@@ -181,6 +184,13 @@ export function CalculadoraCub({ titulo, valorSugerido, onFechar, onGerarFluxo, 
         parcela_valor: resumo.parcelaInicial,
         entrada_valor: resumo.entrada > 0 ? resumo.entrada : null,
         entrada_pct: resumo.percentualEntrada !== null && resumo.entrada > 0 ? resumo.percentualEntrada : null,
+        // O que sobra para o banco na entrega. Aqui a conta e melhor que a do
+        // formulario: as parcelas foram corrigidas mes a mes pelo CUB.
+        financiamento_valor: saldoDaObra,
+        financiamento_pct:
+          saldoDaObra !== null && resumo.valorImovel !== null && resumo.valorImovel > 0
+            ? (saldoDaObra / resumo.valorImovel) * 100
+            : null,
         descricao:
           `Parcelas corrigidas pelo CUB a ${resumo.fonte}. ` +
           `A parcela sai de ${fmtMoeda(resumo.parcelaInicial, true)} e chega a ${fmtMoeda(resumo.parcelaFinal, true)} ` +

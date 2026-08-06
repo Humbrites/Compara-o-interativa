@@ -14,6 +14,7 @@ import {
   FLUXO_VAZIO,
   fluxoParaEnvio,
   fluxoTemNumeros,
+  mudarCampoFluxo,
   type FormularioFluxo,
 } from './FormFluxos'
 import { CalculadoraCub } from './CalculadoraCub'
@@ -154,7 +155,7 @@ export function UnidadesDoEmpreendimento({ empreendimentoId, unidades, onMudou, 
   }
 
   function mudarFluxo(campo: string, valor: string) {
-    setFluxoNovo((atual) => ({ ...atual, [campo]: valor }))
+    setFluxoNovo((atual) => mudarCampoFluxo(atual, campo, valor))
   }
 
   function entrada(campo: string, extra?: React.InputHTMLAttributes<HTMLInputElement>) {
