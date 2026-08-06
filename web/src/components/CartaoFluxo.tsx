@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import type { FluxoPagamento } from '../types'
 import { fmtMoeda, fmtPct, TRACO } from '../lib/format'
 import { Icone } from './Icones'
+import { DetalheFluxo } from './DetalheFluxo'
 
 /**
  * Cada celula tem um valor principal e, quando existe, um complemento em
@@ -46,11 +48,19 @@ interface Props {
   indice: number
   onEditar?: () => void
   onExcluir?: () => void
+  /** Preço da unidade — entra nas contas quando a tabela não tem valor próprio. */
+  valorDaUnidade?: number | null
+  /** Nome do imóvel/unidade, para o cabeçalho do detalhe e os arquivos. */
+  titulo?: string
 }
 
-export function CartaoFluxo({ fluxo, indice, onEditar, onExcluir }: Props) {
+export function CartaoFluxo({ fluxo, indice, onEditar, onExcluir, valorDaUnidade = null, titulo }: Props) {
+  // O cartão inteiro abre as condições calculadas — é o que o corretor quer
+  // ver ao clicar numa tabela de venda, não só o que foi digitado.
+  const [abertoNoDetalhe, setAbertoNoDetalhe] = useState(false)
+
   return (
-    <article className="fluxo">
+    <article className="fluxo fluxo--clicavel">
       <header className="fluxo__topo">
         <Icone nome="cartao" tamanho={14} />
         <span className="fluxo__nome">{fluxo.nome?.trim() || `Fluxo ${indice + 1}`}</span>
@@ -72,25 +82,51 @@ export function CartaoFluxo({ fluxo, indice, onEditar, onExcluir }: Props) {
         )}
       </header>
 
-      <div className="fluxo__grade">
-        {num(fluxo.cub_valor_imovel) && (
-          <CelulaFluxo
-            rotulo="Valor do imóvel"
-            celula={{ principal: fmtMoeda(fluxo.cub_valor_imovel), complemento: null }}
-          />
-        )}
-        <CelulaFluxo rotulo="Entrada" celula={celulaEntrada(fluxo)} />
-        <CelulaFluxo rotulo="Parcelas" celula={celulaParcelas(fluxo)} />
-        <CelulaFluxo rotulo="Reforços" celula={celulaReforcos(fluxo)} />
-        <CelulaFluxo rotulo="Chaves" celula={{ principal: fmtPct(fluxo.chaves_pct), complemento: null }} />
-        <CelulaFluxo rotulo="Financ." celula={{ principal: fmtPct(fluxo.financiamento_pct), complemento: null }} />
-      </div>
+      {/* O botão cobre a grade inteira: clicar em qualquer número abre as
+          contas daquela tabela. Os botões de editar/excluir ficam fora dele,
+          no cabeçalho, para não virarem clique aninhado. */}
+      <button
+        type="button"
+        className="fluxo__abrir"
+        onClick={() => setAbertoNoDetalhe(true)}
+        title="Ver as condições calculadas"
+      >
+        <div className="fluxo__grade">
+          {num(fluxo.cub_valor_imovel) && (
+            <CelulaFluxo
+              rotulo="Valor do imóvel"
+              celula={{ principal: fmtMoeda(fluxo.cub_valor_imovel), complemento: null }}
+            />
+          )}
+          <CelulaFluxo rotulo="Entrada" celula={celulaEntrada(fluxo)} />
+          <CelulaFluxo rotulo="Parcelas" celula={celulaParcelas(fluxo)} />
+          <CelulaFluxo rotulo="Reforços" celula={celulaReforcos(fluxo)} />
+          <CelulaFluxo rotulo="Chaves" celula={{ principal: fmtPct(fluxo.chaves_pct), complemento: null }} />
+          <CelulaFluxo rotulo="Financ." celula={{ principal: fmtPct(fluxo.financiamento_pct), complemento: null }} />
+        </div>
+
+        <span className="fluxo__chamada">
+          <Icone nome="grafico" tamanho={13} />
+          Ver as condições calculadas
+          <Icone nome="seta_direita" tamanho={13} />
+        </span>
+      </button>
 
       {fluxo.descricao?.trim() && <div className="fluxo__texto">{fluxo.descricao}</div>}
       {fluxo.observacoes?.trim() && (
         <div className="fluxo__texto" style={{ color: 'var(--texto-3)' }}>
           {fluxo.observacoes}
         </div>
+      )}
+
+      {abertoNoDetalhe && (
+        <DetalheFluxo
+          fluxo={fluxo}
+          indice={indice}
+          valorDaUnidade={valorDaUnidade}
+          titulo={titulo}
+          onFechar={() => setAbertoNoDetalhe(false)}
+        />
       )}
     </article>
   )

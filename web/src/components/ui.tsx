@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { Icone, type NomeIcone } from './Icones'
 
 /* ------------------------------------------------------------------ */
@@ -30,7 +31,11 @@ export function Modal({ titulo, subtitulo, largo, onFechar, children, rodape, ca
     }
   }, [onFechar])
 
-  return (
+  // ⚠️ Sempre no <body>, via portal. `position: fixed` se ancora no ancestral
+  // que tiver `transform` — e o painel lateral tem (animação de entrada com
+  // `fill-mode: both`, que MANTÉM o transform depois de terminar). Um modal
+  // aberto de dentro do painel ficava preso no rodapé dele.
+  return createPortal(
     <div className="modal-fundo" onMouseDown={(e) => e.target === e.currentTarget && onFechar()}>
       <div className={`modal${largo ? ' modal--largo' : ''}`} role="dialog" aria-modal="true" aria-label={titulo}>
         <div className="modal__topo">
@@ -46,7 +51,8 @@ export function Modal({ titulo, subtitulo, largo, onFechar, children, rodape, ca
         <div className="modal__corpo">{children}</div>
         {rodape && <div className="modal__rodape">{rodape}</div>}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 

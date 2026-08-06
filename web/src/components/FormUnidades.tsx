@@ -4,7 +4,7 @@ import { api } from '../lib/api'
 import { lerNumero } from '../lib/cub'
 import { fmtArea, fmtMoeda } from '../lib/format'
 import { FACES, POSICOES_SOLARES, STATUS_UNIDADE } from '../lib/opcoes'
-import { calcularValorM2, rotuloUnidade, valorNoFluxo } from '../lib/unidades'
+import { calcularValorM2, precoDaUnidade, rotuloUnidade, valorNoFluxo } from '../lib/unidades'
 import { Campo, Estado } from './ui'
 import { Icone } from './Icones'
 import { CartaoUnidade } from './CartaoUnidade'
@@ -315,7 +315,7 @@ export function UnidadesDoEmpreendimento({ empreendimentoId, unidades, onMudou, 
                         empreendimentoId={empreendimentoId}
                         unidadeId={unidade.id}
                         titulo={rotuloUnidade(unidade, indice)}
-                        valorSugerido={unidade.valor}
+                        valorSugerido={precoDaUnidade(unidade)}
                         fluxos={unidade.fluxos}
                         onMudou={(fluxos) => trocarFluxos(unidade.id, fluxos)}
                         avisar={avisar}
@@ -333,7 +333,7 @@ export function UnidadesDoEmpreendimento({ empreendimentoId, unidades, onMudou, 
       {cubAberto && (
         <CalculadoraCub
           titulo={rotuloUnidade(cubAberto)}
-          valorSugerido={cubAberto.valor}
+          valorSugerido={precoDaUnidade(cubAberto)}
           onFechar={() => setCubAberto(null)}
           onGerarFluxo={(dados) => gerarFluxoDoCub(cubAberto, dados)}
           avisar={avisar}
@@ -468,7 +468,7 @@ export function UnidadesDoEmpreendimento({ empreendimentoId, unidades, onMudou, 
                 empreendimentoId={empreendimentoId}
                 unidadeId={emEdicao.id}
                 titulo={rotuloUnidade(emEdicao)}
-                valorSugerido={emEdicao.valor}
+                valorSugerido={precoDaUnidade(emEdicao)}
                 fluxos={emEdicao.fluxos}
                 onMudou={(fluxos) => trocarFluxos(emEdicao.id, fluxos)}
                 onValorImovel={ouvirValorImovel}

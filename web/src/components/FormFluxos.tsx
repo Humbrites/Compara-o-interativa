@@ -344,6 +344,8 @@ export function FluxosDoEmpreendimento({
               key={fluxo.id}
               fluxo={fluxo}
               indice={indice}
+              valorDaUnidade={valorSugerido}
+              titulo={titulo}
               onEditar={() => abrirEdicao(fluxo)}
               onExcluir={() => excluir(fluxo)}
             />

@@ -136,6 +136,22 @@ quando ela não tem valor próprio — e é dele que sai o valor do m².
 > migração é manual, na sua mão. No comparativo, o seletor de fluxo mostra primeiro as
 > tabelas da unidade escolhida e depois as gerais.
 
+### Condições calculadas (clique na tabela)
+
+O cartão do fluxo mostra o que foi **cadastrado** ("10%", "36x", "3 reforços"). **Clicar
+nele abre as condições calculadas** — o que o corretor precisa dizer em voz alta:
+
+| Bloco | O que traz |
+|---|---|
+| Composição do valor | valor do imóvel, quanto sai do bolso **até a entrega** (entrada + parcelas + reforços) e a barra com a fatia de cada parte |
+| Tabela das partes | entrada, parcelas, reforços, chaves e financiamento **em reais**, o % que cada uma representa do imóvel e como foi cadastrada (`36 × R$ 2.500`) |
+| Conferência | a soma das partes contra o valor do imóvel — avisa quanto falta alocar ou quanto passou |
+| Reajuste pelo CUB | só nas tabelas geradas pela calculadora: parcela inicial → final, reajuste acumulado, total das parcelas, saldo que vai para o financiamento, o gráfico da parcela e a **tabela mês a mês**, com exportação em Excel e PDF |
+
+Percentuais viram reais usando o **valor total do imóvel** da tabela; se ela não tiver esse
+campo, entra o preço da unidade (a tela diz de onde veio o número). Sem nenhum dos dois, os
+percentuais ficam sem conversão e a tela explica o porquê em vez de mostrar campos vazios.
+
 ---
 
 ## Indicadores de mercado

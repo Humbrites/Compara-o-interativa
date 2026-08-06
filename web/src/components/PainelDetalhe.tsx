@@ -14,7 +14,7 @@ import {
 } from '../lib/format'
 import { corDoStatus } from '../lib/opcoes'
 import { fotosDe } from '../lib/imagens'
-import { resumoUnidades, rotuloUnidade } from '../lib/unidades'
+import { precoDaUnidade, resumoUnidades, rotuloUnidade } from '../lib/unidades'
 import { Icone, type NomeIcone } from './Icones'
 import { CartaoFluxo } from './CartaoFluxo'
 import { CartaoUnidade } from './CartaoUnidade'
@@ -261,7 +261,8 @@ export function PainelDetalhe({
               {temUnidades && (
                 <Selo cor="cinza" icone="predio">
                   {resumo.total} {resumo.total === 1 ? 'unidade' : 'unidades'}
-                  {resumo.disponiveis > 0 && ` · ${resumo.disponiveis} disponível${resumo.disponiveis > 1 ? 'is' : ''}`}
+                  {resumo.disponiveis > 0 &&
+                    ` · ${resumo.disponiveis} ${resumo.disponiveis === 1 ? 'disponível' : 'disponíveis'}`}
                 </Selo>
               )}
             </div>
@@ -426,7 +427,7 @@ export function PainelDetalhe({
                               empreendimentoId={e.id}
                               unidadeId={unidade.id}
                               titulo={rotuloUnidade(unidade, indice)}
-                              valorSugerido={unidade.valor}
+                              valorSugerido={precoDaUnidade(unidade)}
                               fluxos={unidade.fluxos}
                               onMudou={(fluxos) => trocarFluxos(unidade.id, fluxos)}
                               avisar={avisar}
@@ -458,7 +459,12 @@ export function PainelDetalhe({
 
               {e.fluxos.map((fluxo, indice) => (
                 <div key={fluxo.id}>
-                  <CartaoFluxo fluxo={fluxo} indice={indice} onExcluir={() => void excluirFluxoGeral(fluxo)} />
+                  <CartaoFluxo
+                    fluxo={fluxo}
+                    indice={indice}
+                    titulo={e.nome}
+                    onExcluir={() => void excluirFluxoGeral(fluxo)}
+                  />
 
                   {temUnidades && (
                     <div className="acoes-fluxo" style={{ marginBottom: 'var(--e4)' }}>
