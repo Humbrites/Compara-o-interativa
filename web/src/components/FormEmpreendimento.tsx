@@ -19,6 +19,16 @@ const CAMPOS: string[] = [
   'status_obra', 'entrega', 'tipo', 'imagem_url', 'observacoes',
 ]
 
+/**
+ * Numeros do produto. Sao gerais do empreendimento, mas descrevem a mesma
+ * coisa que cada unidade detalha — por isso moram na etapa das unidades, e
+ * nao junto da identificacao.
+ */
+const CAMPOS_PRODUTO = [
+  'valor_m2', 'metragem_min', 'metragem_max',
+  'dormitorios', 'suites', 'banheiros', 'vagas',
+]
+
 function paraFormulario(e: Empreendimento | null): Formulario {
   const inicial: Formulario = {}
   for (const campo of CAMPOS) {
@@ -28,7 +38,8 @@ function paraFormulario(e: Empreendimento | null): Formulario {
   return inicial
 }
 
-function validar(form: Formulario): Record<string, string> {
+/** Erros da etapa 1: identificacao e localizacao. */
+function validarDados(form: Formulario): Record<string, string> {
   const erros: Record<string, string> = {}
 
   if (!form.nome.trim()) erros.nome = 'Informe o nome do empreendimento'
@@ -42,6 +53,13 @@ function validar(form: Formulario): Record<string, string> {
   if (form.longitude.trim() && (!Number.isFinite(lng) || lng < -180 || lng > 180)) {
     erros.longitude = 'Longitude deve ficar entre -180 e 180'
   }
+
+  return erros
+}
+
+/** Erros do bloco de produto, que agora vive na etapa das unidades. */
+function validarProduto(form: Formulario): Record<string, string> {
+  const erros: Record<string, string> = {}
 
   const min = Number(form.metragem_min.replace(',', '.'))
   const max = Number(form.metragem_max.replace(',', '.'))
@@ -87,6 +105,7 @@ export function FormEmpreendimento({
     return 1
   })
   const [salvando, setSalvando] = useState(false)
+  const [salvandoProduto, setSalvandoProduto] = useState(false)
   // Depois de salvar a etapa 1 passamos a trabalhar sobre o registro criado.
   const [salvo, setSalvo] = useState<Empreendimento | null>(empreendimento)
   // Fotos escolhidas antes de o cadastro existir — sobem logo apos o salvar.
@@ -127,6 +146,62 @@ export function FormEmpreendimento({
 
   const editando = empreendimento !== null
 
+  // O bloco de produto e editado na etapa 2, depois de o registro existir:
+  // so gravamos o que o usuario mexeu de verdade.
+  const produtoAlterado =
+    salvo !== null &&
+    (() => {
+      const gravado = paraFormulario(salvo)
+      return CAMPOS_PRODUTO.some((campo) => form[campo].trim() !== gravado[campo].trim())
+    })()
+
+  /** Grava os numeros gerais sem tirar o usuario da etapa das unidades. */
+  async function salvarProduto(): Promise<boolean> {
+    if (!salvo) return false
+
+    const novosErros = validarProduto(form)
+    setErros(novosErros)
+    if (Object.keys(novosErros).length > 0) {
+      avisar('Revise os campos destacados', 'erro')
+      return false
+    }
+
+    setSalvandoProduto(true)
+    try {
+      // O PUT devolve o empreendimento completo (fluxos, unidades e imagens).
+      setSalvo(await onSalvar(montarPayload()))
+      avisar('Dados gerais salvos')
+      return true
+    } catch (erro) {
+      avisar(erro instanceof Error ? erro.message : 'Falha ao salvar', 'erro')
+      return false
+    } finally {
+      setSalvandoProduto(false)
+    }
+  }
+
+  /**
+   * Sair da etapa das unidades grava o produto pendente — sem isso o usuario
+   * digitaria os numeros e os perderia ao avancar.
+   */
+  async function irParaPasso(numero: 1 | 2 | 3) {
+    if (!salvo) return
+    if (passo === 2 && produtoAlterado && !(await salvarProduto())) return
+    setPasso(numero)
+  }
+
+  /** Fechar com produto por gravar precisa de confirmacao: fechar e desistir. */
+  function fecharComAviso() {
+    if (
+      passo === 2 &&
+      produtoAlterado &&
+      !window.confirm('Os dados gerais do produto ainda não foram salvos. Fechar mesmo assim?')
+    ) {
+      return
+    }
+    onFechar()
+  }
+
   function mudar(campo: string, valor: string) {
     setForm((atual) => ({ ...atual, [campo]: valor }))
     if (erros[campo]) setErros((atual) => ({ ...atual, [campo]: '' }))
@@ -143,8 +218,18 @@ export function FormEmpreendimento({
     )
   }
 
+  /** Campo em branco vai como null para a API nao gravar string vazia. */
+  function montarPayload(): EmpreendimentoInput {
+    const dados: Record<string, string | null> = { nome: form.nome.trim() }
+    for (const campo of CAMPOS) {
+      if (campo === 'nome') continue
+      dados[campo] = form[campo].trim() || null
+    }
+    return dados as EmpreendimentoInput
+  }
+
   async function salvarEtapa1() {
-    const novosErros = validar(form)
+    const novosErros = validarDados(form)
     setErros(novosErros)
     if (Object.keys(novosErros).length > 0) {
       avisar('Revise os campos destacados', 'erro')
@@ -153,14 +238,7 @@ export function FormEmpreendimento({
 
     setSalvando(true)
     try {
-      // Campo em branco vai como null para a API nao gravar string vazia.
-      const dados: Record<string, string | null> = { nome: form.nome.trim() }
-      for (const campo of CAMPOS) {
-        if (campo === 'nome') continue
-        dados[campo] = form[campo].trim() || null
-      }
-
-      const resultado = await onSalvar(dados as EmpreendimentoInput)
+      const resultado = await onSalvar(montarPayload())
       setSalvo(resultado)
       avisar(editando ? 'Empreendimento atualizado' : 'Empreendimento cadastrado')
 
@@ -208,7 +286,7 @@ export function FormEmpreendimento({
               className={`passo${passo === numero ? ' passo--ativo' : ''}${feito ? ' passo--feito' : ''}`}
               // Navegar entre as etapas so faz sentido com o cadastro ja salvo.
               disabled={!salvo}
-              onClick={() => salvo && setPasso(numero as 1 | 2 | 3)}
+              onClick={() => void irParaPasso(numero as 1 | 2 | 3)}
             >
               <span className="passo__bolha">
                 {feito ? <Icone nome="check" tamanho={12} espessura={3} /> : numero}
@@ -302,42 +380,6 @@ export function FormEmpreendimento({
             <p className="campo__dica" style={{ marginTop: 'var(--e2)' }}>
               Sem latitude e longitude o empreendimento é cadastrado normalmente, mas não aparece no mapa.
             </p>
-          </section>
-
-          <section className="form-secao">
-            <h3 className="form-secao__titulo">
-              <Icone nome="regua" tamanho={13} />
-              Produto
-            </h3>
-            <div className="grade">
-              <Campo rotulo="Valor médio do m²" dica="R$">
-                {entrada('valor_m2', { placeholder: '10800', inputMode: 'decimal' })}
-              </Campo>
-              <Campo rotulo="Metragem mínima" dica="m²">
-                {entrada('metragem_min', { placeholder: '45', inputMode: 'decimal' })}
-              </Campo>
-              <Campo rotulo="Metragem máxima" dica="m²" erro={erros.metragem_max}>
-                {entrada('metragem_max', { placeholder: '82', inputMode: 'decimal' })}
-              </Campo>
-              <Campo rotulo="Dormitórios">
-                {entrada('dormitorios', { placeholder: '3', inputMode: 'numeric' })}
-              </Campo>
-              <Campo rotulo="Suítes">{entrada('suites', { placeholder: '1', inputMode: 'numeric' })}</Campo>
-              <Campo rotulo="Banheiros">{entrada('banheiros', { placeholder: '2', inputMode: 'numeric' })}</Campo>
-              <Campo rotulo="Vagas">{entrada('vagas', { placeholder: '2', inputMode: 'numeric' })}</Campo>
-            </div>
-
-            {/* Atalho para a calculadora ja na primeira etapa: e onde o
-                corretor esta olhando o preco. */}
-            <div className="acoes-fluxo" style={{ marginTop: 'var(--e3)' }}>
-              <button type="button" className="btn btn--secundario" onClick={() => setCalculadoraAberta(true)}>
-                <Icone nome="grafico" tamanho={15} />
-                Calcular valor com CUB
-              </button>
-              <span className="campo__dica">
-                Simula o reajuste das parcelas até o fim da obra e vira um fluxo de pagamento.
-              </span>
-            </div>
           </section>
 
           <section className="form-secao">
@@ -443,31 +485,102 @@ export function FormEmpreendimento({
     )
   }
 
-  /* --- Etapa 2: unidades --------------------------------------------------- */
+  /* --- Etapa 2: produto e unidades ----------------------------------------- */
   if (passo === 2) {
     return (
       <Modal
         titulo="Unidades"
-        subtitulo={salvo ? `${salvo.nome} — cada planta com metragem, dormitórios, vagas, posição e preço` : ''}
-        onFechar={onFechar}
+        subtitulo={salvo ? `${salvo.nome} — os números do produto e cada planta que o corretor vende` : ''}
+        onFechar={fecharComAviso}
         cabecalhoExtra={cabecalho}
         largo
         rodape={
           <>
-            <button type="button" className="btn btn--fantasma" onClick={() => setPasso(1)}>
+            <button type="button" className="btn btn--fantasma" onClick={() => void irParaPasso(1)} disabled={salvandoProduto}>
               <Icone nome="seta_esquerda" tamanho={15} />
               Voltar aos dados
             </button>
             <div className="direita">
-              <button type="button" className="btn btn--primario" onClick={() => setPasso(3)}>
-                Avançar aos fluxos
-                <Icone nome="seta_direita" tamanho={15} />
+              <button
+                type="button"
+                className="btn btn--primario"
+                onClick={() => void irParaPasso(3)}
+                disabled={salvandoProduto}
+              >
+                {salvandoProduto ? (
+                  <>
+                    <Icone nome="spinner" tamanho={15} className="girando" />
+                    Salvando…
+                  </>
+                ) : (
+                  <>
+                    Avançar aos fluxos
+                    <Icone nome="seta_direita" tamanho={15} />
+                  </>
+                )}
               </button>
             </div>
           </>
         }
       >
         {calculadora}
+
+        <section className="form-secao">
+          <h3 className="form-secao__titulo">
+            <Icone nome="regua" tamanho={13} />
+            Produto
+            <span className="form-secao__opcional">— números gerais do empreendimento</span>
+          </h3>
+          <div className="grade">
+            <Campo rotulo="Valor médio do m²" dica="R$">
+              {entrada('valor_m2', { placeholder: '10800', inputMode: 'decimal' })}
+            </Campo>
+            <Campo rotulo="Metragem mínima" dica="m²">
+              {entrada('metragem_min', { placeholder: '45', inputMode: 'decimal' })}
+            </Campo>
+            <Campo rotulo="Metragem máxima" dica="m²" erro={erros.metragem_max}>
+              {entrada('metragem_max', { placeholder: '82', inputMode: 'decimal' })}
+            </Campo>
+            <Campo rotulo="Dormitórios">
+              {entrada('dormitorios', { placeholder: '3', inputMode: 'numeric' })}
+            </Campo>
+            <Campo rotulo="Suítes">{entrada('suites', { placeholder: '1', inputMode: 'numeric' })}</Campo>
+            <Campo rotulo="Banheiros">{entrada('banheiros', { placeholder: '2', inputMode: 'numeric' })}</Campo>
+            <Campo rotulo="Vagas">{entrada('vagas', { placeholder: '2', inputMode: 'numeric' })}</Campo>
+          </div>
+
+          <div className="acoes-fluxo" style={{ marginTop: 'var(--e3)' }}>
+            {/* O salvar so aparece com algo por gravar; avancar de etapa tambem grava. */}
+            {produtoAlterado && (
+              <button
+                type="button"
+                className="btn btn--secundario"
+                onClick={() => void salvarProduto()}
+                disabled={salvandoProduto}
+              >
+                {salvandoProduto ? (
+                  <>
+                    <Icone nome="spinner" tamanho={15} className="girando" />
+                    Salvando…
+                  </>
+                ) : (
+                  <>
+                    <Icone nome="check" tamanho={15} />
+                    Salvar números gerais
+                  </>
+                )}
+              </button>
+            )}
+
+            <button type="button" className="btn btn--secundario" onClick={() => setCalculadoraAberta(true)}>
+              <Icone nome="grafico" tamanho={15} />
+              Calcular valor com CUB
+            </button>
+            <span className="campo__dica">
+              Valem para o empreendimento inteiro; com unidades cadastradas, o painel mostra a faixa delas.
+            </span>
+          </div>
+        </section>
 
         {salvo && (
           <UnidadesDoEmpreendimento
