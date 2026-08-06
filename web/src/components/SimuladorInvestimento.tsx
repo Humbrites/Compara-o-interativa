@@ -24,7 +24,7 @@ import {
   type UnidadePrazo,
 } from '../lib/investimento'
 import { exportarPdfInvestimento, type ImovelDaSimulacao } from '../lib/exportarSimulacao'
-import { resumoUnidades, rotuloUnidade, valorM2Da } from '../lib/unidades'
+import { precoDaUnidade, resumoUnidades, rotuloUnidade, valorM2Da, valorNoFluxo } from '../lib/unidades'
 import { Campo, Modal } from './ui'
 import { Icone, type NomeIcone } from './Icones'
 import { GraficoLinha } from './GraficoSvg'
@@ -244,7 +244,10 @@ function imovelParaPdf(empreendimento: Empreendimento | null, unidade: Unidade |
  * simulador continua funcionando sem escolher imovel nenhum.
  */
 function dadosDoImovel(empreendimento: Empreendimento, unidade: Unidade | null) {
-  const valorCompra = unidade?.valor ?? valorDoEmpreendimento(empreendimento)
+  // Com unidade escolhida manda o preco DELA — inclusive quando ele so existe
+  // na tabela de pagamento. Sem isso a tela mantinha o preco do empreendimento
+  // e o cliente via o numero de outra unidade.
+  const valorCompra = (unidade ? precoDaUnidade(unidade) : null) ?? valorDoEmpreendimento(empreendimento)
   const meses = mesesAteAEntrega(empreendimento.entrega)
   // Entrada cadastrada em algum fluxo daquele imovel (o da unidade tem prioridade).
   const fluxos = [...(unidade?.fluxos ?? []), ...empreendimento.fluxos]
@@ -253,12 +256,18 @@ function dadosDoImovel(empreendimento: Empreendimento, unidade: Unidade | null) 
   return { valorCompra, meses, entrada }
 }
 
-/** Sem unidade escolhida, o preco sai do valor do m² pela menor metragem. */
+/**
+ * Sem unidade escolhida, vale a unidade mais barata; sem preco em nenhuma
+ * delas, o valor do m² pela menor metragem. A tabela geral do empreendimento
+ * entra antes do palpite do m²: la o preco foi digitado, aqui e conta.
+ */
 function valorDoEmpreendimento(e: Empreendimento): number | null {
-  if (e.unidades.length > 0) {
-    const valores = e.unidades.map((u) => u.valor).filter((v): v is number => v !== null)
-    if (valores.length > 0) return Math.min(...valores)
-  }
+  const valores = e.unidades.map(precoDaUnidade).filter((v): v is number => v !== null)
+  if (valores.length > 0) return Math.min(...valores)
+
+  const daTabela = valorNoFluxo(e.fluxos)
+  if (daTabela !== null) return daTabela
+
   if (e.valor_m2 !== null && e.metragem_min !== null) return e.valor_m2 * e.metragem_min
   return null
 }
@@ -501,7 +510,7 @@ export function SimuladorInvestimento({
                   {empreendimento.unidades.map((item, indice) => (
                     <option key={item.id} value={item.id}>
                       {rotuloUnidade(item, indice)}
-                      {item.valor !== null ? ` — ${fmtMoeda(item.valor)}` : ''}
+                      {precoDaUnidade(item) !== null ? ` — ${fmtMoeda(precoDaUnidade(item))}` : ''}
                     </option>
                   ))}
                 </select>
@@ -511,8 +520,8 @@ export function SimuladorInvestimento({
             {empreendimento && (
               <p className="campo__dica seletor-imovel__aviso">
                 <Icone nome="info" tamanho={12} /> Preenchi valor de compra
-                {unidade
-                  ? ` (${fmtMoeda(unidade.valor)} da unidade${
+                {unidade && precoDaUnidade(unidade) !== null
+                  ? ` (${fmtMoeda(precoDaUnidade(unidade))} da unidade${
                       valorM2Da(unidade) !== null ? `, ${fmtMoeda(valorM2Da(unidade))}/m²` : ''
                     })`
                   : ''}

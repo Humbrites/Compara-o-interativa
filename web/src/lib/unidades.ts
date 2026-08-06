@@ -65,17 +65,22 @@ export function valorNoFluxo(fluxos: FluxoPagamento[] | undefined): number | nul
 }
 
 /**
+ * O preco que vale para a unidade: o valor dela e, na falta, o valor do imovel
+ * guardado na tabela de pagamento. Uma unidade cadastrada so com a tabela tem
+ * preco — quem le nao precisa saber de onde ele saiu.
+ */
+export function precoDaUnidade(unidade: Unidade): number | null {
+  return unidade.valor ?? valorNoFluxo(unidade.fluxos)
+}
+
+/**
  * Valor do m² da unidade: o informado a mao vence; sem ele, deriva do preco
  * (o da unidade ou o da tabela de pagamento) pela metragem.
  */
 export function valorM2Da(unidade: Unidade): number | null {
   if (unidade.valor_m2 !== null && Number.isFinite(unidade.valor_m2)) return unidade.valor_m2
 
-  return calcularValorM2(
-    unidade.valor ?? valorNoFluxo(unidade.fluxos),
-    unidade.metragem_total,
-    unidade.metragem,
-  )
+  return calcularValorM2(precoDaUnidade(unidade), unidade.metragem_total, unidade.metragem)
 }
 
 interface Faixa {
@@ -98,7 +103,7 @@ export function resumoUnidades(unidades: Unidade[]) {
     total: unidades.length,
     disponiveis: unidades.filter((u) => (u.status || '').trim().toLowerCase() === 'disponível').length,
     metragem: faixa(unidades.map((u) => u.metragem)),
-    valor: faixa(unidades.map((u) => u.valor)),
+    valor: faixa(unidades.map(precoDaUnidade)),
     valorM2: faixa(unidades.map(valorM2Da)),
     dormitorios: faixa(unidades.map((u) => u.dormitorios)),
     vagas: faixa(unidades.map((u) => u.vagas)),

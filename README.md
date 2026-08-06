@@ -193,10 +193,16 @@ do cadastro nem da calculadora do CUB, então serve para qualquer imóvel — in
 nem está aqui.
 
 Se o imóvel *estiver* cadastrado, dá para poupar digitação: o seletor **"Usar um imóvel
-cadastrado"** preenche o **valor de compra** (o da unidade escolhida, ou o menor preço entre
-as unidades / valor do m² × metragem mínima), o **prazo** (meses até a entrega prevista) e a
+cadastrado"** preenche o **valor de compra**, o **prazo** (meses até a entrega prevista) e a
 **entrada**, quando algum fluxo tiver esse dado. O que já foi pago, o saldo devedor e a
-expectativa de valorização continuam por sua conta. O painel do imóvel tem o botão
+expectativa de valorização continuam por sua conta.
+
+> **O valor de compra segue a unidade escolhida.** Trocar de unidade troca o preço na hora —
+> e o preço dela é o *valor da unidade* ou, na falta dele, o valor do imóvel guardado na
+> **tabela de pagamento**. Sem unidade escolhida vale a **mais barata**; se nenhuma tiver
+> preço, a tabela geral do empreendimento e, por último, `valor do m² × metragem mínima`.
+> A lista de unidades mostra o preço de cada uma, e o aviso abaixo do seletor diz qual
+> número entrou. O painel do imóvel tem o botão
 **Simular investimento**, que já abre com ele escolhido — e "Digitar tudo à mão" volta ao
 modo livre a qualquer momento.
 
