@@ -277,9 +277,26 @@ app.delete('/api/unidades/:id', (req, reply) => {
 /* Imagens (galeria)                                                   */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Le e joga fora o que o cliente esta enviando. Responder no meio de um upload
+ * derruba a conexao antes de o navegador terminar de mandar o corpo, e o fetch
+ * do front reporta "Failed to fetch" em vez do erro de verdade.
+ */
+async function descartarUpload(req) {
+  if (!req.isMultipart()) return
+  try {
+    for await (const parte of req.files()) await parte.toBuffer().catch(() => {})
+  } catch {
+    // Cliente desistiu ou estourou algum limite do multipart — nada a fazer.
+  }
+}
+
 app.post('/api/empreendimentos/:id/imagens', async (req, reply) => {
   const { id } = req.params
-  if (!buscarEmpreendimento.get(id)) return reply.code(404).send({ erro: 'Empreendimento nao encontrado' })
+  if (!buscarEmpreendimento.get(id)) {
+    await descartarUpload(req)
+    return reply.code(404).send({ erro: 'Empreendimento nao encontrado' })
+  }
 
   // Novas imagens entram no fim da galeria.
   const { maior } = db

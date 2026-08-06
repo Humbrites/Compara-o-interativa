@@ -15,19 +15,33 @@ export interface RespostaImagens {
   recusadas?: { nome: string; motivo: string }[]
 }
 
+/** Quantos arquivos a API aceita por requisicao (limite `files` do multipart). */
+const IMAGENS_POR_ENVIO = 20
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   // Upload vai como FormData — deixar o navegador montar o Content-Type com o
   // boundary; se sobrescrevermos com JSON o multipart nao e reconhecido.
   const ehFormData = init?.body instanceof FormData
 
-  const resposta = await fetch(url, {
-    ...init,
-    headers: init?.body && !ehFormData ? { 'Content-Type': 'application/json' } : undefined,
-  })
+  let resposta: Response
+  try {
+    resposta = await fetch(url, {
+      ...init,
+      headers: init?.body && !ehFormData ? { 'Content-Type': 'application/json' } : undefined,
+    })
+  } catch {
+    // O fetch so rejeita quando a requisicao nem chegou a completar: conexao
+    // caida (o tunel SSH morre por ociosidade e a aba aberta nao percebe),
+    // API fora do ar, rede fora. A mensagem nativa do navegador ("Failed to
+    // fetch") nao diz nada a quem esta no meio de um cadastro — e o que foi
+    // digitado continua aqui, entao basta refazer a conexao e salvar de novo.
+    throw new Error('Conexão perdida com o servidor — o que você digitou está aqui. Refaça a conexão e salve de novo')
+  }
 
   if (!resposta.ok) {
     const corpo = await resposta.json().catch(() => null)
-    throw new Error(corpo?.erro || `Falha na requisicao (${resposta.status})`)
+    // `erro` e o nosso formato; `message` e o do proprio Fastify (413, 500…).
+    throw new Error(corpo?.erro || corpo?.message || `Falha na requisição (${resposta.status})`)
   }
 
   if (resposta.status === 204) return undefined as T
@@ -61,13 +75,30 @@ export const api = {
 
   excluirUnidade: (id: number) => request<void>(`/api/unidades/${id}`, { method: 'DELETE' }),
 
-  enviarImagens: (empreendimentoId: number, arquivos: File[]) => {
-    const corpo = new FormData()
-    for (const arquivo of arquivos) corpo.append('arquivo', arquivo)
-    return request<RespostaImagens>(`/api/empreendimentos/${empreendimentoId}/imagens`, {
-      method: 'POST',
-      body: corpo,
-    })
+  /**
+   * Manda em lotes de 20 porque e o teto do multipart da API — passar disso
+   * fazia o servidor cortar a requisicao no meio (413 seco). Quem chamou nao
+   * precisa saber: a resposta devolvida junta tudo, e a galeria final e a da
+   * ultima leva.
+   */
+  enviarImagens: async (empreendimentoId: number, arquivos: File[]) => {
+    const resultado: RespostaImagens = { imagens: [], salvas: [], recusadas: [] }
+
+    for (let inicio = 0; inicio < arquivos.length; inicio += IMAGENS_POR_ENVIO) {
+      const corpo = new FormData()
+      for (const arquivo of arquivos.slice(inicio, inicio + IMAGENS_POR_ENVIO)) corpo.append('arquivo', arquivo)
+
+      const resposta = await request<RespostaImagens>(`/api/empreendimentos/${empreendimentoId}/imagens`, {
+        method: 'POST',
+        body: corpo,
+      })
+
+      resultado.imagens = resposta.imagens
+      resultado.salvas = [...(resultado.salvas ?? []), ...(resposta.salvas ?? [])]
+      resultado.recusadas = [...(resultado.recusadas ?? []), ...(resposta.recusadas ?? [])]
+    }
+
+    return resultado
   },
 
   excluirImagem: (id: number) => request<RespostaImagens>(`/api/imagens/${id}`, { method: 'DELETE' }),
