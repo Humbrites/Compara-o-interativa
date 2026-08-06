@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { Empreendimento } from '../types'
+import type { Empreendimento, FluxoPagamento, Unidade } from '../types'
+import { api } from '../lib/api'
 import {
   fmtArea,
   fmtEntrega,
@@ -13,10 +14,11 @@ import {
 } from '../lib/format'
 import { corDoStatus } from '../lib/opcoes'
 import { fotosDe } from '../lib/imagens'
-import { resumoUnidades } from '../lib/unidades'
+import { resumoUnidades, rotuloUnidade } from '../lib/unidades'
 import { Icone, type NomeIcone } from './Icones'
 import { CartaoFluxo } from './CartaoFluxo'
 import { CartaoUnidade } from './CartaoUnidade'
+import { FluxosDoEmpreendimento, fluxoParaEnvio, fluxoParaFormulario } from './FormFluxos'
 import { Galeria } from './Galeria'
 import { Selo } from './ui'
 
@@ -38,11 +40,15 @@ interface Props {
   podeComparar: boolean
   onEditar: () => void
   onExcluir: () => void
-  onAdicionarFluxo: () => void
   onAdicionarUnidade: () => void
   onCalcularCub: () => void
   onSimularInvestimento: () => void
   onCompararCom: () => void
+  /** O painel edita os fluxos das unidades: a lista de fora acompanha. */
+  onMudouUnidades: (unidades: Unidade[]) => void
+  /** Sobra do formato antigo: fluxo sem unidade. */
+  onMudouFluxosGerais: (fluxos: FluxoPagamento[]) => void
+  avisar: (texto: string, tipo?: 'sucesso' | 'erro') => void
   onFechar: () => void
 }
 
@@ -51,11 +57,13 @@ export function PainelDetalhe({
   podeComparar,
   onEditar,
   onExcluir,
-  onAdicionarFluxo,
   onAdicionarUnidade,
   onCalcularCub,
   onSimularInvestimento,
   onCompararCom,
+  onMudouUnidades,
+  onMudouFluxosGerais,
+  avisar,
   onFechar,
 }: Props) {
   const local = [e.bairro, e.cidade].filter(Boolean).join(', ')
@@ -67,6 +75,56 @@ export function PainelDetalhe({
   const [galeriaVazia, setGaleriaVazia] = useState(false)
   useEffect(() => setGaleriaVazia(false), [e.id])
   const temCapa = fotos.length > 0 && !galeriaVazia
+
+  // Qual unidade esta com o fluxo de pagamento aberto para edicao.
+  const [fluxosAbertos, setFluxosAbertos] = useState<number | null>(null)
+  useEffect(() => setFluxosAbertos(null), [e.id])
+  // Para qual unidade cada tabela antiga vai ser copiada.
+  const [destino, setDestino] = useState<Record<number, string>>({})
+  const [copiando, setCopiando] = useState<number | null>(null)
+
+  /** Troca os fluxos de uma unidade sem mexer no resto da lista. */
+  function trocarFluxos(unidadeId: number, fluxos: FluxoPagamento[]) {
+    onMudouUnidades(e.unidades.map((u) => (u.id === unidadeId ? { ...u, fluxos } : u)))
+  }
+
+  /**
+   * Tabela geral e formato antigo: em vez de sumir com ela, o painel deixa
+   * copiar para a unidade escolhida. A original fica — quem exclui e o usuario.
+   */
+  async function copiarParaUnidade(fluxo: FluxoPagamento) {
+    const unidadeId = Number(destino[fluxo.id])
+    const unidade = e.unidades.find((u) => u.id === unidadeId)
+    if (!unidade) {
+      avisar('Escolha a unidade que recebe a tabela', 'erro')
+      return
+    }
+
+    setCopiando(fluxo.id)
+    try {
+      const copia = await api.criarFluxo(fluxoParaEnvio(fluxoParaFormulario(fluxo), e.id, unidade.id))
+      trocarFluxos(unidade.id, [...unidade.fluxos, copia])
+      setFluxosAbertos(unidade.id)
+      avisar(`Tabela copiada para ${rotuloUnidade(unidade)}`)
+    } catch (erro) {
+      avisar(erro instanceof Error ? erro.message : 'Falha ao copiar a tabela', 'erro')
+    } finally {
+      setCopiando(null)
+    }
+  }
+
+  async function excluirFluxoGeral(fluxo: FluxoPagamento) {
+    const nome = fluxo.nome?.trim() || 'esta tabela'
+    if (!window.confirm(`Excluir ${nome}? Essa ação não pode ser desfeita.`)) return
+
+    try {
+      await api.excluirFluxo(fluxo.id)
+      onMudouFluxosGerais(e.fluxos.filter((f) => f.id !== fluxo.id))
+      avisar('Tabela excluída')
+    } catch (erro) {
+      avisar(erro instanceof Error ? erro.message : 'Falha ao excluir', 'erro')
+    }
+  }
 
   return (
     <>
@@ -191,6 +249,11 @@ export function PainelDetalhe({
               <Icone nome="grafico" tamanho={15} />
               Simular investimento
             </button>
+
+            <button type="button" className="btn btn--secundario btn--bloco" onClick={onCalcularCub}>
+              <Icone nome="grafico" tamanho={15} />
+              Calcular valor com CUB
+            </button>
           </div>
 
           <section className="bloco">
@@ -206,8 +269,8 @@ export function PainelDetalhe({
 
             {!temUnidades ? (
               <div className="observacao">
-                Nenhuma unidade cadastrada. Cadastre as plantas (metragem, dormitórios, vagas, posição e preço) para
-                comparar unidade a unidade.
+                Nenhuma unidade cadastrada. Cadastre as plantas (metragem, dormitórios, vagas, posição e preço) e o
+                fluxo de pagamento de cada uma para comparar unidade a unidade.
               </div>
             ) : (
               <>
@@ -231,36 +294,104 @@ export function PainelDetalhe({
                 </div>
 
                 {e.unidades.map((unidade, indice) => (
-                  <CartaoUnidade key={unidade.id} unidade={unidade} indice={indice} />
+                  <CartaoUnidade
+                    key={unidade.id}
+                    unidade={unidade}
+                    indice={indice}
+                    rodape={
+                      <>
+                        {/* O fluxo abre aqui mesmo: e no atendimento que a
+                            condicao vira proposta de um cliente. */}
+                        <button
+                          type="button"
+                          className="btn btn--fantasma btn--pequeno"
+                          onClick={() => setFluxosAbertos((atual) => (atual === unidade.id ? null : unidade.id))}
+                        >
+                          <Icone nome={fluxosAbertos === unidade.id ? 'seta_cima' : 'seta_baixo'} tamanho={13} />
+                          {unidade.fluxos.length === 0
+                            ? 'Fluxo de pagamento'
+                            : `Fluxos de pagamento (${unidade.fluxos.length})`}
+                        </button>
+
+                        {fluxosAbertos === unidade.id && (
+                          <div className="unidade__fluxos">
+                            <FluxosDoEmpreendimento
+                              empreendimentoId={e.id}
+                              unidadeId={unidade.id}
+                              titulo={rotuloUnidade(unidade, indice)}
+                              valorSugerido={unidade.valor}
+                              fluxos={unidade.fluxos}
+                              onMudou={(fluxos) => trocarFluxos(unidade.id, fluxos)}
+                              avisar={avisar}
+                            />
+                          </div>
+                        )}
+                      </>
+                    }
+                  />
                 ))}
               </>
             )}
           </section>
 
-          <section className="bloco">
-            <h3 className="bloco__titulo">
-              <Icone nome="cartao" tamanho={13} />
-              Fluxos de pagamento
-              <button type="button" className="btn btn--fantasma btn--pequeno" onClick={onAdicionarFluxo}>
-                <Icone nome="mais" tamanho={13} />
-                Adicionar
-              </button>
-            </h3>
+          {/* Formato antigo: tabela do empreendimento inteiro. So aparece
+              enquanto sobrar alguma — o cadastro novo e sempre por unidade. */}
+          {e.fluxos.length > 0 && (
+            <section className="bloco">
+              <h3 className="bloco__titulo">
+                <Icone nome="cartao" tamanho={13} />
+                Tabelas gerais
+                <span className="bloco__contador">{e.fluxos.length}</span>
+              </h3>
 
-            <button type="button" className="btn btn--secundario btn--bloco" onClick={onCalcularCub}>
-              <Icone nome="grafico" tamanho={15} />
-              Calcular valor com CUB
-            </button>
-
-            {e.fluxos.length === 0 ? (
               <div className="observacao">
-                Nenhum fluxo geral cadastrado. A tabela de venda pode ficar aqui (vale para o empreendimento inteiro)
-                ou dentro de cada unidade.
+                O fluxo de pagamento agora é cadastrado dentro de cada unidade. Estas tabelas vieram do formato
+                anterior: copie para a unidade que atende e depois exclua.
               </div>
-            ) : (
-              e.fluxos.map((fluxo, indice) => <CartaoFluxo key={fluxo.id} fluxo={fluxo} indice={indice} />)
-            )}
-          </section>
+
+              {e.fluxos.map((fluxo, indice) => (
+                <div key={fluxo.id}>
+                  <CartaoFluxo fluxo={fluxo} indice={indice} onExcluir={() => void excluirFluxoGeral(fluxo)} />
+
+                  {temUnidades && (
+                    <div className="acoes-fluxo" style={{ marginBottom: 'var(--e4)' }}>
+                      <select
+                        className="entrada"
+                        style={{ flex: '1 1 160px' }}
+                        value={destino[fluxo.id] ?? ''}
+                        onChange={(ev) => setDestino((atual) => ({ ...atual, [fluxo.id]: ev.target.value }))}
+                      >
+                        <option value="">Copiar para a unidade…</option>
+                        {e.unidades.map((unidade, i) => (
+                          <option key={unidade.id} value={unidade.id}>
+                            {rotuloUnidade(unidade, i)}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        className="btn btn--secundario btn--pequeno"
+                        onClick={() => void copiarParaUnidade(fluxo)}
+                        disabled={!destino[fluxo.id] || copiando === fluxo.id}
+                      >
+                        {copiando === fluxo.id ? (
+                          <>
+                            <Icone nome="spinner" tamanho={13} className="girando" />
+                            Copiando…
+                          </>
+                        ) : (
+                          <>
+                            <Icone nome="mais" tamanho={13} />
+                            Copiar
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </section>
+          )}
 
           {e.observacoes && (
             <section className="bloco">

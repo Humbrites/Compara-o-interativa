@@ -1,12 +1,20 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { Unidade, UnidadeInput } from '../types'
 import { api } from '../lib/api'
+import { lerNumero } from '../lib/cub'
 import { FACES, POSICOES_SOLARES, STATUS_UNIDADE } from '../lib/opcoes'
-import { rotuloUnidade } from '../lib/unidades'
+import { calcularValorM2, rotuloUnidade, valorNoFluxo } from '../lib/unidades'
 import { Campo, Estado } from './ui'
 import { Icone } from './Icones'
 import { CartaoUnidade } from './CartaoUnidade'
-import { FluxosDoEmpreendimento } from './FormFluxos'
+import {
+  CamposFluxo,
+  FluxosDoEmpreendimento,
+  FLUXO_VAZIO,
+  fluxoParaEnvio,
+  fluxoTemNumeros,
+  type FormularioFluxo,
+} from './FormFluxos'
 import { CalculadoraCub } from './CalculadoraCub'
 
 type Formulario = Record<string, string>
@@ -40,28 +48,82 @@ export function UnidadesDoEmpreendimento({ empreendimentoId, unidades, onMudou, 
   const [form, setForm] = useState<Formulario | null>(null)
   const [editandoId, setEditandoId] = useState<number | null>(null)
   const [salvando, setSalvando] = useState(false)
+  // Primeiro fluxo da unidade nova: sai no mesmo "Adicionar unidade".
+  const [fluxoNovo, setFluxoNovo] = useState<FormularioFluxo>({ ...FLUXO_VAZIO })
   // Qual unidade esta com o bloco de fluxos aberto.
   const [fluxosAbertos, setFluxosAbertos] = useState<number | null>(null)
   // Qual unidade esta com a calculadora do CUB aberta.
   const [cubAberto, setCubAberto] = useState<Unidade | null>(null)
 
+  // O valor do m² se preenche sozinho ate alguem digitar outro numero ali.
+  const [valorM2Manual, setValorM2Manual] = useState(false)
+
+  const emEdicao = editandoId !== null ? unidades.find((u) => u.id === editandoId) ?? null : null
+
+  /**
+   * O m² que sai da conta: preco ÷ metragem total (privativa so na falta
+   * dela). O preco e o "valor da unidade" e, quando ele esta em branco, o
+   * valor do imovel que a tabela de pagamento guardou.
+   */
+  const valorM2Automatico = useMemo(() => {
+    if (!form) return null
+    const preco = lerNumero(form.valor) ?? valorNoFluxo(emEdicao?.fluxos)
+    return calcularValorM2(preco, lerNumero(form.metragem_total), lerNumero(form.metragem))
+  }, [form, emEdicao])
+
+  /** O que aparece no campo: o digitado a mao ou o calculado. */
+  const valorM2NoCampo = valorM2Manual
+    ? form?.valor_m2 ?? ''
+    : valorM2Automatico !== null
+      ? valorM2Automatico.toFixed(2).replace('.', ',')
+      : ''
+
   function abrirNova() {
     setEditandoId(null)
     setForm({ ...VAZIO, status: 'Disponível' })
+    setFluxoNovo({ ...FLUXO_VAZIO })
+    setValorM2Manual(false)
   }
 
   function abrirEdicao(unidade: Unidade) {
     setEditandoId(unidade.id)
     setForm(paraFormulario(unidade))
+    // Unidade gravada com um m² que a conta nao devolve foi ajustada a mao —
+    // recalcular por cima apagaria a escolha de quem cadastrou.
+    const daConta = calcularValorM2(
+      unidade.valor ?? valorNoFluxo(unidade.fluxos),
+      unidade.metragem_total,
+      unidade.metragem,
+    )
+    setValorM2Manual(
+      unidade.valor_m2 !== null && (daConta === null || Math.abs(unidade.valor_m2 - daConta) > 0.01),
+    )
   }
 
   function fechar() {
     setForm(null)
     setEditandoId(null)
+    setFluxoNovo({ ...FLUXO_VAZIO })
+    setValorM2Manual(false)
+  }
+
+  /** Digitar no campo do m² assume o comando; o link devolve para a conta. */
+  function mudarValorM2(valor: string) {
+    setValorM2Manual(true)
+    mudar('valor_m2', valor)
+  }
+
+  function voltarAoValorM2Automatico() {
+    setValorM2Manual(false)
+    mudar('valor_m2', '')
   }
 
   function mudar(campo: string, valor: string) {
     setForm((atual) => (atual ? { ...atual, [campo]: valor } : atual))
+  }
+
+  function mudarFluxo(campo: string, valor: string) {
+    setFluxoNovo((atual) => ({ ...atual, [campo]: valor }))
   }
 
   function entrada(campo: string, extra?: React.InputHTMLAttributes<HTMLInputElement>) {
@@ -98,13 +160,35 @@ export function UnidadesDoEmpreendimento({ empreendimentoId, unidades, onMudou, 
       for (const campo of CAMPOS) {
         dados[campo as keyof UnidadeInput] = form[campo].trim() || null
       }
+      // O m² pode estar so na tela (calculado, sem ninguem ter digitado):
+      // vai gravado do mesmo jeito, e o que se ve e o que fica.
+      dados.valor_m2 = valorM2NoCampo.trim() || null
 
       if (editandoId !== null) {
         const atualizada = await api.editarUnidade(editandoId, dados)
-        onMudou(unidades.map((u) => (u.id === editandoId ? atualizada : u)))
+        // A API devolve a unidade sem os fluxos que ja estavam na tela.
+        onMudou(unidades.map((u) => (u.id === editandoId ? { ...atualizada, fluxos: u.fluxos } : u)))
         avisar('Unidade atualizada')
+        fechar()
+        return
+      }
+
+      const criada = await api.criarUnidade(dados)
+
+      // O fluxo so existe depois da unidade — e so vale a pena gravar se
+      // tiver numero: nome sozinho nao descreve tabela de venda nenhuma.
+      if (fluxoTemNumeros(fluxoNovo)) {
+        try {
+          const fluxo = await api.criarFluxo(fluxoParaEnvio(fluxoNovo, empreendimentoId, criada.id))
+          onMudou([...unidades, { ...criada, fluxos: [fluxo] }])
+          avisar('Unidade e fluxo de pagamento adicionados')
+        } catch (erro) {
+          // A unidade ja esta gravada: o fluxo fica para a edicao dela.
+          onMudou([...unidades, criada])
+          const motivo = erro instanceof Error ? erro.message : 'o fluxo não foi salvo'
+          avisar(`Unidade adicionada, mas ${motivo}. Abra a unidade para cadastrar o fluxo`, 'erro')
+        }
       } else {
-        const criada = await api.criarUnidade(dados)
         onMudou([...unidades, criada])
         avisar('Unidade adicionada')
       }
@@ -171,7 +255,10 @@ export function UnidadesDoEmpreendimento({ empreendimentoId, unidades, onMudou, 
               indice={indice}
               onEditar={() => abrirEdicao(unidade)}
               onExcluir={() => void excluir(unidade)}
+              // Editando esta unidade, o fluxo dela ja esta aberto no
+              // formulario logo abaixo — dois blocos iguais so confundem.
               rodape={
+                editandoId === unidade.id ? null : (
                 <>
                   <div className="unidade__botoes">
                     <button
@@ -205,6 +292,7 @@ export function UnidadesDoEmpreendimento({ empreendimentoId, unidades, onMudou, 
                     </div>
                   )}
                 </>
+                )
               }
             />
           ))}
@@ -276,8 +364,23 @@ export function UnidadesDoEmpreendimento({ empreendimentoId, unidades, onMudou, 
             <Campo rotulo="Valor da unidade" dica="R$">
               {entrada('valor', { placeholder: '842000', inputMode: 'decimal' })}
             </Campo>
-            <Campo rotulo="Valor do m²" dica="em branco = calculado">
-              {entrada('valor_m2', { placeholder: '10800', inputMode: 'decimal' })}
+            <Campo
+              rotulo="Valor do m²"
+              dica={
+                valorM2Manual
+                  ? 'informado à mão'
+                  : lerNumero(form.metragem_total) !== null
+                    ? 'valor ÷ metragem total'
+                    : 'valor ÷ metragem'
+              }
+            >
+              <input
+                className={`entrada${valorM2Manual ? '' : ' entrada--calculada'}`}
+                value={valorM2NoCampo}
+                onChange={(e) => mudarValorM2(e.target.value)}
+                placeholder="10800"
+                inputMode="decimal"
+              />
             </Campo>
 
             <Campo rotulo="Observações" className="col-inteira">
@@ -290,6 +393,40 @@ export function UnidadesDoEmpreendimento({ empreendimentoId, unidades, onMudou, 
               />
             </Campo>
           </div>
+
+          {valorM2Manual && (
+            <p className="campo__dica linha-calculo">
+              <Icone nome="lapis" tamanho={12} /> Valor do m² informado à mão.
+              <button type="button" className="link-acao" onClick={voltarAoValorM2Automatico}>
+                Voltar ao cálculo automático
+              </button>
+            </p>
+          )}
+
+          {/* O fluxo de pagamento e da unidade: entra no mesmo cadastro. Na
+              unidade nova sai um primeiro fluxo junto do salvar; na edicao a
+              lista inteira fica aqui, para personalizar por cliente. */}
+          <h3 className="form-secao__titulo" style={{ marginTop: 'var(--e5)' }}>
+            <Icone nome="cartao" tamanho={13} />
+            Fluxo de pagamento desta unidade
+            {editandoId === null && <span className="form-secao__opcional">— opcional, dá para cadastrar depois</span>}
+          </h3>
+
+          {editandoId === null ? (
+            <CamposFluxo form={fluxoNovo} mudar={mudarFluxo} daUnidade />
+          ) : (
+            emEdicao && (
+              <FluxosDoEmpreendimento
+                empreendimentoId={empreendimentoId}
+                unidadeId={emEdicao.id}
+                titulo={rotuloUnidade(emEdicao)}
+                valorSugerido={emEdicao.valor}
+                fluxos={emEdicao.fluxos}
+                onMudou={(fluxos) => trocarFluxos(emEdicao.id, fluxos)}
+                avisar={avisar}
+              />
+            )
+          )}
 
           <div style={{ display: 'flex', gap: 'var(--e3)', marginTop: 'var(--e4)' }}>
             <button type="button" className="btn btn--primario" onClick={salvar} disabled={salvando}>

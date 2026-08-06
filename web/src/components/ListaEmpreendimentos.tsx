@@ -233,13 +233,18 @@ export function ListaEmpreendimentos({
                   <td>{fmtEntrega(e.entrega)}</td>
 
                   <td>
-                    {e.fluxos.length > 0 ? (
-                      <span className="selo selo--cinza">
-                        {e.fluxos.length} {e.fluxos.length === 1 ? 'fluxo' : 'fluxos'}
-                      </span>
-                    ) : (
-                      <span className="tabela-lista__vazio">nenhum</span>
-                    )}
+                    {/* Os fluxos moram nas unidades; os do empreendimento sao
+                        sobra do formato antigo e entram na mesma conta. */}
+                    {(() => {
+                      const total = e.fluxos.length + e.unidades.reduce((soma, u) => soma + u.fluxos.length, 0)
+                      return total > 0 ? (
+                        <span className="selo selo--cinza">
+                          {total} {total === 1 ? 'fluxo' : 'fluxos'}
+                        </span>
+                      ) : (
+                        <span className="tabela-lista__vazio">nenhum</span>
+                      )
+                    })()}
                   </td>
 
                   <td>

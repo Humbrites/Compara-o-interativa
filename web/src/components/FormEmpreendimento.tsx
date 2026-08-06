@@ -4,7 +4,6 @@ import { STATUS_OBRA, TIPOS } from '../lib/opcoes'
 import { api } from '../lib/api'
 import { Campo, Modal } from './ui'
 import { Icone } from './Icones'
-import { FluxosDoEmpreendimento } from './FormFluxos'
 import { UnidadesDoEmpreendimento } from './FormUnidades'
 import { GaleriaUpload } from './GaleriaUpload'
 import { CalculadoraCub } from './CalculadoraCub'
@@ -73,13 +72,10 @@ function validarProduto(form: Formulario): Record<string, string> {
 interface Props {
   /** null = cadastro novo. */
   empreendimento: Empreendimento | null
-  /** Abre direto na etapa dos fluxos (usado pelo botao "adicionar fluxo"). */
-  iniciarEmFluxos?: boolean
   /** Abre direto na etapa das unidades (botao "adicionar unidade" do painel). */
   iniciarEmUnidades?: boolean
   onFechar: () => void
   onSalvar: (dados: EmpreendimentoInput) => Promise<Empreendimento>
-  onMudouFluxos: () => void
   onMudouImagens: (id: number, imagens: ImagemEmpreendimento[]) => void
   onMudouUnidades: (id: number, unidades: Unidade[]) => void
   avisar: (texto: string, tipo?: 'sucesso' | 'erro') => void
@@ -87,23 +83,16 @@ interface Props {
 
 export function FormEmpreendimento({
   empreendimento,
-  iniciarEmFluxos,
   iniciarEmUnidades,
   onFechar,
   onSalvar,
-  onMudouFluxos,
   onMudouImagens,
   onMudouUnidades,
   avisar,
 }: Props) {
   const [form, setForm] = useState<Formulario>(() => paraFormulario(empreendimento))
   const [erros, setErros] = useState<Record<string, string>>({})
-  const [passo, setPasso] = useState<1 | 2 | 3>(() => {
-    if (!empreendimento) return 1
-    if (iniciarEmFluxos) return 3
-    if (iniciarEmUnidades) return 2
-    return 1
-  })
+  const [passo, setPasso] = useState<1 | 2>(() => (empreendimento && iniciarEmUnidades ? 2 : 1))
   const [salvando, setSalvando] = useState(false)
   const [salvandoProduto, setSalvandoProduto] = useState(false)
   // Depois de salvar a etapa 1 passamos a trabalhar sobre o registro criado.
@@ -114,20 +103,12 @@ export function FormEmpreendimento({
   const [verLink, setVerLink] = useState(() => Boolean(empreendimento?.imagem_url))
   const [calculadoraAberta, setCalculadoraAberta] = useState(false)
 
-  /** A simulacao do CUB vira um fluxo geral do empreendimento. */
-  async function gerarFluxoDoCub(dados: Parameters<typeof api.criarFluxo>[0]) {
-    if (!salvo) return
-    const criado = await api.criarFluxo({ ...dados, empreendimento_id: salvo.id })
-    setSalvo({ ...salvo, fluxos: [...salvo.fluxos, criado] })
-    onMudouFluxos()
-    avisar('Fluxo gerado pela calculadora do CUB')
-  }
-
+  // Aqui a calculadora so simula: fluxo de pagamento e sempre de uma unidade,
+  // entao quem grava e o CUB de dentro dela.
   const calculadora = calculadoraAberta && (
     <CalculadoraCub
       titulo={salvo?.nome || form.nome.trim() || 'Empreendimento'}
       onFechar={() => setCalculadoraAberta(false)}
-      onGerarFluxo={salvo ? gerarFluxoDoCub : undefined}
       avisar={avisar}
     />
   )
@@ -184,10 +165,16 @@ export function FormEmpreendimento({
    * Sair da etapa das unidades grava o produto pendente — sem isso o usuario
    * digitaria os numeros e os perderia ao avancar.
    */
-  async function irParaPasso(numero: 1 | 2 | 3) {
+  async function irParaPasso(numero: 1 | 2) {
     if (!salvo) return
     if (passo === 2 && produtoAlterado && !(await salvarProduto())) return
     setPasso(numero)
+  }
+
+  /** Concluir grava o que estiver pendente antes de fechar. */
+  async function concluir() {
+    if (produtoAlterado && !(await salvarProduto())) return
+    onFechar()
   }
 
   /** Fechar com produto por gravar precisa de confirmacao: fechar e desistir. */
@@ -271,7 +258,7 @@ export function FormEmpreendimento({
   }
 
   /* --- Cabecalho com os dois passos ------------------------------------- */
-  const ETAPAS = ['Dados do empreendimento', 'Unidades', 'Fluxos de pagamento']
+  const ETAPAS = ['Dados do empreendimento', 'Unidades e fluxos']
 
   const cabecalho = (
     <div className="passos">
@@ -286,7 +273,7 @@ export function FormEmpreendimento({
               className={`passo${passo === numero ? ' passo--ativo' : ''}${feito ? ' passo--feito' : ''}`}
               // Navegar entre as etapas so faz sentido com o cadastro ja salvo.
               disabled={!salvo}
-              onClick={() => void irParaPasso(numero as 1 | 2 | 3)}
+              onClick={() => void irParaPasso(numero as 1 | 2)}
             >
               <span className="passo__bolha">
                 {feito ? <Icone nome="check" tamanho={12} espessura={3} /> : numero}
@@ -485,12 +472,14 @@ export function FormEmpreendimento({
     )
   }
 
-  /* --- Etapa 2: produto e unidades ----------------------------------------- */
-  if (passo === 2) {
-    return (
+  /* --- Etapa 2: produto, unidades e o fluxo de cada uma --------------------- */
+  return (
+    <>
       <Modal
-        titulo="Unidades"
-        subtitulo={salvo ? `${salvo.nome} — os números do produto e cada planta que o corretor vende` : ''}
+        titulo="Unidades e fluxos"
+        subtitulo={
+          salvo ? `${salvo.nome} — cada planta com a própria metragem, preço e tabela de pagamento` : ''
+        }
         onFechar={fecharComAviso}
         cabecalhoExtra={cabecalho}
         largo
@@ -504,7 +493,7 @@ export function FormEmpreendimento({
               <button
                 type="button"
                 className="btn btn--primario"
-                onClick={() => void irParaPasso(3)}
+                onClick={() => void concluir()}
                 disabled={salvandoProduto}
               >
                 {salvandoProduto ? (
@@ -514,8 +503,8 @@ export function FormEmpreendimento({
                   </>
                 ) : (
                   <>
-                    Avançar aos fluxos
-                    <Icone nome="seta_direita" tamanho={15} />
+                    <Icone nome="check" tamanho={15} />
+                    Concluir
                   </>
                 )}
               </button>
@@ -591,46 +580,6 @@ export function FormEmpreendimento({
           />
         )}
       </Modal>
-    )
-  }
-
-  /* --- Etapa 3: fluxos gerais ---------------------------------------------- */
-  return (
-    <Modal
-      titulo="Fluxos de pagamento"
-      subtitulo={salvo ? `${salvo.nome} — tabelas que valem para o empreendimento inteiro` : ''}
-      onFechar={onFechar}
-      cabecalhoExtra={cabecalho}
-      largo
-      rodape={
-        <>
-          <button type="button" className="btn btn--fantasma" onClick={() => setPasso(2)}>
-            <Icone nome="seta_esquerda" tamanho={15} />
-            Voltar às unidades
-          </button>
-          <div className="direita">
-            <button type="button" className="btn btn--primario" onClick={onFechar}>
-              <Icone nome="check" tamanho={15} />
-              Concluir
-            </button>
-          </div>
-        </>
-      }
-    >
-      {calculadora}
-
-      {salvo && (
-        <FluxosDoEmpreendimento
-          empreendimentoId={salvo.id}
-          titulo={salvo.nome}
-          fluxos={salvo.fluxos}
-          onMudou={(fluxos) => {
-            setSalvo((atual) => (atual ? { ...atual, fluxos } : atual))
-            onMudouFluxos()
-          }}
-          avisar={avisar}
-        />
-      )}
-    </Modal>
+    </>
   )
 }

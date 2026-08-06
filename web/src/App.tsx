@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { Empreendimento, EmpreendimentoInput, Filtros, FluxoInput, ImagemEmpreendimento, Unidade } from './types'
+import type { Empreendimento, EmpreendimentoInput, Filtros, ImagemEmpreendimento, Unidade } from './types'
 import { FILTROS_VAZIOS } from './types'
 import { api } from './lib/api'
 import { aplicarFiltros, calcularIndicadores } from './lib/dashboard'
@@ -17,7 +17,6 @@ import { Carregando, Estado, Toasts, type Aviso } from './components/ui'
 
 interface EstadoForm {
   empreendimento: Empreendimento | null
-  iniciarEmFluxos?: boolean
   iniciarEmUnidades?: boolean
 }
 
@@ -126,15 +125,6 @@ export default function App() {
   /** Mesma coisa para as unidades (e os fluxos que moram dentro delas). */
   function atualizarUnidades(id: number, unidades: Unidade[]) {
     setLista((atual) => atual.map((e) => (e.id === id ? { ...e, unidades } : e)))
-  }
-
-  /** Fluxo criado pela calculadora do CUB aberta direto no painel. */
-  async function gerarFluxoDoCub(alvo: Empreendimento, dados: FluxoInput) {
-    const criado = await api.criarFluxo({ ...dados, empreendimento_id: alvo.id })
-    setLista((atual) =>
-      atual.map((e) => (e.id === alvo.id ? { ...e, fluxos: [...e.fluxos, criado] } : e)),
-    )
-    avisar('Fluxo gerado pela calculadora do CUB')
   }
 
   /* --- Render ------------------------------------------------------------ */
@@ -250,11 +240,15 @@ export default function App() {
               podeComparar={lista.length > 1}
               onEditar={() => setForm({ empreendimento: empreendimentoA })}
               onExcluir={() => void excluirEmpreendimento(empreendimentoA)}
-              onAdicionarFluxo={() => setForm({ empreendimento: empreendimentoA, iniciarEmFluxos: true })}
               onAdicionarUnidade={() => setForm({ empreendimento: empreendimentoA, iniciarEmUnidades: true })}
               onCalcularCub={() => setCalculandoCub(empreendimentoA)}
               onSimularInvestimento={() => setSimulandoInvestimento(empreendimentoA.id)}
               onCompararCom={() => setComparando(true)}
+              onMudouUnidades={(unidades) => atualizarUnidades(empreendimentoA.id, unidades)}
+              onMudouFluxosGerais={(fluxos) =>
+                setLista((atual) => atual.map((e) => (e.id === empreendimentoA.id ? { ...e, fluxos } : e)))
+              }
+              avisar={avisar}
               onFechar={() => {
                 setSelecionadoA(null)
                 setSelecionadoB(null)
@@ -267,14 +261,12 @@ export default function App() {
       {form && (
         <FormEmpreendimento
           empreendimento={form.empreendimento}
-          iniciarEmFluxos={form.iniciarEmFluxos}
           iniciarEmUnidades={form.iniciarEmUnidades}
           onFechar={() => {
             setForm(null)
             void carregar()
           }}
           onSalvar={salvarEmpreendimento}
-          onMudouFluxos={() => void carregar()}
           onMudouImagens={atualizarImagens}
           onMudouUnidades={atualizarUnidades}
           avisar={avisar}
@@ -325,13 +317,10 @@ export default function App() {
         />
       )}
 
+      {/* Calculadora do empreendimento: so simula. Virar fluxo de pagamento e
+          coisa da unidade — o CUB de dentro dela e que grava. */}
       {calculandoCub && (
-        <CalculadoraCub
-          titulo={calculandoCub.nome}
-          onFechar={() => setCalculandoCub(null)}
-          onGerarFluxo={(dados) => gerarFluxoDoCub(calculandoCub, dados)}
-          avisar={avisar}
-        />
+        <CalculadoraCub titulo={calculandoCub.nome} onFechar={() => setCalculandoCub(null)} avisar={avisar} />
       )}
 
       <Toasts avisos={avisos} />
