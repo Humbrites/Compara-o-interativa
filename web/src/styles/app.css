@@ -795,8 +795,9 @@ select.entrada {
   border-bottom: 1px solid var(--borda);
 }
 
-/* "opcional" ao lado do titulo: some do caixa-alta para nao virar ordem. */
-.form-secao__opcional {
+/* Complemento ao lado do titulo: some do caixa-alta para nao virar ordem. */
+.form-secao__opcional,
+.form-secao__complemento {
   font-weight: 600;
   text-transform: none;
   letter-spacing: 0;
@@ -833,4 +834,33 @@ select.entrada {
   .col-span-2 {
     grid-column: auto;
   }
+}
+
+/* Opcao marcavel dentro de uma grade de campos (ex.: ligar o CUB). */
+.opcao {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.opcao__marcar {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--texto);
+  cursor: pointer;
+}
+
+.opcao__marcar input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--marca-500);
+  cursor: pointer;
+}
+
+/* A dica alinha com o texto, nao com a caixinha. */
+.opcao__dica {
+  padding-left: calc(16px + var(--e2));
 }

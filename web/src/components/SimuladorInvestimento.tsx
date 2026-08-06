@@ -9,13 +9,17 @@ import {
   fmtInteiro,
   fmtMoeda,
   fmtMoedaCurta,
+  fmtNumero,
   TRACO,
 } from '../lib/format'
 import {
   mesesAteAEntrega,
+  mesesDoPrazo,
   saldoDevedorSugerido,
   simularInvestimento,
+  textoDaConclusao,
   textoDoPrazo,
+  type Conclusao,
   type ResultadoInvestimento,
   type UnidadePrazo,
 } from '../lib/investimento'
@@ -28,6 +32,9 @@ import { GraficoLinha } from './GraficoSvg'
 /** Expectativas de valorizacao que aparecem nas conversas de venda. */
 const ATALHOS_VALORIZACAO = [5, 8, 10, 12, 15, 20]
 
+/** Os mesmos percentuais mensais da calculadora do CUB. */
+const ATALHOS_CUB = [0.35, 0.6, 0.7, 0.75, 1]
+
 interface Formulario {
   valorCompra: string
   entrada: string
@@ -36,6 +43,7 @@ interface Formulario {
   prazo: string
   unidadePrazo: UnidadePrazo
   valorizacao: string
+  cub: string
 }
 
 const VAZIO: Formulario = {
@@ -46,9 +54,10 @@ const VAZIO: Formulario = {
   prazo: '',
   unidadePrazo: 'meses',
   valorizacao: '',
+  cub: '',
 }
 
-function validar(form: Formulario) {
+function validar(form: Formulario, usarCub: boolean) {
   const erros: Record<string, string> = {}
 
   const valorCompra = lerNumero(form.valorCompra)
@@ -63,6 +72,14 @@ function validar(form: Formulario) {
   if (valorizacao === null) erros.valorizacao = 'Informe a valorização anual'
   else if (valorizacao < -100) erros.valorizacao = 'Valorização inválida'
   else if (valorizacao > 100) erros.valorizacao = 'Valorização anual acima de 100% — confira'
+
+  // O CUB so e cobrado quando a opcao esta marcada; desmarcada, o campo nem existe.
+  const cub = usarCub ? lerNumero(form.cub) : null
+  if (usarCub) {
+    if (cub === null) erros.cub = 'Informe o percentual mensal do CUB'
+    else if (cub < 0) erros.cub = 'O percentual não pode ser negativo'
+    else if (cub > 20) erros.cub = 'Percentual mensal acima de 20% — confira'
+  }
 
   const opcional = (campo: keyof Formulario, rotulo: string) => {
     const texto = form[campo] as string
@@ -91,6 +108,7 @@ function validar(form: Formulario) {
       prazo: prazo as number,
       unidadePrazo: form.unidadePrazo,
       valorizacaoAnual: valorizacao as number,
+      cubMensal: cub,
     },
   }
 }
@@ -117,6 +135,61 @@ function Cartao({
       <span className="inv-cartao__valor">{valor}</span>
       {dica && <span className="inv-cartao__dica">{dica}</span>}
     </div>
+  )
+}
+
+/** Uma das duas leituras do investimento, lado a lado com a outra. */
+function CartaoConclusao({
+  titulo,
+  dica,
+  icone,
+  resultado,
+  conclusao,
+  destaque = false,
+  rotuloSaldo,
+}: {
+  titulo: string
+  dica: string
+  icone: NomeIcone
+  resultado: ResultadoInvestimento
+  conclusao: Conclusao
+  destaque?: boolean
+  rotuloSaldo: string
+}) {
+  const linhas: { rotulo: string; valor: string }[] = [
+    { rotulo: rotuloSaldo, valor: conclusao.saldoDevedor > 0 ? fmtMoeda(conclusao.saldoDevedor) : 'quitado' },
+    { rotulo: 'Patrimônio líquido', valor: fmtMoeda(conclusao.patrimonioLiquido) },
+    { rotulo: 'Lucro potencial', valor: fmtMoeda(conclusao.lucroPotencial) },
+    {
+      rotulo: 'Rentabilidade',
+      valor: conclusao.rentabilidade === null ? TRACO : fmtPercentual(conclusao.rentabilidade, 2),
+    },
+    // Aqui o ROI vai sem o "R$": no cartao ele nao tem a legenda do hero para
+    // explicar que e patrimonio por real investido, e "1,99×" ja diz sozinho.
+    { rotulo: 'ROI', valor: conclusao.multiplicador === null ? TRACO : `${fmtNumero(conclusao.multiplicador)}×` },
+  ]
+
+  return (
+    <article className={`inv-conclusao${destaque ? ' inv-conclusao--cub' : ''}`}>
+      <header className="inv-conclusao__topo">
+        <span className="inv-conclusao__titulo">
+          <Icone nome={icone} tamanho={13} />
+          {titulo}
+        </span>
+        <span className="inv-conclusao__dica">{dica}</span>
+      </header>
+
+      <dl className="inv-conclusao__linhas">
+        {linhas.map((linha) => (
+          <div key={linha.rotulo} className="inv-conclusao__linha">
+            <dt>{linha.rotulo}</dt>
+            <dd>{linha.valor}</dd>
+          </div>
+        ))}
+      </dl>
+
+      <p className="inv-conclusao__frase">{textoDaConclusao(resultado, conclusao)}</p>
+    </article>
   )
 }
 
@@ -229,6 +302,8 @@ export function SimuladorInvestimento({
   const [unidadeId, setUnidadeId] = useState<number | null>(null)
   // O saldo devedor sai da conta sozinho ate alguem digitar outro valor ali.
   const [saldoManual, setSaldoManual] = useState(false)
+  // Desmarcado, o simulador conclui so com os valores do empreendimento.
+  const [usarCub, setUsarCub] = useState(false)
 
   const empreendimento = useMemo(
     () => lista.find((e) => e.id === empreendimentoId) ?? null,
@@ -278,6 +353,18 @@ export function SimuladorInvestimento({
   const entradaForaDoPago =
     !saldoManual && entradaDigitada !== null && pagoDigitado !== null && entradaDigitada > pagoDigitado
 
+  /**
+   * O CUB e digitado ao mes, mas quem decide olha o periodo inteiro: 0,60% ao
+   * mes por 36 meses viram 24% de correcao. Mostrar isso antes de simular evita
+   * a surpresa de ver a divida crescer tanto.
+   */
+  const cubNoPeriodo = useMemo(() => {
+    const percentual = lerNumero(form.cub)
+    const prazo = lerNumero(form.prazo)
+    if (!usarCub || percentual === null || prazo === null) return null
+    return (Math.pow(1 + percentual / 100, mesesDoPrazo(prazo, form.unidadePrazo)) - 1) * 100
+  }, [usarCub, form.cub, form.prazo, form.unidadePrazo])
+
   function mudarSaldo(valor: string) {
     setSaldoManual(true)
     mudar('saldoDevedor', valor)
@@ -291,7 +378,7 @@ export function SimuladorInvestimento({
 
   function aoSimular() {
     // O campo do saldo pode estar so na tela (calculado) — a simulacao usa o que se ve.
-    const { erros: novosErros, entrada } = validar({ ...form, saldoDevedor: saldoNoCampo })
+    const { erros: novosErros, entrada } = validar({ ...form, saldoDevedor: saldoNoCampo }, usarCub)
     setErros(novosErros)
     if (!entrada) {
       setResultado(null)
@@ -306,6 +393,16 @@ export function SimuladorInvestimento({
     setErros({})
     setResultado(null)
     setSaldoManual(false)
+    setUsarCub(false)
+  }
+
+  /** Desmarcar o CUB apaga o percentual e o erro dele — nada fica pendurado. */
+  function alternarCub(marcado: boolean) {
+    setUsarCub(marcado)
+    if (!marcado) {
+      setForm((atual) => ({ ...atual, cub: '' }))
+      setErros((atual) => ({ ...atual, cub: '' }))
+    }
   }
 
   function aoExportarPdf() {
@@ -479,6 +576,24 @@ export function SimuladorInvestimento({
           <Campo rotulo="Valorização anual" obrigatorio dica="% ao ano" erro={erros.valorizacao}>
             {entradaMonetaria('valorizacao', '10')}
           </Campo>
+
+          {/* Logo depois da valorizacao porque e a segunda taxa da conta — uma
+              empurra o valor do imovel para cima, a outra empurra a divida. */}
+          <div className="col-inteira opcao">
+            <label className="opcao__marcar">
+              <input type="checkbox" checked={usarCub} onChange={(e) => alternarCub(e.target.checked)} />
+              <span>Considerar a correção do CUB no saldo devedor</span>
+            </label>
+            <span className="campo__dica opcao__dica">
+              liga a segunda conclusão, com a dívida corrigida até a entrega
+            </span>
+          </div>
+
+          {usarCub && (
+            <Campo rotulo="CUB mensal" obrigatorio dica="% ao mês" erro={erros.cub}>
+              {entradaMonetaria('cub', '0,60')}
+            </Campo>
+          )}
         </div>
 
         {saldoManual && (
@@ -498,7 +613,7 @@ export function SimuladorInvestimento({
         )}
 
         <div className="atalhos-cub">
-          <span className="campo__dica">Usar:</span>
+          <span className="campo__dica">Valorização:</span>
           {ATALHOS_VALORIZACAO.map((valor) => (
             <button
               key={valor}
@@ -510,6 +625,25 @@ export function SimuladorInvestimento({
             </button>
           ))}
         </div>
+
+        {usarCub && (
+          <div className="atalhos-cub">
+            <span className="campo__dica">CUB:</span>
+            {ATALHOS_CUB.map((valor) => (
+              <button
+                key={valor}
+                type="button"
+                className={`atalho${lerNumero(form.cub) === valor ? ' atalho--ativo' : ''}`}
+                onClick={() => mudar('cub', String(valor).replace('.', ','))}
+              >
+                {fmtPercentual(valor)}
+              </button>
+            ))}
+            {cubNoPeriodo !== null && (
+              <span className="campo__dica">≈ {fmtPercentual(cubNoPeriodo, 2)} de correção no período</span>
+            )}
+          </div>
+        )}
 
         <p className="campo__dica" style={{ marginTop: 'var(--e3)' }}>
           <Icone nome="info" tamanho={12} /> A valorização é composta sobre o valor de compra e a expectativa é sua —
@@ -524,6 +658,9 @@ export function SimuladorInvestimento({
             <h3 className="form-secao__titulo">
               <Icone nome="alvo" tamanho={13} />
               Projeção da entrega
+              {resultado.cub && (
+                <span className="form-secao__complemento">— só com os valores do empreendimento</span>
+              )}
             </h3>
 
             <div className="inv-hero">
@@ -604,6 +741,50 @@ export function SimuladorInvestimento({
               />
             </div>
           </section>
+
+          {resultado.cub && (
+            <section className="form-secao">
+              <h3 className="form-secao__titulo">
+                <Icone nome="lista" tamanho={13} />
+                Conclusão
+                <span className="form-secao__complemento">— com e sem a correção do CUB</span>
+              </h3>
+
+              <div className="inv-conclusoes">
+                <CartaoConclusao
+                  titulo="Só o empreendimento"
+                  icone="predio"
+                  dica={`valorização de ${fmtPercentual(resultado.valorizacaoAnual, 2)} ao ano · saldo devedor parado`}
+                  resultado={resultado}
+                  conclusao={resultado}
+                  rotuloSaldo="Saldo devedor"
+                />
+                <CartaoConclusao
+                  titulo="Com o CUB"
+                  icone="grafico"
+                  dica={`a mesma valorização · saldo corrigido em ${fmtPercentual(resultado.cub.cubMensal)} ao mês`}
+                  resultado={resultado}
+                  conclusao={resultado.cub}
+                  rotuloSaldo="Saldo corrigido"
+                  destaque
+                />
+              </div>
+
+              {resultado.saldoDevedor > 0 ? (
+                <p className="campo__dica linha-calculo">
+                  <Icone nome="info" tamanho={12} /> O CUB de {fmtPercentual(resultado.cub.cubMensal)} ao mês acumula{' '}
+                  {fmtPercentual(resultado.cub.cubAcumulado, 2)} em {textoDoPrazo(resultado.meses)}: acrescenta{' '}
+                  {fmtMoeda(resultado.cub.correcao)} ao saldo devedor e tira o mesmo do patrimônio líquido. A
+                  valorização do imóvel é a mesma nas duas leituras — o que muda é a dívida.
+                </p>
+              ) : (
+                <p className="campo__dica linha-calculo">
+                  <Icone nome="info" tamanho={12} /> Sem saldo devedor não há o que corrigir: com o imóvel quitado, as
+                  duas conclusões dão no mesmo.
+                </p>
+              )}
+            </section>
+          )}
 
           <section className="form-secao">
             <h3 className="form-secao__titulo">

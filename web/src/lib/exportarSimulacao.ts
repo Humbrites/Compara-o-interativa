@@ -1,7 +1,7 @@
 import type { Simulacao } from './cub'
 import { fmtPercentual } from './cub'
-import { fmtMoeda, TRACO } from './format'
-import { textoDoPrazo, type ResultadoInvestimento } from './investimento'
+import { fmtMoeda, fmtNumero, TRACO } from './format'
+import { textoDaConclusao, textoDoPrazo, type Conclusao, type ResultadoInvestimento } from './investimento'
 
 /**
  * Exportacoes sem biblioteca externa:
@@ -126,6 +126,20 @@ const ESTILO_IMPRESSAO = `
   .hero__dica { font-size: 10.5px; opacity: .9; }
   .nota { color: #7b8599; font-size: 10px; line-height: 1.5; margin-top: 14px;
           border-top: 1px solid #e3e8f0; padding-top: 8px; }
+
+  /* As duas conclusoes (com e sem CUB), lado a lado como na tela. */
+  .conclusoes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .conclusao { border: 1px solid #e3e8f0; border-radius: 8px; padding: 10px 12px; }
+  .conclusao--cub { border-color: #d97706; background: #fef4e6; }
+  .conclusao__titulo { font-size: 13px; font-weight: 700; }
+  .conclusao--cub .conclusao__titulo { color: #d97706; }
+  .conclusao__dica { font-size: 10px; color: #7b8599; margin-bottom: 8px; }
+  .conclusao__linha { display: flex; justify-content: space-between; gap: 10px;
+                      font-size: 11.5px; padding: 2px 0; }
+  .conclusao__linha b { font-variant-numeric: tabular-nums; }
+  .conclusao__frase { margin: 8px 0 0; padding-top: 6px; border-top: 1px solid #e3e8f0;
+                      font-size: 10.5px; line-height: 1.5; color: #4d5871; }
+  .conclusao--cub .conclusao__frase { border-top-color: #d97706; }
 `
 
 export function exportarPdf(simulacao: Simulacao, titulo: string) {
@@ -264,6 +278,77 @@ function blocoDoImovel(imovel: ImovelDaSimulacao | null): string {
   </div>`
 }
 
+/** Um dos dois quadros de conclusao da apresentacao. */
+function blocoDaConclusao(
+  resultado: ResultadoInvestimento,
+  conclusao: Conclusao,
+  titulo: string,
+  dica: string,
+  rotuloSaldo: string,
+  destaque = false,
+): string {
+  const linha = (rotulo: string, valor: string) =>
+    `<div class="conclusao__linha"><span>${rotulo}</span><b>${valor}</b></div>`
+
+  return `<div class="conclusao${destaque ? ' conclusao--cub' : ''}">
+    <div class="conclusao__titulo">${esc(titulo)}</div>
+    <div class="conclusao__dica">${esc(dica)}</div>
+    ${linha(rotuloSaldo, conclusao.saldoDevedor > 0 ? fmtMoeda(conclusao.saldoDevedor) : 'quitado')}
+    ${linha('Patrimônio líquido', fmtMoeda(conclusao.patrimonioLiquido))}
+    ${linha('Lucro potencial', fmtMoeda(conclusao.lucroPotencial))}
+    ${linha(
+      'Rentabilidade',
+      conclusao.rentabilidade === null ? TRACO : fmtPercentual(conclusao.rentabilidade, 2),
+    )}
+    ${linha('ROI', conclusao.multiplicador === null ? TRACO : `${fmtNumero(conclusao.multiplicador)}×`)}
+    <p class="conclusao__frase">${esc(textoDaConclusao(resultado, conclusao))}</p>
+  </div>`
+}
+
+/**
+ * As duas conclusoes so vao ao papel quando o CUB foi considerado — sem ele a
+ * unica leitura ja esta na projecao, e repetir seria enche-lo de ruido.
+ */
+function blocoDasConclusoes(resultado: ResultadoInvestimento): string {
+  const cub = resultado.cub
+  if (!cub) return ''
+
+  const conclusoes = `<div class="conclusoes">
+    ${blocoDaConclusao(
+      resultado,
+      resultado,
+      'Só o empreendimento',
+      `valorização de ${fmtPercentual(resultado.valorizacaoAnual, 2)} ao ano · saldo devedor parado`,
+      'Saldo devedor',
+    )}
+    ${blocoDaConclusao(
+      resultado,
+      cub,
+      'Com o CUB',
+      `a mesma valorização · saldo corrigido em ${fmtPercentual(cub.cubMensal)} ao mês`,
+      'Saldo corrigido',
+      true,
+    )}
+  </div>`
+
+  const comparacao =
+    resultado.saldoDevedor > 0
+      ? `<p class="conclusao__frase" style="border:0;padding:0;margin-top:8px">
+          O CUB de ${fmtPercentual(cub.cubMensal)} ao mês acumula ${fmtPercentual(cub.cubAcumulado, 2)} em
+          ${textoDoPrazo(resultado.meses)}: acrescenta ${fmtMoeda(cub.correcao)} ao saldo devedor e tira o mesmo do
+          patrimônio líquido. A valorização do imóvel é a mesma nas duas leituras — o que muda é a dívida.
+        </p>`
+      : `<p class="conclusao__frase" style="border:0;padding:0;margin-top:8px">
+          Sem saldo devedor não há o que corrigir: com o imóvel quitado, as duas conclusões dão no mesmo.
+        </p>`
+
+  return `<div class="secao">
+    <div class="secao__titulo">Conclusão — com e sem a correção do CUB</div>
+    ${conclusoes}
+    ${comparacao}
+  </div>`
+}
+
 /**
  * Apresentacao da simulacao de investimento para levar ao cliente: o imovel
  * primeiro (nome, metragem, dormitorios), depois o que foi simulado e o que a
@@ -283,6 +368,7 @@ export function exportarPdfInvestimento(
     ['Saldo devedor', resultado.saldoDevedor > 0 ? fmtMoeda(resultado.saldoDevedor) : 'quitado'],
     ['Prazo até a entrega', textoDoPrazo(resultado.meses)],
     ['Valorização considerada', `${fmtPercentual(resultado.valorizacaoAnual, 2)} ao ano`],
+    ['CUB considerado', resultado.cub ? `${fmtPercentual(resultado.cub.cubMensal)} ao mês` : null],
   ])
 
   const projecao = itensPreenchidos([
@@ -352,6 +438,8 @@ export function exportarPdfInvestimento(
     <div class="resumo">${projecao}</div>
   </div>
 
+  ${blocoDasConclusoes(resultado)}
+
   <div class="secao">
     <div class="secao__titulo">Valorização até a entrega</div>
     <table>
@@ -365,7 +453,13 @@ export function exportarPdfInvestimento(
   <div class="nota">
     Projeção baseada na expectativa de valorização de ${fmtPercentual(resultado.valorizacaoAnual, 2)} ao ano informada
     na simulação — é uma estimativa, não uma garantia de rentabilidade. O <strong>lucro potencial</strong> não desconta
-    o saldo devedor; o número já sem a dívida é o <strong>patrimônio líquido</strong>.
+    o saldo devedor; o número já sem a dívida é o <strong>patrimônio líquido</strong>.${
+      resultado.cub
+        ? ` A leitura <strong>com o CUB</strong> corrige o saldo devedor em ${fmtPercentual(
+            resultado.cub.cubMensal,
+          )} ao mês até a entrega, como a construtora faz; o percentual informado é uma expectativa e o índice varia mês a mês.`
+        : ''
+    }
   </div>
 </body>
 </html>`

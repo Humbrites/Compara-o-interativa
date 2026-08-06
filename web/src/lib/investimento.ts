@@ -7,6 +7,8 @@
  * cadastrado aqui.
  */
 
+import { fmtMoeda, fmtNumero } from './format'
+
 export type UnidadePrazo = 'meses' | 'anos'
 
 export interface EntradaInvestimento {
@@ -26,12 +28,42 @@ export interface EntradaInvestimento {
   unidadePrazo: UnidadePrazo
   /** Valorizacao esperada, em % ao ano. */
   valorizacaoAnual: number
+  /**
+   * Correcao do saldo devedor pelo CUB, em % ao MES (e assim que o indice e
+   * publicado, e e assim que a calculadora do CUB deste projeto trabalha).
+   * null/undefined = simular so com os valores do empreendimento.
+   */
+  cubMensal?: number | null
 }
 
 export interface PontoValorizacao {
   /** Meses desde hoje. */
   mes: number
   valor: number
+}
+
+/**
+ * O fecho da conta. Sai duas vezes quando o CUB entra — uma so com os valores
+ * do empreendimento e outra com o saldo devedor corrigido —, e por isso os
+ * campos moram num tipo proprio: as duas conclusoes se comparam linha a linha.
+ */
+export interface Conclusao {
+  saldoDevedor: number
+  patrimonioLiquido: number
+  lucroPotencial: number
+  rentabilidade: number | null
+  multiplicador: number | null
+}
+
+export interface CenarioCub extends Conclusao {
+  /** O percentual informado, em % ao mes. */
+  cubMensal: number
+  /** O mesmo percentual acumulado no prazo inteiro, em %. */
+  cubAcumulado: number
+  /** Quanto o CUB acrescenta ao saldo devedor ate a entrega. */
+  correcao: number
+  /** Quanto de patrimonio liquido a correcao consome (>= 0). */
+  custoNoPatrimonio: number
 }
 
 export interface ResultadoInvestimento {
@@ -61,6 +93,11 @@ export interface ResultadoInvestimento {
   /** Patrimonio liquido por R$ 1,00 investido — null sem investimento. */
   multiplicador: number | null
   evolucao: PontoValorizacao[]
+  /**
+   * A segunda conclusao, com o CUB corrigindo o saldo devedor. null quando o
+   * usuario nao marcou a opcao — ai a unica leitura e a do empreendimento.
+   */
+  cub: CenarioCub | null
 }
 
 /**
@@ -178,5 +215,79 @@ export function simularInvestimento(dados: EntradaInvestimento): ResultadoInvest
     rentabilidade: valorInvestido > 0 ? (lucroPotencial / valorInvestido) * 100 : null,
     multiplicador: valorInvestido > 0 ? patrimonioLiquido / valorInvestido : null,
     evolucao,
+    cub: cenarioComCub(dados.cubMensal, {
+      saldoDevedor,
+      valorInvestido,
+      valorEstimadoEntrega,
+      patrimonioLiquido,
+      meses,
+    }),
+  }
+}
+
+/**
+ * A frase que fecha cada conclusao — a mesma na tela e no PDF. E o que o
+ * corretor le em voz alta para o cliente, entao sai em dinheiro, nao em
+ * indicador: quanto sobra de patrimonio e quantas vezes isso e o que ja saiu
+ * do bolso.
+ */
+export function textoDaConclusao(resultado: ResultadoInvestimento, conclusao: Conclusao): string {
+  const patrimonio = fmtMoeda(conclusao.patrimonioLiquido)
+  const entrega = `Na entrega, o imóvel vale ${fmtMoeda(resultado.valorEstimadoEntrega)}`
+
+  if (resultado.valorInvestido <= 0) {
+    return conclusao.saldoDevedor > 0
+      ? `${entrega} e, quitados ${fmtMoeda(conclusao.saldoDevedor)} de saldo devedor, sobram ${patrimonio}.`
+      : `${entrega} — sem dívida, o patrimônio é ${patrimonio}.`
+  }
+
+  // O multiplicador e razao, nao dinheiro: "1,99 vezes", nunca "R$ 1,99 vezes".
+  const vezes = conclusao.multiplicador !== null ? fmtNumero(conclusao.multiplicador) : null
+  return (
+    `${entrega}. Com ${fmtMoeda(resultado.valorInvestido)} já investidos` +
+    (conclusao.saldoDevedor > 0 ? ` e ${fmtMoeda(conclusao.saldoDevedor)} a quitar` : ' e nada a quitar') +
+    `, sobram ${patrimonio}` +
+    (vezes ? ` — ${vezes} vezes o que saiu do bolso.` : '.')
+  )
+}
+
+/**
+ * A conclusao com o CUB. O que muda em relacao a primeira e UMA coisa: o saldo
+ * devedor nao fica parado ate a entrega — ele e corrigido pelo indice, mes a
+ * mes, como a construtora faz. Dividia maior significa menos patrimonio no fim
+ * e menos lucro, porque a correcao tambem vai sair do bolso.
+ *
+ * O que ja foi pago nao entra na correcao: aquele dinheiro ja saiu.
+ */
+function cenarioComCub(
+  cubMensal: number | null | undefined,
+  base: {
+    saldoDevedor: number
+    valorInvestido: number
+    valorEstimadoEntrega: number
+    patrimonioLiquido: number
+    meses: number
+  },
+): CenarioCub | null {
+  if (cubMensal === null || cubMensal === undefined || !Number.isFinite(cubMensal)) return null
+
+  const fator = Math.pow(1 + cubMensal / 100, base.meses)
+  const saldoCorrigido = base.saldoDevedor * fator
+  const correcao = saldoCorrigido - base.saldoDevedor
+
+  const patrimonioLiquido = base.valorEstimadoEntrega - saldoCorrigido
+  const lucroPotencial = base.valorEstimadoEntrega - base.valorInvestido - correcao
+
+  return {
+    cubMensal,
+    cubAcumulado: (fator - 1) * 100,
+    correcao,
+    custoNoPatrimonio: base.patrimonioLiquido - patrimonioLiquido,
+    saldoDevedor: saldoCorrigido,
+    patrimonioLiquido,
+    lucroPotencial,
+    // Mesma base de comparacao da primeira conclusao: o que ja saiu do bolso.
+    rentabilidade: base.valorInvestido > 0 ? (lucroPotencial / base.valorInvestido) * 100 : null,
+    multiplicador: base.valorInvestido > 0 ? patrimonioLiquido / base.valorInvestido : null,
   }
 }

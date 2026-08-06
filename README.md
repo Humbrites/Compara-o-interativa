@@ -224,6 +224,30 @@ saldo calculado sairia maior que o real.
 Sem informar o valor já pago, rentabilidade e ROI aparecem como "—" em vez de inventar
 divisão por zero. O gráfico mostra a curva de valorização até a entrega.
 
+### Considerar o CUB — as duas conclusões
+
+Logo abaixo da valorização anual há a opção **"Considerar a correção do CUB no saldo
+devedor"**. Marcada, abre o campo do **CUB mensal** (% ao mês, com os mesmos atalhos da
+calculadora — 0,35% a 1,00% — e a correção acumulada no período ao lado), e o resultado
+passa a sair em **duas conclusões lado a lado**:
+
+| | Só o empreendimento | Com o CUB |
+|---|---|---|
+| Saldo | fica parado até a entrega | `saldo × (1 + CUB)^meses` |
+| Patrimônio líquido | entrega − saldo | entrega − saldo corrigido |
+| Lucro potencial | entrega − investido | entrega − investido − correção |
+| Rentabilidade e ROI | sobre o investido | sobre o mesmo investido |
+
+Muda **uma coisa só**: a dívida. A valorização do imóvel é a mesma nas duas leituras — o
+CUB corrige o que ainda se deve, mês a mês, como a construtora faz, então o patrimônio e o
+lucro caem exatamente o tanto que a correção custa. O que já foi pago não é corrigido:
+aquele dinheiro já saiu. Cada quadro fecha com a frase que se lê para o cliente, e a linha
+abaixo diz quanto o CUB acrescentou à dívida. Imóvel quitado não tem o que corrigir — a
+tela avisa que as duas conclusões dão no mesmo.
+
+Desmarcada a opção, o campo some, o percentual é esquecido e volta a existir uma leitura
+só. As duas conclusões vão para o PDF junto com o CUB considerado.
+
 ### Exportar PDF (a apresentação para o cliente)
 
 O botão **Exportar PDF**, no rodapé do simulador, abre a folha de impressão do navegador
