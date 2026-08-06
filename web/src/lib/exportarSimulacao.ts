@@ -318,25 +318,33 @@ function blocoDasConclusoes(resultado: ResultadoInvestimento): string {
       resultado,
       resultado,
       'Só o empreendimento',
-      `valorização de ${fmtPercentual(resultado.valorizacaoAnual, 2)} ao ano · saldo devedor parado`,
+      `valorização de ${fmtPercentual(resultado.valorizacaoAnual, 2)} ao ano · ${
+        resultado.pagoNoPeriodo > 0 ? 'parcelas sem reajuste' : 'saldo devedor parado'
+      }`,
       'Saldo devedor',
     )}
     ${blocoDaConclusao(
       resultado,
       cub,
       'Com o CUB',
-      `a mesma valorização · saldo corrigido em ${fmtPercentual(cub.cubMensal)} ao mês`,
+      `a mesma valorização · ${fmtPercentual(cub.cubMensal)} ao mês sobre a dívida${
+        resultado.pagoNoPeriodo > 0 ? ' e sobre as parcelas' : ''
+      }`,
       'Saldo corrigido',
       true,
     )}
   </div>`
 
   const comparacao =
-    resultado.saldoDevedor > 0
+    resultado.saldoDevedorHoje > 0
       ? `<p class="conclusao__frase" style="border:0;padding:0;margin-top:8px">
-          O CUB de ${fmtPercentual(cub.cubMensal)} ao mês acumula ${fmtPercentual(cub.cubAcumulado, 2)} em
-          ${textoDoPrazo(resultado.meses)}: acrescenta ${fmtMoeda(cub.correcao)} ao saldo devedor e tira o mesmo do
-          patrimônio líquido. A valorização do imóvel é a mesma nas duas leituras — o que muda é a dívida.
+          O índice de ${fmtPercentual(cub.cubMensal)} ao mês acumula ${fmtPercentual(cub.cubAcumulado, 2)} em
+          ${textoDoPrazo(resultado.meses)} e acrescenta ${fmtMoeda(cub.correcao)} à dívida ao longo da obra${
+            cub.custoNoDesembolso > 0.5
+              ? ` — ${fmtMoeda(cub.custoNoDesembolso)} disso sai do bolso nas parcelas reajustadas`
+              : ''
+          }. No fim, o patrimônio líquido é ${fmtMoeda(cub.custoNoPatrimonio)} menor. A valorização do imóvel é a
+          mesma nas duas leituras — o que muda é a dívida.
         </p>`
       : `<p class="conclusao__frase" style="border:0;padding:0;margin-top:8px">
           Sem saldo devedor não há o que corrigir: com o imóvel quitado, as duas conclusões dão no mesmo.
@@ -346,6 +354,56 @@ function blocoDasConclusoes(resultado: ResultadoInvestimento): string {
     <div class="secao__titulo">Conclusão — com e sem a correção do CUB</div>
     ${conclusoes}
     ${comparacao}
+  </div>`
+}
+
+/**
+ * A obra mes a mes no papel. Uma linha por ano (mais a entrega): mes a mes o
+ * papel viraria tabela de dez paginas, e quem quer o detalhe tem a tela.
+ */
+function blocoDaObra(resultado: ResultadoInvestimento): string {
+  const cronograma = resultado.cub?.evolucao ?? resultado.evolucao
+  if (cronograma.length === 0 || resultado.saldoDevedorHoje <= 0) return ''
+
+  const comCub = resultado.cub !== null
+  const marcos =
+    cronograma.length <= 13
+      ? cronograma
+      : cronograma.filter((linha, indice) => linha.mes % 12 === 0 || indice === cronograma.length - 1)
+
+  const linhas = marcos
+    .map(
+      (linha) => `<tr>
+      <td>Mês ${linha.mes}</td>
+      <td>${fmtMoeda(linha.saldoInicial)}</td>
+      ${comCub ? `<td>${fmtMoeda(linha.correcao)}</td>` : ''}
+      <td>${linha.pagamento > 0 ? fmtMoeda(linha.pagamento) : TRACO}</td>
+      <td>${fmtMoeda(linha.saldoFinal)}</td>
+    </tr>`,
+    )
+    .join('')
+
+  const ultima = cronograma[cronograma.length - 1]
+
+  return `<div class="secao">
+    <div class="secao__titulo">Evolução do saldo devedor durante a obra</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Período</th><th>Saldo no início</th>${comCub ? '<th>Correção</th>' : ''}
+          <th>Pago no mês</th><th>Saldo no fim</th>
+        </tr>
+      </thead>
+      <tbody>${linhas}</tbody>
+      <tfoot>
+        <tr>
+          <td>Entrega</td><td></td>
+          ${comCub ? `<td>${fmtMoeda(ultima.correcaoAcumulada)}</td>` : ''}
+          <td>${fmtMoeda(ultima.pagoAcumulado)}</td>
+          <td>${fmtMoeda(ultima.saldoFinal)}</td>
+        </tr>
+      </tfoot>
+    </table>
   </div>`
 }
 
@@ -361,11 +419,16 @@ export function exportarPdfInvestimento(
 ): boolean {
   const titulo = imovel?.nome ?? 'Simulação de investimento'
 
+  // Sem CUB a leitura valida e a base; com CUB, a que o cliente vai pagar.
+  const cenario = resultado.cub ?? resultado
+
   const investido = itensPreenchidos([
     ['Valor de compra', fmtMoeda(resultado.valorCompra)],
     ['Entrada', resultado.entrada > 0 ? fmtMoeda(resultado.entrada) : null],
-    ['Valor já pago', resultado.valorInvestido > 0 ? fmtMoeda(resultado.valorInvestido) : null],
-    ['Saldo devedor', resultado.saldoDevedor > 0 ? fmtMoeda(resultado.saldoDevedor) : 'quitado'],
+    ['Valor já pago', resultado.valorPago > 0 ? fmtMoeda(resultado.valorPago) : null],
+    ['Saldo devedor hoje', resultado.saldoDevedorHoje > 0 ? fmtMoeda(resultado.saldoDevedorHoje) : 'quitado'],
+    ['A pagar até a entrega', cenario.pagoNoPeriodo > 0 ? fmtMoeda(cenario.pagoNoPeriodo) : null],
+    ['Investido até a entrega', cenario.investidoTotal > 0 ? fmtMoeda(cenario.investidoTotal) : null],
     ['Prazo até a entrega', textoDoPrazo(resultado.meses)],
     ['Valorização considerada', `${fmtPercentual(resultado.valorizacaoAnual, 2)} ao ano`],
     ['CUB considerado', resultado.cub ? `${fmtPercentual(resultado.cub.cubMensal)} ao mês` : null],
@@ -373,13 +436,14 @@ export function exportarPdfInvestimento(
 
   const projecao = itensPreenchidos([
     ['Ganho patrimonial', fmtMoeda(resultado.ganhoPatrimonialBruto)],
-    ['Patrimônio líquido', fmtMoeda(resultado.patrimonioLiquido)],
-    ['Lucro potencial', fmtMoeda(resultado.lucroPotencial)],
-    ['Rentabilidade', resultado.rentabilidade === null ? null : fmtPercentual(resultado.rentabilidade, 2)],
+    ['Saldo na entrega', cenario.saldoDevedor > 0 ? fmtMoeda(cenario.saldoDevedor) : 'quitado'],
+    ['Patrimônio líquido', fmtMoeda(cenario.patrimonioLiquido)],
+    ['Lucro potencial', fmtMoeda(cenario.lucroPotencial)],
+    ['Rentabilidade', cenario.rentabilidade === null ? null : fmtPercentual(cenario.rentabilidade, 2)],
     ['Valorização no período', fmtPercentual(resultado.valorizacaoTotal, 2)],
   ])
 
-  const linhas = resultado.evolucao
+  const linhas = resultado.evolucaoValor
     .map((ponto) => {
       const acumulada = resultado.valorCompra > 0 ? (ponto.valor / resultado.valorCompra - 1) * 100 : 0
       return `<tr>
@@ -440,6 +504,8 @@ export function exportarPdfInvestimento(
 
   ${blocoDasConclusoes(resultado)}
 
+  ${blocoDaObra(resultado)}
+
   <div class="secao">
     <div class="secao__titulo">Valorização até a entrega</div>
     <table>
@@ -457,7 +523,13 @@ export function exportarPdfInvestimento(
       resultado.cub
         ? ` A leitura <strong>com o CUB</strong> corrige o saldo devedor em ${fmtPercentual(
             resultado.cub.cubMensal,
-          )} ao mês até a entrega, como a construtora faz; o percentual informado é uma expectativa e o índice varia mês a mês.`
+          )} ao mês e reajusta as parcelas pelo mesmo índice, mês a mês, como a construtora faz; o percentual informado
+          é uma expectativa e o índice varia a cada mês.`
+        : ''
+    }${
+      resultado.pagoNoPeriodo > 0
+        ? ` As parcelas informadas abatem o saldo devedor durante a obra — o que sobra na entrega é o valor que
+          costuma ir para o financiamento bancário.`
         : ''
     }
   </div>

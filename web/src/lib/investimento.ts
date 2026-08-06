@@ -5,11 +5,17 @@
  * nem a calculadora do CUB. Tudo que ele precisa vem dos campos preenchidos
  * pelo usuario, entao serve para qualquer imovel — inclusive um que nem esta
  * cadastrado aqui.
+ *
+ * A conta central e o CRONOGRAMA DA OBRA: mes a mes o saldo devedor e
+ * corrigido pelo indice e abatido pelo que o comprador paga. Sao dois
+ * cronogramas com a mesma amortizacao — um sem correcao e outro com o CUB —,
+ * e e a comparacao entre eles que mostra quanto o indice custa.
  */
 
 import { fmtMoeda, fmtNumero } from './format'
 
 export type UnidadePrazo = 'meses' | 'anos'
+export type UnidadeIndice = 'mes' | 'ano'
 
 export interface EntradaInvestimento {
   /** Quanto o imovel custou na compra. */
@@ -17,20 +23,27 @@ export interface EntradaInvestimento {
   /** Entrada paga na assinatura (opcional). */
   entrada?: number | null
   /**
-   * Tudo que ja saiu do bolso ate agora: entrada, parcelas, reforcos, baloes.
-   * E a base da rentabilidade.
+   * Tudo que ja saiu do bolso ate HOJE: entrada, parcelas, reforcos, baloes.
+   * O que ainda vai ser pago durante a obra entra pelo plano de pagamento.
    */
   valorPago?: number | null
-  /** O que ainda se deve. Imovel quitado = 0. */
+  /** O que se deve HOJE. Imovel quitado = 0. */
   saldoDevedor?: number | null
   /** Tempo ate a entrega, na unidade escolhida. */
   prazo: number
   unidadePrazo: UnidadePrazo
   /** Valorizacao esperada, em % ao ano. */
   valorizacaoAnual: number
+  /** Parcela mensal que ainda sera paga durante a obra (0/null = nenhuma). */
+  parcelaMensal?: number | null
+  /** Quantas parcelas ainda faltam; null = todas as do prazo. */
+  parcelasRestantes?: number | null
+  /** Reforcos/baloes previstos ate a entrega. */
+  reforcosQtd?: number | null
+  reforcoValor?: number | null
   /**
-   * Correcao do saldo devedor pelo CUB, em % ao MES (e assim que o indice e
-   * publicado, e e assim que a calculadora do CUB deste projeto trabalha).
+   * Correcao do saldo devedor pelo CUB/INCC. Guardado sempre em % ao MES —
+   * quem digita ao ano converte antes com `mensalDoIndice`.
    * null/undefined = simular so com os valores do empreendimento.
    */
   cubMensal?: number | null
@@ -42,35 +55,63 @@ export interface PontoValorizacao {
   valor: number
 }
 
+/** Um mes de obra: quanto a divida subiu pelo indice e quanto foi abatido. */
+export interface MesDaObra {
+  mes: number
+  saldoInicial: number
+  /** Quanto o indice acrescentou a divida neste mes. */
+  correcao: number
+  /** Parcela do mes ja reajustada (0 quando as parcelas acabaram). */
+  parcela: number
+  /** Reforco/balao que cai neste mes, ja reajustado. */
+  reforco: number
+  /** parcela + reforco, limitado ao que ainda se deve. */
+  pagamento: number
+  saldoFinal: number
+  pagoAcumulado: number
+  correcaoAcumulada: number
+}
+
 /**
  * O fecho da conta. Sai duas vezes quando o CUB entra — uma so com os valores
  * do empreendimento e outra com o saldo devedor corrigido —, e por isso os
  * campos moram num tipo proprio: as duas conclusoes se comparam linha a linha.
  */
 export interface Conclusao {
+  /** O que ainda se deve QUANDO A OBRA ENTREGA. */
   saldoDevedor: number
+  /** Parcelas e reforcos pagos entre hoje e a entrega. */
+  pagoNoPeriodo: number
+  /** Ja pago ate hoje + pago no periodo: a base da rentabilidade na entrega. */
+  investidoTotal: number
+  /** Quanto o indice acrescentou a divida no periodo inteiro. */
+  correcao: number
   patrimonioLiquido: number
   lucroPotencial: number
   rentabilidade: number | null
   multiplicador: number | null
+  /** A obra mes a mes — e o que a tela e o PDF mostram como evolucao. */
+  evolucao: MesDaObra[]
 }
 
 export interface CenarioCub extends Conclusao {
-  /** O percentual informado, em % ao mes. */
+  /** O percentual aplicado, em % ao mes. */
   cubMensal: number
   /** O mesmo percentual acumulado no prazo inteiro, em %. */
   cubAcumulado: number
-  /** Quanto o CUB acrescenta ao saldo devedor ate a entrega. */
-  correcao: number
   /** Quanto de patrimonio liquido a correcao consome (>= 0). */
   custoNoPatrimonio: number
+  /** Quanto a mais sai do bolso ate a entrega por causa do reajuste. */
+  custoNoDesembolso: number
 }
 
-export interface ResultadoInvestimento {
+export interface ResultadoInvestimento extends Conclusao {
   valorCompra: number
   entrada: number
-  valorInvestido: number
-  saldoDevedor: number
+  /** O que ja tinha saido do bolso quando a simulacao foi feita. */
+  valorPago: number
+  /** O que se deve HOJE (o da entrega esta em `saldoDevedor`). */
+  saldoDevedorHoje: number
   meses: number
   /** O prazo em anos — e nele que a valorizacao composta roda. */
   anos: number
@@ -81,23 +122,27 @@ export interface ResultadoInvestimento {
   ganhoPatrimonialBruto: number
   /** Valorizacao acumulada no periodo, em %. */
   valorizacaoTotal: number
-  /** O que sobra de patrimonio depois de quitar a divida. */
-  patrimonioLiquido: number
-  /**
-   * Valor na entrega menos o que foi investido. NAO desconta o saldo devedor —
-   * quem quiser o numero "no bolso" olha o patrimonio liquido.
-   */
-  lucroPotencial: number
-  /** lucro / investido — null quando nada foi investido ainda. */
-  rentabilidade: number | null
-  /** Patrimonio liquido por R$ 1,00 investido — null sem investimento. */
-  multiplicador: number | null
-  evolucao: PontoValorizacao[]
+  /** O plano de pagamento que alimentou o cronograma. */
+  plano: PlanoDePagamento
+  /** A curva do valor do imovel (a valorizacao, nao a divida). */
+  evolucaoValor: PontoValorizacao[]
   /**
    * A segunda conclusao, com o CUB corrigindo o saldo devedor. null quando o
    * usuario nao marcou a opcao — ai a unica leitura e a do empreendimento.
    */
   cub: CenarioCub | null
+}
+
+/** O que ainda vai ser pago entre hoje e a entrega. */
+export interface PlanoDePagamento {
+  parcela: number
+  /** Quantas parcelas cabem no prazo. */
+  parcelas: number
+  reforcoValor: number
+  /** Em que meses os reforcos caem (distribuidos no prazo). */
+  mesesDeReforco: number[]
+  /** true quando nao ha nada a pagar ate a entrega. */
+  vazio: boolean
 }
 
 /**
@@ -127,6 +172,24 @@ function ou(valor: number | null | undefined, padrao = 0): number {
 export function mesesDoPrazo(prazo: number, unidade: UnidadePrazo): number {
   const bruto = unidade === 'anos' ? prazo * 12 : prazo
   return Math.max(0, Math.round(bruto))
+}
+
+/**
+ * O indice sempre roda ao mes. Quem digita "12% ao ano" quer 12% acumulados em
+ * doze meses — 0,9489% ao mes —, e nao 12 vezes 1%: taxa se converte por raiz,
+ * nao por divisao. Era daqui que saia a maior distorcao quando alguem digitava
+ * o CUB anual num campo mensal.
+ */
+export function mensalDoIndice(percentual: number, unidade: UnidadeIndice): number {
+  if (!Number.isFinite(percentual)) return 0
+  if (unidade === 'mes') return percentual
+  return (Math.pow(1 + percentual / 100, 1 / 12) - 1) * 100
+}
+
+/** O caminho de volta: o mensal acumulado em doze meses. */
+export function anualDoIndice(percentualMensal: number): number {
+  if (!Number.isFinite(percentualMensal)) return 0
+  return (Math.pow(1 + percentualMensal / 100, 12) - 1) * 100
 }
 
 /**
@@ -171,11 +234,135 @@ function passoDaEvolucao(meses: number): number {
   return 12
 }
 
+/**
+ * Onde os reforcos caem. Sem data cadastrada em lugar nenhum, o razoavel e
+ * espalha-los pelo prazo — 3 reforcos em 36 meses viram os meses 12, 24 e 36,
+ * que e como as tabelas anuais funcionam de verdade.
+ */
+function mesesDosReforcos(quantidade: number, meses: number): number[] {
+  if (quantidade <= 0 || meses <= 0) return []
+  const total = Math.min(quantidade, meses)
+  const intervalo = meses / total
+  const posicoes: number[] = []
+  for (let i = 1; i <= total; i++) {
+    const mes = Math.min(meses, Math.max(1, Math.round(intervalo * i)))
+    // Dois reforcos no mesmo mes viram um so: empurra o segundo para o proximo.
+    posicoes.push(posicoes.includes(mes) ? Math.min(meses, mes + 1) : mes)
+  }
+  return [...new Set(posicoes)]
+}
+
+export function montarPlano(dados: EntradaInvestimento, meses: number): PlanoDePagamento {
+  const parcela = Math.max(0, ou(dados.parcelaMensal))
+  const pedidas = ou(dados.parcelasRestantes, meses)
+  // Parcela sem numero informado vale pelo prazo inteiro; alem da entrega nao
+  // entra na conta (o que se paga depois nao muda o saldo NA entrega).
+  const parcelas = parcela > 0 ? Math.min(meses, Math.max(0, Math.round(pedidas || meses))) : 0
+
+  const reforcoValor = Math.max(0, ou(dados.reforcoValor))
+  const reforcosQtd = reforcoValor > 0 ? Math.max(0, Math.round(ou(dados.reforcosQtd))) : 0
+  const mesesDeReforco = mesesDosReforcos(reforcosQtd, meses)
+
+  return {
+    parcela,
+    parcelas,
+    reforcoValor,
+    mesesDeReforco,
+    vazio: parcelas === 0 && mesesDeReforco.length === 0,
+  }
+}
+
+/**
+ * A obra mes a mes. O saldo devedor sobe pelo indice e desce pelo que o
+ * comprador paga, nessa ordem — e como a construtora fecha o boleto: corrige
+ * primeiro, cobra depois. As parcelas e os reforcos tambem sao reajustados
+ * pelo indice, porque e isso que o contrato diz.
+ *
+ * Com taxa 0 a funcao vira a amortizacao pura, e por isso serve aos DOIS
+ * cenarios: a unica diferenca entre eles e o indice.
+ */
+export function cronogramaDaObra(
+  saldoInicial: number,
+  meses: number,
+  percentualMensal: number,
+  plano: PlanoDePagamento,
+): MesDaObra[] {
+  const taxa = percentualMensal / 100
+  const linhas: MesDaObra[] = []
+
+  let saldo = Math.max(0, saldoInicial)
+  let pagoAcumulado = 0
+  let correcaoAcumulada = 0
+
+  for (let mes = 1; mes <= meses; mes++) {
+    const saldoInicialDoMes = saldo
+    const correcao = saldo * taxa
+    saldo += correcao
+    correcaoAcumulada += correcao
+
+    // O reajuste da parcela acompanha o mesmo indice do saldo.
+    const reajuste = Math.pow(1 + taxa, mes)
+    const parcelaBruta = mes <= plano.parcelas ? plano.parcela * reajuste : 0
+    const reforcoBruto = plano.mesesDeReforco.includes(mes) ? plano.reforcoValor * reajuste : 0
+
+    // Ninguem paga mais do que deve: o excedente do mes simplesmente nao sai.
+    const previsto = parcelaBruta + reforcoBruto
+    const pagamento = Math.min(previsto, saldo)
+    const proporcao = previsto > 0 ? pagamento / previsto : 0
+
+    saldo -= pagamento
+    pagoAcumulado += pagamento
+
+    linhas.push({
+      mes,
+      saldoInicial: saldoInicialDoMes,
+      correcao,
+      parcela: parcelaBruta * proporcao,
+      reforco: reforcoBruto * proporcao,
+      pagamento,
+      saldoFinal: saldo,
+      pagoAcumulado,
+      correcaoAcumulada,
+    })
+  }
+
+  return linhas
+}
+
+/** Fecha um cenario a partir do cronograma dele. */
+function concluir(
+  evolucao: MesDaObra[],
+  base: { saldoInicial: number; valorPago: number; valorEstimadoEntrega: number },
+): Conclusao {
+  const ultimo = evolucao[evolucao.length - 1]
+  const saldoDevedor = ultimo ? ultimo.saldoFinal : Math.max(0, base.saldoInicial)
+  const pagoNoPeriodo = ultimo ? ultimo.pagoAcumulado : 0
+  const correcao = ultimo ? ultimo.correcaoAcumulada : 0
+
+  const investidoTotal = base.valorPago + pagoNoPeriodo
+  const patrimonioLiquido = base.valorEstimadoEntrega - saldoDevedor
+  // O lucro potencial nao desconta a divida que sobra (esse numero e o
+  // patrimonio liquido); desconta so o que saiu do bolso.
+  const lucroPotencial = base.valorEstimadoEntrega - investidoTotal
+
+  return {
+    saldoDevedor,
+    pagoNoPeriodo,
+    investidoTotal,
+    correcao,
+    patrimonioLiquido,
+    lucroPotencial,
+    rentabilidade: investidoTotal > 0 ? (lucroPotencial / investidoTotal) * 100 : null,
+    multiplicador: investidoTotal > 0 ? patrimonioLiquido / investidoTotal : null,
+    evolucao,
+  }
+}
+
 export function simularInvestimento(dados: EntradaInvestimento): ResultadoInvestimento {
   const valorCompra = ou(dados.valorCompra)
   const entrada = ou(dados.entrada)
-  const valorInvestido = ou(dados.valorPago)
-  const saldoDevedor = ou(dados.saldoDevedor)
+  const valorPago = ou(dados.valorPago)
+  const saldoDevedorHoje = Math.max(0, ou(dados.saldoDevedor))
   const valorizacaoAnual = ou(dados.valorizacaoAnual)
 
   const meses = mesesDoPrazo(dados.prazo, dados.unidadePrazo)
@@ -184,58 +371,86 @@ export function simularInvestimento(dados: EntradaInvestimento): ResultadoInvest
 
   // Valorizacao composta: o prazo em anos pode ser fracionario (18 meses = 1,5).
   const valorEstimadoEntrega = valorCompra * Math.pow(fator, anos)
-
   const ganhoPatrimonialBruto = valorEstimadoEntrega - valorCompra
-  const patrimonioLiquido = valorEstimadoEntrega - saldoDevedor
-  const lucroPotencial = valorEstimadoEntrega - valorInvestido
 
-  const evolucao: PontoValorizacao[] = []
+  const plano = montarPlano(dados, meses)
+  const comum = { saldoInicial: saldoDevedorHoje, valorPago, valorEstimadoEntrega }
+
+  // Cenario do empreendimento: mesma amortizacao, indice zero.
+  const semIndice = concluir(cronogramaDaObra(saldoDevedorHoje, meses, 0, plano), comum)
+
+  const evolucaoValor: PontoValorizacao[] = []
   const passo = passoDaEvolucao(meses)
   for (let mes = 0; mes <= meses; mes += passo) {
-    evolucao.push({ mes, valor: valorCompra * Math.pow(fator, mes / 12) })
+    evolucaoValor.push({ mes, valor: valorCompra * Math.pow(fator, mes / 12) })
   }
   // O ultimo ponto e sempre a entrega, mesmo que o passo nao caia certinho.
-  if (evolucao.length === 0 || evolucao[evolucao.length - 1].mes !== meses) {
-    evolucao.push({ mes: meses, valor: valorEstimadoEntrega })
+  if (evolucaoValor.length === 0 || evolucaoValor[evolucaoValor.length - 1].mes !== meses) {
+    evolucaoValor.push({ mes: meses, valor: valorEstimadoEntrega })
   }
 
   return {
+    ...semIndice,
     valorCompra,
     entrada,
-    valorInvestido,
-    saldoDevedor,
+    valorPago,
+    saldoDevedorHoje,
     meses,
     anos,
     valorizacaoAnual,
     valorEstimadoEntrega,
     ganhoPatrimonialBruto,
     valorizacaoTotal: valorCompra > 0 ? (valorEstimadoEntrega / valorCompra - 1) * 100 : 0,
-    patrimonioLiquido,
-    lucroPotencial,
-    rentabilidade: valorInvestido > 0 ? (lucroPotencial / valorInvestido) * 100 : null,
-    multiplicador: valorInvestido > 0 ? patrimonioLiquido / valorInvestido : null,
-    evolucao,
-    cub: cenarioComCub(dados.cubMensal, {
-      saldoDevedor,
-      valorInvestido,
-      valorEstimadoEntrega,
-      patrimonioLiquido,
-      meses,
-    }),
+    plano,
+    evolucaoValor,
+    cub: cenarioComCub(dados.cubMensal, { ...comum, meses, plano, semIndice }),
+  }
+}
+
+/**
+ * A conclusao com o CUB. O que muda em relacao a primeira e UMA coisa: o
+ * indice. O saldo devedor e corrigido todo mes antes de receber o pagamento, e
+ * a propria parcela e reajustada pelo mesmo percentual — a amortizacao, o
+ * prazo e a valorizacao do imovel sao identicos nos dois cenarios.
+ *
+ * O que ja foi pago ate hoje nao entra na correcao: aquele dinheiro ja saiu.
+ */
+function cenarioComCub(
+  cubMensal: number | null | undefined,
+  base: {
+    saldoInicial: number
+    valorPago: number
+    valorEstimadoEntrega: number
+    meses: number
+    plano: PlanoDePagamento
+    semIndice: Conclusao
+  },
+): CenarioCub | null {
+  if (cubMensal === null || cubMensal === undefined || !Number.isFinite(cubMensal)) return null
+
+  const evolucao = cronogramaDaObra(base.saldoInicial, base.meses, cubMensal, base.plano)
+  const conclusao = concluir(evolucao, base)
+
+  return {
+    ...conclusao,
+    cubMensal,
+    cubAcumulado: (Math.pow(1 + cubMensal / 100, base.meses) - 1) * 100,
+    custoNoPatrimonio: base.semIndice.patrimonioLiquido - conclusao.patrimonioLiquido,
+    custoNoDesembolso: conclusao.pagoNoPeriodo - base.semIndice.pagoNoPeriodo,
   }
 }
 
 /**
  * A frase que fecha cada conclusao — a mesma na tela e no PDF. E o que o
  * corretor le em voz alta para o cliente, entao sai em dinheiro, nao em
- * indicador: quanto sobra de patrimonio e quantas vezes isso e o que ja saiu
- * do bolso.
+ * indicador: quanto sobra de patrimonio e quantas vezes isso e o que saiu do
+ * bolso ate a entrega.
  */
 export function textoDaConclusao(resultado: ResultadoInvestimento, conclusao: Conclusao): string {
   const patrimonio = fmtMoeda(conclusao.patrimonioLiquido)
   const entrega = `Na entrega, o imóvel vale ${fmtMoeda(resultado.valorEstimadoEntrega)}`
 
-  if (resultado.valorInvestido <= 0) {
+  if (conclusao.investidoTotal <= 0) {
     return conclusao.saldoDevedor > 0
       ? `${entrega} e, quitados ${fmtMoeda(conclusao.saldoDevedor)} de saldo devedor, sobram ${patrimonio}.`
       : `${entrega} — sem dívida, o patrimônio é ${patrimonio}.`
@@ -243,51 +458,15 @@ export function textoDaConclusao(resultado: ResultadoInvestimento, conclusao: Co
 
   // O multiplicador e razao, nao dinheiro: "1,99 vezes", nunca "R$ 1,99 vezes".
   const vezes = conclusao.multiplicador !== null ? fmtNumero(conclusao.multiplicador) : null
+  const investido =
+    conclusao.pagoNoPeriodo > 0
+      ? `${fmtMoeda(conclusao.investidoTotal)} investidos até a entrega`
+      : `${fmtMoeda(conclusao.investidoTotal)} já investidos`
+
   return (
-    `${entrega}. Com ${fmtMoeda(resultado.valorInvestido)} já investidos` +
+    `${entrega}. Com ${investido}` +
     (conclusao.saldoDevedor > 0 ? ` e ${fmtMoeda(conclusao.saldoDevedor)} a quitar` : ' e nada a quitar') +
     `, sobram ${patrimonio}` +
     (vezes ? ` — ${vezes} vezes o que saiu do bolso.` : '.')
   )
-}
-
-/**
- * A conclusao com o CUB. O que muda em relacao a primeira e UMA coisa: o saldo
- * devedor nao fica parado ate a entrega — ele e corrigido pelo indice, mes a
- * mes, como a construtora faz. Dividia maior significa menos patrimonio no fim
- * e menos lucro, porque a correcao tambem vai sair do bolso.
- *
- * O que ja foi pago nao entra na correcao: aquele dinheiro ja saiu.
- */
-function cenarioComCub(
-  cubMensal: number | null | undefined,
-  base: {
-    saldoDevedor: number
-    valorInvestido: number
-    valorEstimadoEntrega: number
-    patrimonioLiquido: number
-    meses: number
-  },
-): CenarioCub | null {
-  if (cubMensal === null || cubMensal === undefined || !Number.isFinite(cubMensal)) return null
-
-  const fator = Math.pow(1 + cubMensal / 100, base.meses)
-  const saldoCorrigido = base.saldoDevedor * fator
-  const correcao = saldoCorrigido - base.saldoDevedor
-
-  const patrimonioLiquido = base.valorEstimadoEntrega - saldoCorrigido
-  const lucroPotencial = base.valorEstimadoEntrega - base.valorInvestido - correcao
-
-  return {
-    cubMensal,
-    cubAcumulado: (fator - 1) * 100,
-    correcao,
-    custoNoPatrimonio: base.patrimonioLiquido - patrimonioLiquido,
-    saldoDevedor: saldoCorrigido,
-    patrimonioLiquido,
-    lucroPotencial,
-    // Mesma base de comparacao da primeira conclusao: o que ja saiu do bolso.
-    rentabilidade: base.valorInvestido > 0 ? (lucroPotencial / base.valorInvestido) * 100 : null,
-    multiplicador: base.valorInvestido > 0 ? patrimonioLiquido / base.valorInvestido : null,
-  }
 }

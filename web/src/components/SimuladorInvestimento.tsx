@@ -13,6 +13,8 @@ import {
   TRACO,
 } from '../lib/format'
 import {
+  anualDoIndice,
+  mensalDoIndice,
   mesesAteAEntrega,
   mesesDoPrazo,
   saldoDevedorSugerido,
@@ -20,7 +22,9 @@ import {
   textoDaConclusao,
   textoDoPrazo,
   type Conclusao,
+  type MesDaObra,
   type ResultadoInvestimento,
+  type UnidadeIndice,
   type UnidadePrazo,
 } from '../lib/investimento'
 import { exportarPdfInvestimento, type ImovelDaSimulacao } from '../lib/exportarSimulacao'
@@ -34,6 +38,8 @@ const ATALHOS_VALORIZACAO = [5, 8, 10, 12, 15, 20]
 
 /** Os mesmos percentuais mensais da calculadora do CUB. */
 const ATALHOS_CUB = [0.35, 0.6, 0.7, 0.75, 1]
+/** Ao ano os numeros redondos sao outros — o INCC costuma rodar nessa faixa. */
+const ATALHOS_CUB_ANO = [4, 6, 8, 10, 12]
 
 interface Formulario {
   valorCompra: string
@@ -43,7 +49,12 @@ interface Formulario {
   prazo: string
   unidadePrazo: UnidadePrazo
   valorizacao: string
+  parcelaMensal: string
+  parcelasRestantes: string
+  reforcosQtd: string
+  reforcoValor: string
   cub: string
+  unidadeCub: UnidadeIndice
 }
 
 const VAZIO: Formulario = {
@@ -54,7 +65,12 @@ const VAZIO: Formulario = {
   prazo: '',
   unidadePrazo: 'meses',
   valorizacao: '',
+  parcelaMensal: '',
+  parcelasRestantes: '',
+  reforcosQtd: '',
+  reforcoValor: '',
   cub: '',
+  unidadeCub: 'mes',
 }
 
 function validar(form: Formulario, usarCub: boolean) {
@@ -74,12 +90,16 @@ function validar(form: Formulario, usarCub: boolean) {
   else if (valorizacao > 100) erros.valorizacao = 'Valorização anual acima de 100% — confira'
 
   // O CUB so e cobrado quando a opcao esta marcada; desmarcada, o campo nem existe.
-  const cub = usarCub ? lerNumero(form.cub) : null
+  // O teto muda com a unidade: 20% ao mes e absurdo, 20% ao ano e rotina.
+  const digitado = usarCub ? lerNumero(form.cub) : null
+  const tetoDoIndice = form.unidadeCub === 'mes' ? 20 : 100
   if (usarCub) {
-    if (cub === null) erros.cub = 'Informe o percentual mensal do CUB'
-    else if (cub < 0) erros.cub = 'O percentual não pode ser negativo'
-    else if (cub > 20) erros.cub = 'Percentual mensal acima de 20% — confira'
+    if (digitado === null) erros.cub = `Informe o percentual do índice (% ao ${form.unidadeCub})`
+    else if (digitado < 0) erros.cub = 'O percentual não pode ser negativo'
+    else if (digitado > tetoDoIndice) erros.cub = `Percentual acima de ${tetoDoIndice}% ao ${form.unidadeCub} — confira`
   }
+  // O motor so trabalha ao mes; o anual e convertido por raiz, nao por divisao.
+  const cub = digitado === null ? null : mensalDoIndice(digitado, form.unidadeCub)
 
   const opcional = (campo: keyof Formulario, rotulo: string) => {
     const texto = form[campo] as string
@@ -95,6 +115,10 @@ function validar(form: Formulario, usarCub: boolean) {
   const entrada = opcional('entrada', 'Valor de entrada')
   const valorPago = opcional('valorPago', 'Valor já pago')
   const saldoDevedor = opcional('saldoDevedor', 'Saldo devedor')
+  const parcelaMensal = opcional('parcelaMensal', 'Valor da parcela')
+  const parcelasRestantes = opcional('parcelasRestantes', 'Número de parcelas')
+  const reforcosQtd = opcional('reforcosQtd', 'Quantidade de reforços')
+  const reforcoValor = opcional('reforcoValor', 'Valor do reforço')
 
   if (Object.keys(erros).length > 0) return { erros, entrada: null }
 
@@ -108,6 +132,10 @@ function validar(form: Formulario, usarCub: boolean) {
       prazo: prazo as number,
       unidadePrazo: form.unidadePrazo,
       valorizacaoAnual: valorizacao as number,
+      parcelaMensal,
+      parcelasRestantes: parcelasRestantes || null,
+      reforcosQtd,
+      reforcoValor,
       cubMensal: cub,
     },
   }
@@ -158,6 +186,15 @@ function CartaoConclusao({
 }) {
   const linhas: { rotulo: string; valor: string }[] = [
     { rotulo: rotuloSaldo, valor: conclusao.saldoDevedor > 0 ? fmtMoeda(conclusao.saldoDevedor) : 'quitado' },
+    // Com parcelas na conta, os dois cenarios desembolsam valores diferentes
+    // (a parcela tambem e reajustada) — sem essas duas linhas a comparacao
+    // esconderia metade do custo do indice.
+    ...(conclusao.pagoNoPeriodo > 0
+      ? [
+          { rotulo: 'Pago durante a obra', valor: fmtMoeda(conclusao.pagoNoPeriodo) },
+          { rotulo: 'Investido até a entrega', valor: fmtMoeda(conclusao.investidoTotal) },
+        ]
+      : []),
     { rotulo: 'Patrimônio líquido', valor: fmtMoeda(conclusao.patrimonioLiquido) },
     { rotulo: 'Lucro potencial', valor: fmtMoeda(conclusao.lucroPotencial) },
     {
@@ -190,6 +227,84 @@ function CartaoConclusao({
 
       <p className="inv-conclusao__frase">{textoDaConclusao(resultado, conclusao)}</p>
     </article>
+  )
+}
+
+/**
+ * Uma linha por ano de obra (mais o ultimo mes) — obra de 36 meses vira 4
+ * linhas, e quem quiser conferir mes a mes abre a tabela inteira.
+ */
+function resumirObra(linhas: MesDaObra[]): MesDaObra[] {
+  if (linhas.length <= 13) return linhas
+  const marcos = linhas.filter((linha) => linha.mes % 12 === 0)
+  const ultima = linhas[linhas.length - 1]
+  return marcos.some((linha) => linha.mes === ultima.mes) ? marcos : [...marcos, ultima]
+}
+
+/** A obra mes a mes: quanto a divida subiu pelo indice e quanto foi abatido. */
+function TabelaDaObra({ resultado }: { resultado: ResultadoInvestimento }) {
+  const [tudo, setTudo] = useState(false)
+
+  // Com CUB, a tabela mostra o cenario corrigido — e o que vai ser cobrado.
+  const cronograma = resultado.cub?.evolucao ?? resultado.evolucao
+  const semIndice = resultado.evolucao
+  const comCub = resultado.cub !== null
+  const linhas = tudo ? cronograma : resumirObra(cronograma)
+  const resumida = linhas.length < cronograma.length
+
+  const ultima = cronograma[cronograma.length - 1]
+
+  return (
+    <>
+      <div className="tabela-cub__area" style={{ marginTop: 'var(--e4)' }}>
+        <table className="tabela-cub">
+          <thead>
+            <tr>
+              <th>Mês</th>
+              <th>Saldo no início</th>
+              {comCub && <th>Correção</th>}
+              <th>Pago no mês</th>
+              <th>Saldo no fim</th>
+              {comCub && <th>Sem correção</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {linhas.map((linha) => (
+              <tr key={linha.mes}>
+                <td>{linha.mes}</td>
+                <td>{fmtMoeda(linha.saldoInicial)}</td>
+                {comCub && <td className="tabela-cub__reajuste">{fmtMoeda(linha.correcao)}</td>}
+                <td>{linha.pagamento > 0 ? fmtMoeda(linha.pagamento) : TRACO}</td>
+                <td className="tabela-cub__forte">{fmtMoeda(linha.saldoFinal)}</td>
+                {comCub && <td>{fmtMoeda(semIndice[linha.mes - 1]?.saldoFinal)}</td>}
+              </tr>
+            ))}
+          </tbody>
+          {ultima && (
+            <tfoot>
+              <tr>
+                <td>Entrega</td>
+                <td />
+                {comCub && <td className="tabela-cub__reajuste">{fmtMoeda(ultima.correcaoAcumulada)}</td>}
+                <td>{fmtMoeda(ultima.pagoAcumulado)}</td>
+                <td className="tabela-cub__forte">{fmtMoeda(ultima.saldoFinal)}</td>
+                {comCub && <td>{fmtMoeda(semIndice[semIndice.length - 1]?.saldoFinal)}</td>}
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      </div>
+
+      {(resumida || tudo) && (
+        <p className="campo__dica linha-calculo">
+          <Icone nome="info" tamanho={12} />
+          {resumida ? 'Uma linha por ano de obra.' : `Todos os ${cronograma.length} meses.`}
+          <button type="button" className="link-acao" onClick={() => setTudo(!tudo)}>
+            {tudo ? 'Resumir por ano' : 'Ver mês a mês'}
+          </button>
+        </p>
+      )}
+    </>
   )
 }
 
@@ -249,11 +364,32 @@ function dadosDoImovel(empreendimento: Empreendimento, unidade: Unidade | null) 
   // e o cliente via o numero de outra unidade.
   const valorCompra = (unidade ? precoDaUnidade(unidade) : null) ?? valorDoEmpreendimento(empreendimento)
   const meses = mesesAteAEntrega(empreendimento.entrega)
+  // Sem unidade escolhida, o preco veio da mais barata: a tabela de venda tem
+  // de vir da MESMA unidade, senao a parcela seria de um imovel e o preco de
+  // outro.
+  const referencia = unidade ?? unidadeMaisBarata(empreendimento)
   // Entrada cadastrada em algum fluxo daquele imovel (o da unidade tem prioridade).
-  const fluxos = [...(unidade?.fluxos ?? []), ...empreendimento.fluxos]
-  const entrada = fluxos.find((f) => f.entrada_valor !== null)?.entrada_valor ?? null
+  const fluxos = [...(referencia?.fluxos ?? []), ...empreendimento.fluxos]
+  const entradaValor = fluxos.find((f) => f.entrada_valor !== null)?.entrada_valor ?? null
+  const entradaPct = fluxos.find((f) => f.entrada_pct !== null)?.entrada_pct ?? null
+  const entrada =
+    entradaValor ?? (entradaPct !== null && valorCompra !== null ? (valorCompra * entradaPct) / 100 : null)
 
-  return { valorCompra, meses, entrada }
+  // O parcelamento sai da mesma tabela de venda: e o que a obra ainda vai
+  // consumir do bolso do cliente, e sem isso a divida ficava parada ate a
+  // entrega — o erro que inflava a leitura com CUB.
+  const comParcela = fluxos.find((f) => f.parcela_valor !== null)
+  const comReforco = fluxos.find((f) => f.reforco_valor !== null)
+
+  return {
+    valorCompra,
+    meses,
+    entrada,
+    parcelaMensal: comParcela?.parcela_valor ?? null,
+    parcelasRestantes: comParcela?.parcelas ?? null,
+    reforcosQtd: comReforco?.reforcos_qtd ?? null,
+    reforcoValor: comReforco?.reforco_valor ?? null,
+  }
 }
 
 /**
@@ -261,6 +397,15 @@ function dadosDoImovel(empreendimento: Empreendimento, unidade: Unidade | null) 
  * delas, o valor do m² pela menor metragem. A tabela geral do empreendimento
  * entra antes do palpite do m²: la o preco foi digitado, aqui e conta.
  */
+/** A unidade de menor preco — a que o "Empreendimento" do seletor representa. */
+function unidadeMaisBarata(e: Empreendimento): Unidade | null {
+  const comPreco = e.unidades.filter((u) => precoDaUnidade(u) !== null)
+  if (comPreco.length === 0) return null
+  return comPreco.reduce((menor, atual) =>
+    (precoDaUnidade(atual) as number) < (precoDaUnidade(menor) as number) ? atual : menor,
+  )
+}
+
 function valorDoEmpreendimento(e: Empreendimento): number | null {
   const valores = e.unidades.map(precoDaUnidade).filter((v): v is number => v !== null)
   if (valores.length > 0) return Math.min(...valores)
@@ -272,17 +417,26 @@ function valorDoEmpreendimento(e: Empreendimento): number | null {
   return null
 }
 
+/** Numero cadastrado que vira texto de campo; null mantem o que ja estava. */
+function ouMantem(valor: number | null, atual: string): string {
+  return valor !== null && Number.isFinite(valor) ? String(Math.round(valor)) : atual
+}
+
 /** Aplica sobre o formulario o que o imovel escolhido sabe preencher. */
 function comImovel(base: Formulario, alvo: Empreendimento | null, unidadeAlvo: Unidade | null): Formulario {
   if (!alvo) return base
-  const { valorCompra, meses, entrada } = dadosDoImovel(alvo, unidadeAlvo)
+  const dados = dadosDoImovel(alvo, unidadeAlvo)
 
   return {
     ...base,
-    valorCompra: valorCompra !== null ? String(Math.round(valorCompra)) : base.valorCompra,
-    prazo: meses !== null ? String(meses) : base.prazo,
-    unidadePrazo: meses !== null ? 'meses' : base.unidadePrazo,
-    entrada: entrada !== null ? String(Math.round(entrada)) : base.entrada,
+    valorCompra: ouMantem(dados.valorCompra, base.valorCompra),
+    prazo: dados.meses !== null ? String(dados.meses) : base.prazo,
+    unidadePrazo: dados.meses !== null ? 'meses' : base.unidadePrazo,
+    entrada: ouMantem(dados.entrada, base.entrada),
+    parcelaMensal: ouMantem(dados.parcelaMensal, base.parcelaMensal),
+    parcelasRestantes: ouMantem(dados.parcelasRestantes, base.parcelasRestantes),
+    reforcosQtd: ouMantem(dados.reforcosQtd, base.reforcosQtd),
+    reforcoValor: ouMantem(dados.reforcoValor, base.reforcoValor),
   }
 }
 
@@ -362,17 +516,38 @@ export function SimuladorInvestimento({
   const entradaForaDoPago =
     !saldoManual && entradaDigitada !== null && pagoDigitado !== null && entradaDigitada > pagoDigitado
 
+  /** O indice sempre em % ao mes — e nessa unidade que a obra e simulada. */
+  const cubMensal = useMemo(() => {
+    const percentual = lerNumero(form.cub)
+    return percentual === null ? null : mensalDoIndice(percentual, form.unidadeCub)
+  }, [form.cub, form.unidadeCub])
+
   /**
-   * O CUB e digitado ao mes, mas quem decide olha o periodo inteiro: 0,60% ao
-   * mes por 36 meses viram 24% de correcao. Mostrar isso antes de simular evita
-   * a surpresa de ver a divida crescer tanto.
+   * O indice acumulado no periodo inteiro: 0,60% ao mes por 36 meses viram 24%
+   * de correcao. Mostrar isso antes de simular evita a surpresa de ver a
+   * divida crescer tanto — e denuncia na hora quem digitou o anual no mensal.
    */
   const cubNoPeriodo = useMemo(() => {
-    const percentual = lerNumero(form.cub)
     const prazo = lerNumero(form.prazo)
-    if (!usarCub || percentual === null || prazo === null) return null
-    return (Math.pow(1 + percentual / 100, mesesDoPrazo(prazo, form.unidadePrazo)) - 1) * 100
-  }, [usarCub, form.cub, form.prazo, form.unidadePrazo])
+    if (!usarCub || cubMensal === null || prazo === null) return null
+    return (Math.pow(1 + cubMensal / 100, mesesDoPrazo(prazo, form.unidadePrazo)) - 1) * 100
+  }, [usarCub, cubMensal, form.prazo, form.unidadePrazo])
+
+  /**
+   * O que ainda vai ser pago ate a entrega, sem correcao nenhuma. Serve de
+   * conferencia: parcela × meses + reforcos, o numero que o corretor tem na
+   * cabeca ao olhar a tabela de venda.
+   */
+  const pagamentoPrevisto = useMemo(() => {
+    const prazo = lerNumero(form.prazo)
+    if (prazo === null) return null
+    const meses = mesesDoPrazo(prazo, form.unidadePrazo)
+    const parcela = lerNumero(form.parcelaMensal) ?? 0
+    const quantas = Math.min(meses, lerNumero(form.parcelasRestantes) ?? meses)
+    const reforcos = (lerNumero(form.reforcosQtd) ?? 0) * (lerNumero(form.reforcoValor) ?? 0)
+    const total = parcela * Math.max(0, quantas) + reforcos
+    return total > 0 ? { total, meses: Math.max(0, quantas) } : null
+  }, [form.prazo, form.unidadePrazo, form.parcelaMensal, form.parcelasRestantes, form.reforcosQtd, form.reforcoValor])
 
   function mudarSaldo(valor: string) {
     setSaldoManual(true)
@@ -422,7 +597,7 @@ export function SimuladorInvestimento({
 
   const pontos = useMemo(
     () =>
-      (resultado?.evolucao ?? []).map((ponto) => ({
+      (resultado?.evolucaoValor ?? []).map((ponto) => ({
         rotulo: ponto.mes === 0 ? 'Hoje' : `Mês ${ponto.mes}`,
         valor: ponto.valor,
         detalhe:
@@ -432,6 +607,30 @@ export function SimuladorInvestimento({
       })),
     [resultado],
   )
+
+  /**
+   * A divida mes a mes. Com CUB, a linha mostrada e a corrigida — e ela que o
+   * cliente vai pagar; a leitura sem indice fica na tabela, lado a lado.
+   */
+  const pontosDaDivida = useMemo(() => {
+    const cronograma = resultado?.cub?.evolucao ?? resultado?.evolucao ?? []
+    if (!resultado || cronograma.length === 0) return []
+    const passo = cronograma.length <= 48 ? 1 : cronograma.length <= 120 ? 3 : 12
+
+    const inicio = {
+      rotulo: 'Hoje',
+      valor: resultado.saldoDevedorHoje,
+      detalhe: 'saldo devedor de hoje',
+    }
+    const linhas = cronograma
+      .filter((_, indice) => indice % passo === 0 || indice === cronograma.length - 1)
+      .map((linha) => ({
+        rotulo: `Mês ${linha.mes}`,
+        valor: linha.saldoFinal,
+        detalhe: `${fmtMoeda(linha.pagoAcumulado)} pagos · ${fmtMoeda(linha.correcaoAcumulada)} de correção`,
+      }))
+    return [inicio, ...linhas]
+  }, [resultado])
 
   function entradaMonetaria(campo: keyof Formulario, placeholder: string) {
     return (
@@ -599,8 +798,38 @@ export function SimuladorInvestimento({
           </div>
 
           {usarCub && (
-            <Campo rotulo="CUB mensal" obrigatorio dica="% ao mês" erro={erros.cub}>
-              {entradaMonetaria('cub', '0,60')}
+            <Campo
+              rotulo="Correção (CUB/INCC)"
+              obrigatorio
+              dica={
+                form.unidadeCub === 'mes'
+                  ? cubMensal !== null
+                    ? `${fmtPercentual(anualDoIndice(cubMensal), 2)} ao ano`
+                    : 'como o índice é publicado'
+                  : cubMensal !== null
+                    ? `${fmtPercentual(cubMensal)} ao mês`
+                    : 'convertido para o mês'
+              }
+              erro={erros.cub}
+            >
+              <div className="entrada-com-unidade">
+                <input
+                  className={`entrada${erros.cub ? ' entrada--erro' : ''}`}
+                  value={form.cub}
+                  onChange={(e) => mudar('cub', e.target.value)}
+                  placeholder={form.unidadeCub === 'mes' ? '0,60' : '7,5'}
+                  inputMode="decimal"
+                />
+                <select
+                  className="entrada"
+                  value={form.unidadeCub}
+                  onChange={(e) => mudar('unidadeCub', e.target.value)}
+                  aria-label="Unidade do índice"
+                >
+                  <option value="mes">% ao mês</option>
+                  <option value="ano">% ao ano</option>
+                </select>
+              </div>
             </Campo>
           )}
         </div>
@@ -638,7 +867,7 @@ export function SimuladorInvestimento({
         {usarCub && (
           <div className="atalhos-cub">
             <span className="campo__dica">CUB:</span>
-            {ATALHOS_CUB.map((valor) => (
+            {(form.unidadeCub === 'mes' ? ATALHOS_CUB : ATALHOS_CUB_ANO).map((valor) => (
               <button
                 key={valor}
                 type="button"
@@ -657,7 +886,54 @@ export function SimuladorInvestimento({
         <p className="campo__dica" style={{ marginTop: 'var(--e3)' }}>
           <Icone nome="info" tamanho={12} /> A valorização é composta sobre o valor de compra e a expectativa é sua —
           o simulador não busca índice de mercado. O <strong>valor já pago</strong> soma entrada, parcelas, reforços e
-          balões — é ele que define a rentabilidade.
+          balões pagos <strong>até hoje</strong>; o que ainda vai ser pago entra logo abaixo.
+        </p>
+      </section>
+
+      {/* O que ainda sai do bolso ate a entrega. E o que faz a divida andar:
+          sem isso o saldo devedor ficava parado ate a entrega e a correcao do
+          CUB era cobrada sobre o valor cheio o tempo todo. */}
+      <section className="form-secao">
+        <h3 className="form-secao__titulo">
+          <Icone nome="cartao" tamanho={13} />
+          Pagamentos até a entrega
+          <span className="form-secao__opcional">— opcional; sem eles a dívida fica parada</span>
+        </h3>
+
+        <div className="grade">
+          <Campo rotulo="Parcela mensal" dica="R$" erro={erros.parcelaMensal}>
+            {entradaMonetaria('parcelaMensal', '2.500,00')}
+          </Campo>
+
+          <Campo
+            rotulo="Parcelas restantes"
+            dica={form.parcelaMensal.trim() ? 'em branco = até a entrega' : 'nº de parcelas'}
+            erro={erros.parcelasRestantes}
+          >
+            {entradaMonetaria('parcelasRestantes', '24')}
+          </Campo>
+
+          <Campo rotulo="Reforços" dica="quantidade até a entrega" erro={erros.reforcosQtd}>
+            {entradaMonetaria('reforcosQtd', '3')}
+          </Campo>
+
+          <Campo rotulo="Valor do reforço" dica="R$" erro={erros.reforcoValor}>
+            {entradaMonetaria('reforcoValor', '15.000,00')}
+          </Campo>
+        </div>
+
+        <p className="campo__dica linha-calculo">
+          <Icone nome="info" tamanho={12} />
+          {pagamentoPrevisto ? (
+            <>
+              Previsto até a entrega: <strong>{fmtMoeda(pagamentoPrevisto.total)}</strong> sem correção
+              {pagamentoPrevisto.meses > 0 && ` (${pagamentoPrevisto.meses} parcelas)`}. Com o CUB marcado, cada parcela
+              é reajustada pelo índice e o saldo devedor é corrigido antes de receber o pagamento — mês a mês, como a
+              construtora faz.
+            </>
+          ) : (
+            'Preencha a parcela mensal (e os reforços, se houver) para o saldo devedor evoluir durante a obra. Escolher uma unidade cadastrada acima já traz os números da tabela de venda.'
+          )}
         </p>
       </section>
 
@@ -710,15 +986,24 @@ export function SimuladorInvestimento({
               />
               <Cartao
                 icone="banco"
-                rotulo="Valor investido"
-                valor={resultado.valorInvestido > 0 ? fmtMoeda(resultado.valorInvestido) : TRACO}
-                dica="tudo que já saiu do bolso"
+                rotulo="Investido até a entrega"
+                valor={resultado.investidoTotal > 0 ? fmtMoeda(resultado.investidoTotal) : TRACO}
+                dica={
+                  resultado.pagoNoPeriodo > 0
+                    ? `${fmtMoeda(resultado.valorPago)} já pagos + ${fmtMoeda(resultado.pagoNoPeriodo)} na obra`
+                    : 'tudo que já saiu do bolso'
+                }
                 tom="marca"
               />
               <Cartao
                 icone="chave"
-                rotulo="Saldo devedor"
+                rotulo="Saldo na entrega"
                 valor={resultado.saldoDevedor > 0 ? fmtMoeda(resultado.saldoDevedor) : 'quitado'}
+                dica={
+                  resultado.pagoNoPeriodo > 0
+                    ? `de ${fmtMoeda(resultado.saldoDevedorHoje)} hoje, sem correção`
+                    : 'a dívida fica parada sem parcelas'
+                }
               />
               <Cartao
                 icone="seta_cima"
@@ -745,7 +1030,7 @@ export function SimuladorInvestimento({
                 icone="alvo"
                 rotulo="Rentabilidade"
                 valor={resultado.rentabilidade === null ? TRACO : fmtPercentual(resultado.rentabilidade, 2)}
-                dica={resultado.rentabilidade === null ? 'informe o valor já pago' : 'sobre o valor investido'}
+                dica={resultado.rentabilidade === null ? 'informe o valor já pago' : 'sobre o investido até a entrega'}
                 tom="marca"
               />
             </div>
@@ -763,7 +1048,9 @@ export function SimuladorInvestimento({
                 <CartaoConclusao
                   titulo="Só o empreendimento"
                   icone="predio"
-                  dica={`valorização de ${fmtPercentual(resultado.valorizacaoAnual, 2)} ao ano · saldo devedor parado`}
+                  dica={`valorização de ${fmtPercentual(resultado.valorizacaoAnual, 2)} ao ano · ${
+                    resultado.pagoNoPeriodo > 0 ? 'parcelas sem reajuste' : 'saldo devedor parado'
+                  }`}
                   resultado={resultado}
                   conclusao={resultado}
                   rotuloSaldo="Saldo devedor"
@@ -771,7 +1058,9 @@ export function SimuladorInvestimento({
                 <CartaoConclusao
                   titulo="Com o CUB"
                   icone="grafico"
-                  dica={`a mesma valorização · saldo corrigido em ${fmtPercentual(resultado.cub.cubMensal)} ao mês`}
+                  dica={`a mesma valorização · ${fmtPercentual(resultado.cub.cubMensal)} ao mês sobre a dívida${
+                    resultado.pagoNoPeriodo > 0 ? ' e sobre as parcelas' : ''
+                  }`}
                   resultado={resultado}
                   conclusao={resultado.cub}
                   rotuloSaldo="Saldo corrigido"
@@ -779,12 +1068,15 @@ export function SimuladorInvestimento({
                 />
               </div>
 
-              {resultado.saldoDevedor > 0 ? (
+              {resultado.saldoDevedorHoje > 0 ? (
                 <p className="campo__dica linha-calculo">
-                  <Icone nome="info" tamanho={12} /> O CUB de {fmtPercentual(resultado.cub.cubMensal)} ao mês acumula{' '}
-                  {fmtPercentual(resultado.cub.cubAcumulado, 2)} em {textoDoPrazo(resultado.meses)}: acrescenta{' '}
-                  {fmtMoeda(resultado.cub.correcao)} ao saldo devedor e tira o mesmo do patrimônio líquido. A
-                  valorização do imóvel é a mesma nas duas leituras — o que muda é a dívida.
+                  <Icone nome="info" tamanho={12} /> O índice de {fmtPercentual(resultado.cub.cubMensal)} ao mês acumula{' '}
+                  {fmtPercentual(resultado.cub.cubAcumulado, 2)} em {textoDoPrazo(resultado.meses)} e acrescenta{' '}
+                  {fmtMoeda(resultado.cub.correcao)} à dívida ao longo da obra
+                  {resultado.cub.custoNoDesembolso > 0.5 &&
+                    ` — ${fmtMoeda(resultado.cub.custoNoDesembolso)} disso sai do bolso nas parcelas reajustadas`}
+                  . No fim, o patrimônio líquido é {fmtMoeda(resultado.cub.custoNoPatrimonio)} menor. A valorização do
+                  imóvel é a mesma nas duas leituras — o que muda é a dívida.
                 </p>
               ) : (
                 <p className="campo__dica linha-calculo">
@@ -792,6 +1084,32 @@ export function SimuladorInvestimento({
                   duas conclusões dão no mesmo.
                 </p>
               )}
+            </section>
+          )}
+
+          {/* A obra mes a mes: e aqui que se ve a divida subir pelo indice e
+              cair pelo pagamento, em vez de so o numero final. */}
+          {resultado.evolucao.length > 0 && resultado.saldoDevedorHoje > 0 && (
+            <section className="form-secao">
+              <h3 className="form-secao__titulo">
+                <Icone nome="chave" tamanho={13} />
+                Evolução do saldo devedor
+                <span className="form-secao__complemento">
+                  {resultado.cub ? '— com a correção do índice' : '— sem correção'}
+                </span>
+              </h3>
+
+              <GraficoLinha
+                titulo="Saldo devedor até a entrega"
+                descricao={`de ${fmtMoeda(resultado.saldoDevedorHoje)} a ${fmtMoeda(
+                  (resultado.cub ?? resultado).saldoDevedor,
+                )}`}
+                pontos={pontosDaDivida}
+                formatar={(v) => fmtMoeda(v)}
+                formatarEixo={fmtMoedaCurta}
+              />
+
+              <TabelaDaObra resultado={resultado} />
             </section>
           )}
 

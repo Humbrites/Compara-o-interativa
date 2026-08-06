@@ -9,11 +9,18 @@ export function fmtMoeda(valor: number | null | undefined, cheia = false): strin
   return cheia ? moedaCheia.format(valor) : moeda.format(valor)
 }
 
-/** Moeda curta para eixo de grafico: R$ 2,5 mil, R$ 1,2 mi. */
+const inteiro = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 })
+
+/**
+ * Moeda curta para eixo de grafico: R$ 2,5 mil, R$ 628 mil, R$ 1,2 mi.
+ * Acima de cem mil o eixo sai sem centavos — "R$ 628,49 mil" e ruido num
+ * rotulo que so serve de referencia.
+ */
 export function fmtMoedaCurta(valor: number | null | undefined): string {
   if (valor === null || valor === undefined || !Number.isFinite(valor)) return TRACO
   const absoluto = Math.abs(valor)
   if (absoluto >= 1_000_000) return `R$ ${numero.format(valor / 1_000_000)} mi`
+  if (absoluto >= 100_000) return `R$ ${inteiro.format(valor / 1_000)} mil`
   if (absoluto >= 1_000) return `R$ ${numero.format(valor / 1_000)} mil`
   return `R$ ${numero.format(valor)}`
 }
