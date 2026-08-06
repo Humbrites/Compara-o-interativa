@@ -104,6 +104,18 @@
   background: var(--neutro-fundo);
 }
 
+/* Valor que a serie nao confirmou nesta consulta: o cartao fica, com aviso. */
+.indicador--defasado {
+  border-color: var(--alerta);
+  background: var(--alerta-fundo);
+}
+
+.indicador__aviso {
+  margin-left: auto;
+  display: inline-flex;
+  color: var(--alerta);
+}
+
 .indicador__rodape {
   font-size: 10.5px;
   color: var(--texto-3);

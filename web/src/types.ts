@@ -131,6 +131,8 @@ export interface IndicadorMercado {
   acumulado12: number | null
   /** Codigo da serie no SGS do Banco Central. */
   serie: number
+  /** true = a serie nao respondeu agora e este e o ultimo valor conhecido. */
+  defasado?: boolean
 }
 
 export interface RespostaIndicadores {
@@ -139,6 +141,8 @@ export interface RespostaIndicadores {
   indicadores: IndicadorMercado[]
   /** Series que nao responderam nesta consulta. */
   falhas?: { chave: string; motivo: string }[]
+  /** Chaves que estao na tela com o ultimo valor conhecido. */
+  defasados?: string[]
   /** true = a consulta falhou e isto e o ultimo dado bom guardado. */
   stale?: boolean
   doCache?: boolean

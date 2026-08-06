@@ -162,14 +162,22 @@ quem está com a tela aberta.
 
 **Cache e falhas:** o resultado fica em `api/data/indicadores.json` (fora do Git) com
 validade de **6 horas** — a tela revalida ao abrir e a cada 30 minutos, e o servidor decide
-se vale mesmo consultar. Se o Banco Central não responder, a faixa mostra o **último dado
-bom** com o aviso *"sem conexão — dados de &lt;data&gt;"*, em vez de sumir ou mentir que o
-número é de agora. Uma série fora do ar não derruba as outras (cada uma é independente), e
-enquanto os números não chegam a faixa mostra o esqueleto dos cartões.
+se vale mesmo consultar. Enquanto os números não chegam, a faixa mostra o esqueleto dos
+cartões. Quando algo dá errado, em três níveis:
 
-> ⚠️ Duas armadilhas do SGS já tratadas: a série da Selic **recusa** `ultimos/N` acima de
-> ~30 (HTTP 400) e publica a meta vigente com **data no futuro** — por isso ela é buscada
-> por período e as leituras adiante de hoje são descartadas.
+| Situação | O que acontece |
+|---|---|
+| Uma série não responde | o cartão **continua na faixa** com o último valor conhecido, destacado em laranja, e o rodapé avisa *"1 índice sem atualizar"* |
+| Cache incompleto | vale só **20 minutos** (não 6 horas), para a série que faltou ganhar nova chance logo |
+| Banco Central inteiro fora | a faixa mostra o último dado bom com *"sem conexão — dados de &lt;data&gt;"* |
+
+> Guardar a **ausência** de uma série pelas 6 horas do cache normal foi o que fez o cartão
+> da Selic sumir do cabeçalho por uma tarde depois de um único HTTP 400.
+
+> ⚠️ Armadilhas do SGS já tratadas: a série da Selic **não aceita `ultimos/N`** (acima de
+> ~30 responde HTTP 400 e, mesmo com 30, devolve `{"erro":{}}` em **HTTP 200**) e publica a
+> meta vigente com **data no futuro** — por isso ela é buscada por período (180 dias) e as
+> leituras adiante de hoje são descartadas.
 
 `GET /api/indicadores` devolve tudo pronto; `?forcar=1` fura o cache (é o que o botão de
 atualizar faz).

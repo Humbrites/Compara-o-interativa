@@ -59,10 +59,22 @@ function Cartao({ indicador }: { indicador: IndicadorMercado }) {
   const seta = indicador.tendencia === 'alta' ? '↑' : indicador.tendencia === 'baixa' ? '↓' : '→'
 
   return (
-    <article className="indicador" title={`${indicador.descricao} · leitura de ${indicador.referencia}`}>
+    <article
+      className={`indicador${indicador.defasado ? ' indicador--defasado' : ''}`}
+      title={
+        indicador.defasado
+          ? `${indicador.descricao} · a série não respondeu agora; último valor conhecido, de ${indicador.referencia}`
+          : `${indicador.descricao} · leitura de ${indicador.referencia}`
+      }
+    >
       <div className="indicador__topo">
         <span className="indicador__nome">{indicador.nome}</span>
         <span className="indicador__periodo">{indicador.unidade}</span>
+        {indicador.defasado && (
+          <span className="indicador__aviso" aria-label="valor defasado">
+            <Icone nome="alerta" tamanho={11} />
+          </span>
+        )}
       </div>
 
       <div className="indicador__linha">
@@ -137,6 +149,8 @@ export function IndicadoresMercado() {
 
   const atualizadoEm = textoDaAtualizacao(dados?.atualizadoEm ?? null)
   const semDados = !dados || dados.indicadores.length === 0
+  // Quantos cartoes estao na tela com o ultimo valor conhecido.
+  const defasados = dados?.indicadores.filter((i) => i.defasado).length ?? 0
 
   return (
     <section className="indicadores" aria-label="Indicadores de mercado">
@@ -155,9 +169,17 @@ export function IndicadoresMercado() {
 
       <div className="indicadores__rodape">
         {atualizadoEm && (
-          <span className={`indicadores__carimbo${dados?.stale ? ' indicadores__carimbo--velho' : ''}`}>
-            {dados?.stale && <Icone nome="alerta" tamanho={11} />}
-            {dados?.stale ? `sem conexão — dados de ${atualizadoEm}` : `atualizado em ${atualizadoEm}`}
+          <span
+            className={`indicadores__carimbo${
+              dados?.stale || defasados > 0 ? ' indicadores__carimbo--velho' : ''
+            }`}
+          >
+            {(dados?.stale || defasados > 0) && <Icone nome="alerta" tamanho={11} />}
+            {dados?.stale
+              ? `sem conexão — dados de ${atualizadoEm}`
+              : defasados > 0
+                ? `${defasados} ${defasados === 1 ? 'índice' : 'índices'} sem atualizar · ${atualizadoEm}`
+                : `atualizado em ${atualizadoEm}`}
           </span>
         )}
         <button

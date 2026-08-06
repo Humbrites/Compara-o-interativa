@@ -16,8 +16,14 @@ const SGS = 'https://api.bcb.gov.br/dados/serie/bcdata.sgs'
 
 /** Quanto tempo o dado serve antes de valer a pena buscar de novo. */
 const TTL_MS = 6 * 60 * 60 * 1000
-/** O Banco Central responde em menos de 1s; o resto e folga para tropeco. */
-const TIMEOUT_MS = 12000
+/**
+ * Com alguma serie faltando, o TTL cai: seis horas guardando a AUSENCIA de um
+ * indicador e o que fez o cartao da Selic sumir do cabecalho por uma tarde
+ * inteira depois de um unico HTTP 400.
+ */
+const TTL_FALHA_MS = 20 * 60 * 1000
+/** O Banco Central responde em ~1s; a segunda tentativa ganha mais folga. */
+const TIMEOUTS_MS = [12000, 20000]
 
 /**
  * As series. `pontos` e quantas leituras buscar: 13 fecham o acumulado de 12
@@ -32,10 +38,13 @@ const SERIES = [
     nome: 'Selic',
     descricao: 'meta do Copom',
     serie: 432,
-    // ⚠️ A 432 recusa `ultimos/N` acima de ~30 (HTTP 400) e ainda publica a
-    // meta VIGENTE com data no futuro. Por periodo o historico vem inteiro e
-    // o filtro de data corta o que ainda nao aconteceu.
-    janelaDias: 420,
+    // ⚠️ A 432 nao aceita `ultimos/N`: acima de ~30 responde HTTP 400 e ate
+    // com 30 devolve `{"erro":{}}` em HTTP 200. E ainda publica a meta
+    // VIGENTE com data no futuro. Por periodo o historico vem inteiro e o
+    // filtro de data corta o que ainda nao aconteceu. Seis meses bastam para
+    // achar a ultima mudanca (o Copom se reune a cada 45 dias) e a consulta
+    // fica na metade do tempo de uma janela de dois anos.
+    janelaDias: 180,
     formato: 'percentual',
     unidade: 'a.a.',
     // A meta so muda em reuniao do Copom: comparar com ontem daria sempre 0.
@@ -128,16 +137,19 @@ function urlDaSerie(config, agora) {
 async function buscarSerie(config, agora) {
   const url = urlDaSerie(config, agora)
 
-  // Uma segunda tentativa cobre o tropeco de rede; duas ja seria insistir.
+  // Uma segunda tentativa (com mais folga no relogio) cobre o tropeco de
+  // rede; duas ja seria insistir.
   let ultimoErro = null
-  for (let tentativa = 0; tentativa < 2; tentativa++) {
+  for (const timeout of TIMEOUTS_MS) {
     try {
       const resposta = await fetch(url, {
-        signal: AbortSignal.timeout(TIMEOUT_MS),
+        signal: AbortSignal.timeout(timeout),
         headers: { accept: 'application/json' },
       })
       if (!resposta.ok) throw new Error(`série ${config.serie}: HTTP ${resposta.status}`)
 
+      // ⚠️ O SGS responde `{"erro":{}}` com HTTP 200 em consulta que ele nao
+      // aceita — sem esta checagem viraria "sem dados" so no `.length`.
       const dados = await resposta.json()
       if (!Array.isArray(dados) || dados.length === 0) throw new Error(`série ${config.serie}: sem dados`)
 
@@ -250,23 +262,42 @@ export function criarServicoIndicadores({ dataDir, log }) {
     const indicadores = []
     const falhas = []
     resultados.forEach((resultado, indice) => {
-      if (resultado.status === 'fulfilled') indicadores.push(resultado.value)
-      else falhas.push({ chave: SERIES[indice].chave, motivo: String(resultado.reason?.message || resultado.reason) })
+      const config = SERIES[indice]
+      if (resultado.status === 'fulfilled') {
+        indicadores.push(resultado.value)
+        return
+      }
+
+      falhas.push({ chave: config.chave, motivo: String(resultado.reason?.message || resultado.reason) })
+
+      // A serie que falhou reaproveita a ULTIMA leitura boa em vez de sumir da
+      // faixa: um numero de ontem, marcado como defasado, informa mais que um
+      // cartao que simplesmente nao existe.
+      const anterior = cache?.indicadores?.find((i) => i.chave === config.chave)
+      if (anterior) indicadores.push({ ...anterior, defasado: true })
     })
 
-    if (indicadores.length === 0) {
+    // Ninguem respondeu: nao adianta devolver o cache inteiro carimbado de
+    // agora — isso diria que os numeros sao de hoje. Erra alto e deixa o
+    // `obter` cair no cache com `stale: true`, que e o aviso honesto.
+    if (indicadores.every((i) => i.defasado)) {
       throw new Error(falhas[0]?.motivo || 'nenhum indicador respondeu')
     }
 
-    // Uma serie fora do ar nao derruba a faixa inteira: as outras vao ao ar e
-    // o front mostra so o que chegou.
     if (falhas.length > 0) log?.warn({ falhas }, 'indicadores parcialmente indisponíveis')
+
+    // A ordem e sempre a das SERIES — o reaproveitado entra no lugar dele.
+    indicadores.sort(
+      (a, b) =>
+        SERIES.findIndex((s) => s.chave === a.chave) - SERIES.findIndex((s) => s.chave === b.chave),
+    )
 
     return {
       atualizadoEm: new Date().toISOString(),
       fonte: 'Banco Central do Brasil · SGS',
       indicadores,
       falhas,
+      defasados: indicadores.filter((i) => i.defasado).map((i) => i.chave),
     }
   }
 
@@ -279,7 +310,10 @@ export function criarServicoIndicadores({ dataDir, log }) {
     await lerDoDisco()
 
     const idade = cache ? Date.now() - new Date(cache.atualizadoEm).getTime() : Infinity
-    if (!forcar && cache && idade < TTL_MS) return { ...cache, doCache: true, stale: false }
+    // Cache incompleto vale 20 minutos, nao 6 horas: a serie que faltou tem de
+    // ganhar nova chance logo.
+    const validade = cache?.falhas?.length ? TTL_FALHA_MS : TTL_MS
+    if (!forcar && cache && idade < validade) return { ...cache, doCache: true, stale: false }
 
     if (!emVoo) {
       emVoo = buscarTudo()
