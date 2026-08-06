@@ -1,115 +1,215 @@
 /* ==========================================================================
-   Indicadores (KPIs)
+   Indicadores de mercado (faixa do cabecalho)
+
+   Substituiu os cartoes de KPI do dashboard em 06/08. Os cartoes esticam
+   igualmente (flex 1 1 0) para ocupar bem tanto o notebook quanto o
+   ultrawide, e a faixa rola na horizontal antes de espremer o numero.
    ========================================================================== */
 
-.kpis {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: var(--e3);
-  padding: var(--e4) var(--e5);
-  background: var(--fundo);
-  border-bottom: 1px solid var(--borda);
-  flex-shrink: 0;
-}
-
-.kpi {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  padding: var(--e3) var(--e4);
-  background: var(--superficie);
-  border: 1px solid var(--borda);
-  border-radius: var(--raio);
-  box-shadow: var(--sombra-xs);
-  transition: box-shadow var(--transicao), transform var(--transicao);
-  min-width: 0;
-  animation: surgir var(--transicao-lenta) both;
-}
-
-.kpi:hover {
-  box-shadow: var(--sombra);
-  transform: translateY(-1px);
-}
-
-/* Cartao que abre alguma coisa: texto alinhado e affordance no hover. */
-.kpi--clicavel {
-  text-align: left;
-  border-color: var(--borda-forte);
-}
-
-.kpi--clicavel:hover {
-  border-color: var(--marca-400);
-  background: var(--marca-50);
-}
-
-.kpi__seta {
-  margin-left: auto;
-  display: inline-flex;
-  color: var(--texto-3);
-  opacity: 0;
-  transform: translateX(-3px);
-  transition: opacity var(--transicao), transform var(--transicao);
-}
-
-.kpi--clicavel:hover .kpi__seta {
-  opacity: 1;
-  transform: none;
-}
-
-.kpi__topo {
+.indicadores {
   display: flex;
   align-items: center;
-  gap: 5px;
-  color: var(--texto-3);
+  gap: var(--e4);
+  /* Margem negativa: a linha divisoria atravessa o cabecalho inteiro. */
+  margin: 0 calc(var(--e6) * -1);
+  padding: var(--e3) var(--e6);
+  border-top: 1px solid var(--borda);
+  background: var(--superficie-2);
 }
 
-.kpi__rotulo {
+.indicadores__faixa {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: var(--e2);
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.indicador {
+  flex: 1 1 0;
+  min-width: 150px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px var(--e3);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-sm);
+  background: var(--superficie);
+  animation: surgir var(--transicao) both;
+}
+
+.indicador__topo {
+  display: flex;
+  align-items: baseline;
+  gap: var(--e2);
+  min-width: 0;
+}
+
+.indicador__nome {
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
-  /* Sem espacamento extra o rotulo cabe inteiro mesmo com o painel aberto. */
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  letter-spacing: 0.04em;
+  color: var(--texto-2);
 }
 
-.kpi__valor {
-  font-size: 19px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.2;
-}
-
-.kpi__detalhe {
-  font-size: 11.5px;
+.indicador__periodo {
+  font-size: 10px;
   color: var(--texto-3);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-weight: 500;
 }
 
-.kpi--barato .kpi__valor,
-.kpi--barato .kpi__topo {
+.indicador__linha {
+  display: flex;
+  align-items: baseline;
+  gap: var(--e2);
+  flex-wrap: wrap;
+}
+
+.indicador__valor {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+
+.indicador__variacao {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 5px;
+  border-radius: var(--raio-pill);
+  white-space: nowrap;
+}
+
+.indicador__variacao--alta {
   color: var(--vitoria);
+  background: var(--vitoria-fundo);
 }
 
-.kpi--caro .kpi__valor,
-.kpi--caro .kpi__topo {
-  color: var(--alerta);
+.indicador__variacao--baixa {
+  color: var(--perigo);
+  background: var(--perigo-fundo);
 }
 
-@media (max-width: 1400px) {
-  .kpis {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+.indicador__variacao--estavel {
+  color: var(--texto-3);
+  background: var(--neutro-fundo);
+}
+
+.indicador__rodape {
+  font-size: 10.5px;
+  color: var(--texto-3);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Enquanto carrega: o mesmo tamanho do cartao real, sem pular o layout. */
+.indicador--esqueleto {
+  gap: 6px;
+  justify-content: center;
+}
+
+.esqueleto {
+  display: block;
+  height: 10px;
+  border-radius: var(--raio-pill);
+  background: linear-gradient(90deg, var(--superficie-3), var(--fundo), var(--superficie-3));
+  background-size: 200% 100%;
+  animation: brilho 1.4s ease-in-out infinite;
+}
+
+.esqueleto--curto {
+  width: 44%;
+}
+
+.esqueleto--largo {
+  width: 78%;
+  height: 15px;
+}
+
+@keyframes brilho {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
   }
 }
 
-@media (max-width: 720px) {
-  .kpis {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+.indicadores__erro {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  font-size: 12.5px;
+  color: var(--perigo);
+  padding: var(--e2) var(--e3);
+  border: 1px solid var(--perigo);
+  border-radius: var(--raio-sm);
+  background: var(--perigo-fundo);
+}
+
+.indicadores__rodape {
+  display: flex;
+  align-items: center;
+  gap: var(--e1);
+  flex-shrink: 0;
+}
+
+.indicadores__carimbo {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--texto-3);
+  white-space: nowrap;
+}
+
+.indicadores__carimbo--velho {
+  color: var(--alerta);
+  font-weight: 600;
+}
+
+/* Contador ao lado do rotulo do botao (ex.: Empreendimentos · 12). */
+.btn__contador {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--raio-pill);
+  background: var(--marca-100);
+  color: var(--marca-600);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 1080px) {
+  .indicador {
+    min-width: 140px;
+  }
+}
+
+/* Notebook baixo (768px de altura): o cabecalho nao pode comer a tela. */
+@media (max-height: 820px) {
+  .indicadores {
+    padding-top: var(--e2);
+    padding-bottom: var(--e2);
+  }
+
+  .indicador__valor {
+    font-size: 15.5px;
   }
 }
 
@@ -536,20 +636,27 @@
   line-height: 1.25;
 }
 
+/* O painel respira: uma pilha de blocos separados pelo mesmo intervalo, em
+   vez de margens diferentes em cada pedaco. */
 .detalhe {
   padding: var(--e5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--e4);
   animation: surgir var(--transicao-lenta) both;
 }
 
 .detalhe__cabecalho {
-  margin-bottom: var(--e4);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .detalhe__nome {
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: -0.015em;
-  line-height: 1.25;
+  font-size: 21px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
 }
 
 .detalhe__construtora {
@@ -575,49 +682,79 @@
   margin-top: var(--e3);
 }
 
-.destaque-valor {
-  display: flex;
-  align-items: baseline;
+/* O dinheiro em primeiro plano: preco de entrada a esquerda, m² a direita. */
+.preco {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: var(--e2);
   padding: var(--e4);
-  margin-bottom: var(--e4);
   background: linear-gradient(135deg, var(--marca-50), var(--superficie-2));
   border: 1px solid var(--marca-100);
   border-radius: var(--raio-lg);
 }
 
-.destaque-valor__numero {
+.preco__bloco {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+/* O segundo numero nao compete com o primeiro: divisor e tom mais leve. */
+.preco__bloco--secundario {
+  padding-left: var(--e4);
+  border-left: 1px solid var(--marca-100);
+}
+
+.preco__rotulo {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--texto-3);
+}
+
+.preco__valor {
   font-size: 24px;
   font-weight: 750;
   letter-spacing: -0.025em;
   color: var(--marca-700);
   font-variant-numeric: tabular-nums;
+  line-height: 1.2;
 }
 
-.destaque-valor__rotulo {
-  font-size: 12px;
-  color: var(--texto-2);
-  font-weight: 600;
+.preco__valor--menor {
+  font-size: 16px;
+  color: var(--texto);
 }
 
+.preco__dica {
+  font-size: 11.5px;
+  color: var(--texto-3);
+  font-weight: 500;
+}
+
+/* Um cartao por indicador da ficha: mais legivel que a lista corrida. */
 .ficha {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: var(--e1);
-  margin-bottom: var(--e5);
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: var(--e2);
 }
 
 .ficha__item {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
   padding: var(--e3);
+  border: 1px solid var(--borda);
   border-radius: var(--raio-sm);
-  transition: background var(--transicao);
+  background: var(--superficie-2);
+  transition: border-color var(--transicao);
+  min-width: 0;
 }
 
 .ficha__item:hover {
-  background: var(--superficie-2);
+  border-color: var(--borda-forte);
 }
 
 .ficha__rotulo {
@@ -642,24 +779,75 @@
   font-weight: 500;
 }
 
+/* Cada assunto e um cartao que abre e fecha: o painel comeca com o essencial
+   aberto e o resto recolhido, em vez de despejar tudo de uma vez. */
 .bloco {
-  margin-bottom: var(--e5);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-lg);
+  background: var(--superficie);
+  overflow: hidden;
+  transition: border-color var(--transicao), box-shadow var(--transicao);
 }
 
-.bloco__titulo {
+.bloco--aberto {
+  box-shadow: var(--sombra-xs);
+}
+
+.bloco__cabecalho {
   display: flex;
   align-items: center;
   gap: var(--e2);
+  padding-right: var(--e3);
+}
+
+/* O cabecalho inteiro e o alvo do clique — nao so o texto. */
+.bloco__botao {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  padding: var(--e3) var(--e4);
+  background: none;
+  border: 0;
+  font: inherit;
+  color: var(--texto-2);
+  cursor: pointer;
+  text-align: left;
+}
+
+.bloco__botao:hover {
+  color: var(--marca-600);
+}
+
+.bloco__titulo {
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--texto-3);
-  margin-bottom: var(--e3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.bloco__titulo .btn {
+.bloco__seta {
   margin-left: auto;
+  display: inline-flex;
+  color: var(--texto-3);
+}
+
+.bloco__corpo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e3);
+  padding: 0 var(--e4) var(--e4);
+  animation: surgir var(--transicao) both;
+}
+
+/* Os cartoes de dentro ja tem margem propria: aqui ela viraria buraco duplo. */
+.bloco__corpo .unidade:last-child,
+.bloco__corpo .fluxo:last-child {
+  margin-bottom: 0;
 }
 
 .observacao {
@@ -1584,11 +1772,11 @@
    ========================================================================== */
 
 /* Acoes do painel que abrem outra ferramenta. */
+/* Tres acoes lado a lado; empilham sozinhas quando o painel estreita. */
 .painel__ferramentas {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
   gap: var(--e2);
-  margin-bottom: var(--e5);
 }
 
 /* Atalho para puxar os dados de um imovel cadastrado. */
@@ -2445,6 +2633,20 @@
   }
 }
 
+/* Monitor largo: o painel cresce junto em vez de deixar o mapa esticar
+   sozinho — a ficha ganha uma terceira coluna e a leitura melhora. */
+@media (min-width: 1800px) {
+  :root {
+    --largura-painel: 520px;
+  }
+}
+
+@media (min-width: 2300px) {
+  :root {
+    --largura-painel: 580px;
+  }
+}
+
 @media (max-width: 900px) {
   .corpo {
     /* Em coluna unica o conjunto rola inteiro em vez de espremer as partes. */
@@ -2489,6 +2691,9 @@
 
   .topo {
     padding: 0 var(--e4);
+  }
+
+  .topo__linha {
     gap: var(--e2);
   }
 
@@ -2496,8 +2701,9 @@
     display: none;
   }
 
-  .kpis {
-    padding: var(--e3) var(--e4);
+  .indicadores {
+    margin: 0 calc(var(--e4) * -1);
+    padding: var(--e2) var(--e4);
   }
 }
 
@@ -2507,7 +2713,8 @@
     padding: 0 var(--e3);
   }
 
-  .topo__acoes .btn span {
+  /* So o rotulo some; o contador de empreendimentos continua legivel. */
+  .topo__acoes .btn span:not(.btn__contador) {
     display: none;
   }
 

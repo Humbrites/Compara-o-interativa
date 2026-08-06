@@ -44,8 +44,12 @@ npm run seed:limpar   # remove só os exemplos, preservando o que você cadastro
 e agrupa os marcadores em *clusters* quando há muitos empreendimentos próximos.
 Usa Leaflet com OpenStreetMap: **sem token, sem conta, sem custo**.
 
-**Painel de detalhes** (lado direito) — galeria de fotos, nome, construtora, localização,
-dormitórios, metragem, valor do m², status, entrega, as **unidades** e os fluxos de pagamento.
+**Painel de detalhes** (lado direito) — galeria de fotos e, na sequência da conversa de
+venda: **quem é o imóvel** (nome, construtora, localização e selos de status, entrega e
+unidades), **quanto custa** (o preço de entrada em destaque e a faixa do m²), **o que fazer
+com ele** (comparar, simular investimento, calcular o CUB) e, por último, os blocos que
+abrem e fecham — ficha técnica, unidades, observações e localização. Ficha e unidades
+começam abertas; o resto fica recolhido para a tela não despejar tudo de uma vez.
 A capa navega entre as fotos e um clique amplia em tela cheia (setas e Esc no teclado).
 
 **Comparativo A vs B** — a tela se divide comparando os dois empreendimentos.
@@ -57,21 +61,22 @@ também a tabela unidade × unidade (metragem, dormitórios, vagas, andar, posi�
 e faixa de valor do m²; busca por nome, construtora, cidade ou bairro (ignora acentos:
 "agua verde" encontra "Água Verde").
 
-**Indicadores** — quantidade de empreendimentos, preço médio do m², maior e menor
-metragem, mais barato e mais caro (esses dois são clicáveis e levam ao empreendimento).
+**Indicadores de mercado** — a faixa do cabeçalho traz Selic, dólar, IPCA, IGP-M, INCC e TR
+atualizados diariamente pelo Banco Central, cada um com a variação, a seta de tendência e o
+acumulado de 12 meses.
 
 **Calculadora do CUB** — dentro do cadastro, o botão **Calcular valor com CUB** simula
 a evolução das parcelas até o fim da obra e vira um fluxo de pagamento pronto.
 
-**Simulador de investimento** — o botão **Investimento** (no topo) e **Simular investimento**
-(no painel do imóvel) projetam quanto o imóvel pode render até a entrega, e exportam a
+**Simulador de investimento** — o botão **Investimento**, no painel do imóvel, projeta
+quanto ele pode render até a entrega (com ou sem a correção do CUB) e exporta a
 **apresentação em PDF** com os dados do empreendimento e os números da simulação.
 
 ---
 
-## Cadastro em três etapas
+## Cadastro em duas etapas
 
-O botão **Adicionar empreendimento** abre um formulário de três etapas (com o cadastro
+O botão **Adicionar empreendimento** abre um formulário de duas etapas (com o cadastro
 salvo, dá para pular de uma para outra clicando no título da etapa):
 
 **1. Dados do empreendimento** — nome (único campo obrigatório), construtora, cidade,
@@ -104,20 +109,70 @@ de pagamento**, abertos dentro do cartão dela.
 > **O valor do m² se preenche sozinho.** Assim que a **metragem total** e o **valor** estão
 > na tela, o campo aparece calculado (`valor ÷ metragem total`) e é esse número que fica
 > gravado. Sem metragem total, a conta usa a privativa — e a dica do campo diz qual base
-> entrou. O preço vem do **valor da unidade**; se ele estiver em branco, vale o valor do
-> imóvel que a **tabela de pagamento** guardou (o que a calculadora do CUB grava ao gerar o
-> fluxo). Digitar outro número ali assume o comando — a dica vira "informado à mão" e
-> aparece um **"Voltar ao cálculo automático"**. Reabrindo a unidade, um m² que bate com a
-> conta continua acompanhando o valor; um que foi ajustado à mão é preservado.
+> entrou. O preço vem do **valor da unidade**; se ele estiver em branco, vale o **valor
+> total do imóvel** informado na tabela de pagamento — inclusive enquanto ele ainda está
+> sendo digitado, na unidade nova ou no fluxo aberto na edição: **não há botão a apertar**.
+> A conta aparece embaixo do campo (`R$ 800.000 ÷ 80 m² = R$ 10.000/m²`), então dá para
+> conferir de onde saiu o número. Digitar outro valor ali assume o comando — a dica vira
+> "informado à mão" e aparece um **"Voltar ao cálculo automático"**. Reabrindo a unidade,
+> um m² que bate com a conta continua acompanhando o valor; um que foi ajustado à mão é
+> preservado.
+>
+> ⚠️ **Separador de milhar**: "800.000" é lido como oitocentos mil, tanto na tela quanto na
+> API. Antes disso o ponto virava decimal e o campo gravava **800** — o m² saía mil vezes
+> menor, calado.
 >
 > Com unidades cadastradas, o painel passa a mostrar a **faixa** delas (metragem,
 > dormitórios e vagas) no lugar dos campos gerais.
 
-**3. Fluxos de pagamento** — as tabelas que valem para o **empreendimento inteiro**.
-Um empreendimento pode ter **vários** (tabela padrão, plano obra, à vista…), cada um com
-entrada, parcelamento, reforços, chaves, financiamento, descrição livre e observações.
-No comparativo, o seletor de fluxo mostra primeiro as tabelas da unidade escolhida e
-depois as gerais.
+**Fluxo de pagamento** — a tabela de venda mora **dentro da unidade** e a mesma unidade
+pode ter várias (tabela padrão, plano obra, proposta de um cliente…). Cada uma traz o
+**valor total do imóvel**, entrada, parcelamento, reforços, chaves, financiamento,
+descrição livre e observações. O valor total é o campo que define o preço da unidade
+quando ela não tem valor próprio — e é dele que sai o valor do m².
+
+> As **tabelas gerais** (do empreendimento inteiro) são o formato antigo. O painel mostra
+> um bloco com elas enquanto sobrar alguma, com "copiar para a unidade…" e excluir; a
+> migração é manual, na sua mão. No comparativo, o seletor de fluxo mostra primeiro as
+> tabelas da unidade escolhida e depois as gerais.
+
+---
+
+## Indicadores de mercado
+
+A faixa do cabeçalho mostra seis índices que aparecem em toda conversa de venda:
+
+| Indicador | O que é | Série no SGS |
+|---|---|---|
+| **Selic** | meta definida pelo Copom, em % ao ano | 432 |
+| **Dólar** | PTAX de venda, em R$ | 1 |
+| **IPCA** | inflação oficial do mês | 433 |
+| **IGP-M** | o índice do reajuste de aluguel | 189 |
+| **INCC** | custo da construção (INCC-DI/FGV) | 192 |
+| **TR** | taxa referencial do mês | 7811 |
+
+Cada cartão traz o valor, a variação em relação à leitura anterior (**verde para alta,
+vermelho para baixa**, com seta), e o **acumulado de 12 meses** nos índices mensais. A data
+e a hora da última atualização ficam à direita, junto do botão de atualizar agora.
+
+**De onde vem:** da API pública do **Banco Central** (`api.bcb.gov.br`, o SGS) — sem
+cadastro, sem token, sem contrato. Quem consulta é a **nossa API**, não o navegador: assim
+não há CORS, uma consulta serve todas as abas abertas e o número não depende da rede de
+quem está com a tela aberta.
+
+**Cache e falhas:** o resultado fica em `api/data/indicadores.json` (fora do Git) com
+validade de **6 horas** — a tela revalida ao abrir e a cada 30 minutos, e o servidor decide
+se vale mesmo consultar. Se o Banco Central não responder, a faixa mostra o **último dado
+bom** com o aviso *"sem conexão — dados de &lt;data&gt;"*, em vez de sumir ou mentir que o
+número é de agora. Uma série fora do ar não derruba as outras (cada uma é independente), e
+enquanto os números não chegam a faixa mostra o esqueleto dos cartões.
+
+> ⚠️ Duas armadilhas do SGS já tratadas: a série da Selic **recusa** `ultimos/N` acima de
+> ~30 (HTTP 400) e publica a meta vigente com **data no futuro** — por isso ela é buscada
+> por período e as leituras adiante de hoje são descartadas.
+
+`GET /api/indicadores` devolve tudo pronto; `?forcar=1` fura o cache (é o que o botão de
+atualizar faz).
 
 ---
 
@@ -188,27 +243,36 @@ não zera o resto da simulação.
 
 ## Simulador de investimento
 
-O botão **Investimento**, no topo, abre um módulo **independente**: o cálculo não depende
-do cadastro nem da calculadora do CUB, então serve para qualquer imóvel — inclusive um que
-nem está aqui.
+O botão **Investimento**, no painel do imóvel, abre um módulo **independente**: o cálculo
+não depende do cadastro nem da calculadora do CUB, então serve para qualquer imóvel —
+inclusive um que nem está aqui ("Digitar tudo à mão").
 
 Se o imóvel *estiver* cadastrado, dá para poupar digitação: o seletor **"Usar um imóvel
-cadastrado"** preenche o **valor de compra**, o **prazo** (meses até a entrega prevista) e a
-**entrada**, quando algum fluxo tiver esse dado. O que já foi pago, o saldo devedor e a
-expectativa de valorização continuam por sua conta.
+cadastrado"** preenche o **valor de compra**, o **prazo** (meses até a entrega prevista), a
+**entrada**, a **parcela mensal**, o **número de parcelas** e os **reforços** — tudo da
+tabela de venda daquela unidade. O que já foi pago e a expectativa de valorização
+continuam por sua conta.
 
 > **O valor de compra segue a unidade escolhida.** Trocar de unidade troca o preço na hora —
 > e o preço dela é o *valor da unidade* ou, na falta dele, o valor do imóvel guardado na
-> **tabela de pagamento**. Sem unidade escolhida vale a **mais barata**; se nenhuma tiver
-> preço, a tabela geral do empreendimento e, por último, `valor do m² × metragem mínima`.
+> **tabela de pagamento**. Sem unidade escolhida vale a **mais barata** — e a tabela de
+> venda vem da **mesma** unidade, senão a parcela seria de um imóvel e o preço de outro.
+> Se nenhuma tiver preço, entra a tabela geral do empreendimento e, por último,
+> `valor do m² × metragem mínima`.
 > A lista de unidades mostra o preço de cada uma, e o aviso abaixo do seletor diz qual
 > número entrou. O painel do imóvel tem o botão
 **Simular investimento**, que já abre com ele escolhido — e "Digitar tudo à mão" volta ao
 modo livre a qualquer momento.
 
 **O que você informa:** valor de compra (obrigatório), entrada, **valor já pago** (entrada
-+ parcelas + reforços + balões — é o que define a rentabilidade), tempo até a entrega (em
-**meses ou anos**) e a valorização anual esperada, com atalhos de 5% a 20%.
++ parcelas + reforços + balões pagos **até hoje** — é o que define a rentabilidade), tempo
+até a entrega (em **meses ou anos**) e a valorização anual esperada, com atalhos de 5% a 20%.
+
+**Pagamentos até a entrega** (bloco opcional) — parcela mensal, quantas parcelas ainda
+faltam (em branco = até a entrega), quantidade de reforços e o valor de cada um. É isso que
+faz a dívida **andar** durante a obra: o saldo devedor cai a cada pagamento em vez de ficar
+parado até a entrega. A linha abaixo mostra o total previsto sem correção. Sem preencher
+nada, a simulação se comporta como antes (dívida parada).
 
 O **saldo devedor sai da conta sozinho**: `valor de compra − valor já pago`, com piso em
 zero (pagar mais que o combinado não vira dívida negativa). Ele acompanha o que você
@@ -225,8 +289,10 @@ saldo calculado sairia maior que o real.
 |---|---|
 | Valor estimado na entrega | compra corrigida pela valorização |
 | Ganho patrimonial | entrega − compra |
-| Patrimônio líquido | entrega − saldo devedor |
-| Lucro potencial | entrega − valor já pago (**não** desconta a dívida) |
+| Saldo na entrega | o que sobra da dívida depois do cronograma da obra |
+| Investido até a entrega | valor já pago + parcelas e reforços do período |
+| Patrimônio líquido | entrega − saldo na entrega |
+| Lucro potencial | entrega − investido (**não** desconta a dívida) |
 | Rentabilidade | lucro ÷ investido × 100 |
 | ROI | patrimônio líquido ÷ investido — "R$ X,XX para cada R$ 1,00 investido" |
 
@@ -241,26 +307,45 @@ divisão por zero. O gráfico mostra a curva de valorização até a entrega.
 ### Considerar o CUB — as duas conclusões
 
 Logo abaixo da valorização anual há a opção **"Considerar a correção do CUB no saldo
-devedor"**. Marcada, abre o campo do **CUB mensal** (% ao mês, com os mesmos atalhos da
-calculadora — 0,35% a 1,00% — e a correção acumulada no período ao lado), e o resultado
-passa a sair em **duas conclusões lado a lado**:
+devedor"**. Marcada, abre o campo da **correção (CUB/INCC)** — em **% ao mês ou % ao ano**,
+como o índice estiver na sua mão, com a conversão da outra unidade logo na dica e a correção
+acumulada no período ao lado dos atalhos. O resultado passa a sair em **duas conclusões
+lado a lado**.
+
+**A conta é um cronograma, não uma fórmula fechada.** Mês a mês, na ordem em que a
+construtora fecha o boleto:
+
+```
+correção   = saldo × índice          (o saldo é corrigido primeiro)
+parcela    = parcela base × (1 + índice)^mês   (reajustada pelo mesmo índice)
+saldo      = saldo + correção − pagamento      (nunca abaixo de zero)
+```
 
 | | Só o empreendimento | Com o CUB |
 |---|---|---|
-| Saldo | fica parado até a entrega | `saldo × (1 + CUB)^meses` |
-| Patrimônio líquido | entrega − saldo | entrega − saldo corrigido |
-| Lucro potencial | entrega − investido | entrega − investido − correção |
-| Rentabilidade e ROI | sobre o investido | sobre o mesmo investido |
+| Índice sobre a dívida | nenhum | corrige todo mês |
+| Parcelas | valor combinado | reajustadas pelo mesmo índice |
+| Amortização | a mesma | a mesma |
+| Valorização do imóvel | a mesma | a mesma |
 
-Muda **uma coisa só**: a dívida. A valorização do imóvel é a mesma nas duas leituras — o
-CUB corrige o que ainda se deve, mês a mês, como a construtora faz, então o patrimônio e o
-lucro caem exatamente o tanto que a correção custa. O que já foi pago não é corrigido:
-aquele dinheiro já saiu. Cada quadro fecha com a frase que se lê para o cliente, e a linha
-abaixo diz quanto o CUB acrescentou à dívida. Imóvel quitado não tem o que corrigir — a
-tela avisa que as duas conclusões dão no mesmo.
+Muda **uma coisa só**: o índice. Por isso as duas conclusões mostram também o **pago
+durante a obra** e o **investido até a entrega** — com CUB, sai mais dinheiro do bolso nas
+parcelas reajustadas, e esconder isso comparando só o saldo final contaria metade da
+história. Cada quadro fecha com a frase que se lê para o cliente, e a linha abaixo resume
+quanto o índice acrescentou à dívida, quanto disso saiu do bolso e quanto o patrimônio
+líquido encolheu.
+
+Abaixo das conclusões, a seção **Evolução do saldo devedor** mostra o gráfico da dívida até
+a entrega e a tabela ano a ano (saldo no início, correção, pago no mês, saldo no fim e o
+saldo *sem* correção para comparar) — com "ver mês a mês" para abrir o cronograma inteiro.
+Sem saldo devedor não há o que corrigir: a tela avisa que as duas conclusões dão no mesmo.
 
 Desmarcada a opção, o campo some, o percentual é esquecido e volta a existir uma leitura
-só. As duas conclusões vão para o PDF junto com o CUB considerado.
+só. As duas conclusões e a evolução da obra vão para o PDF.
+
+> **Por que o índice não pode ser dividido por 12.** "12% ao ano" são 0,9489% ao mês
+> (`(1,12)^(1/12) − 1`), não 1%. O campo converte por raiz e mostra o resultado na dica —
+> digitar o índice anual num campo mensal inflava a dívida em dezenas de pontos.
 
 ### Exportar PDF (a apresentação para o cliente)
 
@@ -321,9 +406,11 @@ compara-interativa/
 │   ├── src/
 │   │   ├── db.js            schema das tabelas e sanitização dos campos
 │   │   ├── server.js        rotas REST
+│   │   ├── indicadores.js   índices do Banco Central (busca, cache e fallback)
 │   │   └── seed.js          exemplos opcionais
 │   └── data/
 │       ├── compara.db       o banco inteiro (criado no 1º start, fora do Git)
+│       ├── indicadores.json cache dos índices de mercado (fora do Git)
 │       └── uploads/         as fotos enviadas (fora do Git)
 └── web/                     interface (React + TypeScript + Vite)
     └── src/
@@ -332,7 +419,7 @@ compara-interativa/
         │   ├── comparar.ts  regras do "melhor indicador"
         │   ├── cub.ts       simulação do CUB (fonte de índice plugável)
         │   ├── exportarSimulacao.ts  CSV para Excel e folha de impressão"
-        │   ├── dashboard.ts filtros, busca e cálculo dos indicadores
+        │   ├── dashboard.ts filtros e busca
         │   ├── format.ts    formatação em pt-BR (R$, m², datas)
         │   ├── imagens.ts   capa e galeria de cada empreendimento
         │   ├── investimento.ts  simulador de investimento (módulo à parte)
@@ -373,6 +460,7 @@ valendo quando as unidades entraram.
 | `POST` | `/api/empreendimentos/:id/imagens` | envia fotos (multipart, várias de uma vez) |
 | `PUT` | `/api/empreendimentos/:id/imagens/ordem` | reordena — o primeiro id vira a capa |
 | `DELETE` | `/api/imagens/:id` | exclui a foto e o arquivo do disco |
+| `GET` | `/api/indicadores` | índices de mercado (cache de 6h; `?forcar=1` refaz a consulta) |
 | `GET` | `/uploads/<arquivo>` | serve a foto enviada |
 | `GET` | `/api/health` | status da API |
 

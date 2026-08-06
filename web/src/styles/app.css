@@ -156,17 +156,23 @@ img {
 
 /* --- Topo ---------------------------------------------------------------- */
 
+/* Duas faixas: a linha da marca e, abaixo, os indicadores de mercado. */
 .topo {
   display: flex;
-  align-items: center;
-  gap: var(--e4);
-  height: var(--altura-topo);
+  flex-direction: column;
   padding: 0 var(--e6);
   background: var(--superficie);
   border-bottom: 1px solid var(--borda);
   box-shadow: var(--sombra-xs);
   z-index: 500;
   flex-shrink: 0;
+}
+
+.topo__linha {
+  display: flex;
+  align-items: center;
+  gap: var(--e4);
+  height: var(--altura-topo);
 }
 
 .topo__marca {

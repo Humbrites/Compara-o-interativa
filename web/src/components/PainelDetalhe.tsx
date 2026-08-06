@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { Empreendimento, FluxoPagamento, Unidade } from '../types'
 import { api } from '../lib/api'
 import {
@@ -22,6 +22,16 @@ import { FluxosDoEmpreendimento, fluxoParaEnvio, fluxoParaFormulario } from './F
 import { Galeria } from './Galeria'
 import { Selo } from './ui'
 
+/**
+ * O painel do empreendimento.
+ *
+ * A leitura vai do geral ao detalhe e sempre na mesma ordem: quem é o imóvel,
+ * quanto custa, o que fazer com ele e, só então, a ficha e as unidades. O que
+ * é secundário (observações, endereço, coordenadas, tabelas do formato antigo)
+ * fica em blocos recolhidos — abertos, todos juntos, davam a sensação de
+ * excesso que motivou o redesenho.
+ */
+
 function ItemFicha({ icone, rotulo, valor }: { icone: NomeIcone; rotulo: string; valor: string }) {
   const vazio = valor === TRACO
   return (
@@ -32,6 +42,47 @@ function ItemFicha({ icone, rotulo, valor }: { icone: NomeIcone; rotulo: string;
       </span>
       <span className={`ficha__valor${vazio ? ' ficha__valor--fraco' : ''}`}>{valor}</span>
     </div>
+  )
+}
+
+/**
+ * Bloco recolhível. O cabeçalho é sempre um botão do tamanho da linha inteira
+ * (alvo grande de clique) e leva o contador junto — dá para saber o que tem
+ * dentro sem abrir.
+ */
+function Bloco({
+  icone,
+  titulo,
+  contador,
+  acao,
+  aberto,
+  onAlternar,
+  children,
+}: {
+  icone: NomeIcone
+  titulo: string
+  contador?: number
+  acao?: ReactNode
+  aberto: boolean
+  onAlternar: () => void
+  children: ReactNode
+}) {
+  return (
+    <section className={`bloco${aberto ? ' bloco--aberto' : ''}`}>
+      <div className="bloco__cabecalho">
+        <button type="button" className="bloco__botao" onClick={onAlternar} aria-expanded={aberto}>
+          <Icone nome={icone} tamanho={14} />
+          <span className="bloco__titulo">{titulo}</span>
+          {contador !== undefined && <span className="bloco__contador">{contador}</span>}
+          <span className="bloco__seta">
+            <Icone nome={aberto ? 'seta_cima' : 'seta_baixo'} tamanho={14} />
+          </span>
+        </button>
+        {acao}
+      </div>
+
+      {aberto && <div className="bloco__corpo">{children}</div>}
+    </section>
   )
 }
 
@@ -71,7 +122,7 @@ export function PainelDetalhe({
   const fotos = useMemo(() => fotosDe(e), [e])
   const resumo = useMemo(() => resumoUnidades(e.unidades), [e.unidades])
   const temUnidades = e.unidades.length > 0
-  // A galeria some quando todo link quebra; ai o nome volta para o cabecalho.
+  // A galeria some quando todo link quebra; ai a capa vazia entra no lugar.
   const [galeriaVazia, setGaleriaVazia] = useState(false)
   useEffect(() => setGaleriaVazia(false), [e.id])
   const temCapa = fotos.length > 0 && !galeriaVazia
@@ -82,6 +133,31 @@ export function PainelDetalhe({
   // Para qual unidade cada tabela antiga vai ser copiada.
   const [destino, setDestino] = useState<Record<number, string>>({})
   const [copiando, setCopiando] = useState<number | null>(null)
+
+  // O que abre por padrao: o que o corretor olha em toda visita.
+  const [blocos, setBlocos] = useState({
+    ficha: true,
+    unidades: true,
+    tabelas: false,
+    notas: false,
+    local: false,
+  })
+  useEffect(() => setBlocos({ ficha: true, unidades: true, tabelas: false, notas: false, local: false }), [e.id])
+  const alternar = (chave: keyof typeof blocos) =>
+    setBlocos((atual) => ({ ...atual, [chave]: !atual[chave] }))
+
+  /**
+   * O numero que abre a conversa de venda: o preço. Com unidades vale a faixa
+   * delas (que já considera o valor guardado na tabela de pagamento); sem
+   * unidades, o valor do m² cadastrado no empreendimento.
+   */
+  const precoPrincipal = temUnidades && resumo.valor.min !== null ? fmtMoeda(resumo.valor.min) : null
+  const m2Principal =
+    temUnidades && resumo.valorM2.min !== null
+      ? fmtFaixaMoeda(resumo.valorM2.min, resumo.valorM2.max)
+      : e.valor_m2 !== null
+        ? fmtMoeda(e.valor_m2)
+        : null
 
   /** Troca os fluxos de uma unidade sem mexer no resto da lista. */
   function trocarFluxos(unidadeId: number, fluxos: FluxoPagamento[]) {
@@ -104,6 +180,7 @@ export function PainelDetalhe({
     try {
       const copia = await api.criarFluxo(fluxoParaEnvio(fluxoParaFormulario(fluxo), e.id, unidade.id))
       trocarFluxos(unidade.id, [...unidade.fluxos, copia])
+      setBlocos((atual) => ({ ...atual, unidades: true }))
       setFluxosAbertos(unidade.id)
       avisar(`Tabela copiada para ${rotuloUnidade(unidade)}`)
     } catch (erro) {
@@ -144,13 +221,10 @@ export function PainelDetalhe({
       </div>
 
       <div className="painel__conteudo">
-        {fotos.length > 0 && (
-          <Galeria key={e.id} fotos={fotos} nome={e.nome} tipo={e.tipo} onVazia={setGaleriaVazia} />
-        )}
+        {temCapa && <Galeria key={e.id} fotos={fotos} nome={e.nome} tipo={e.tipo} onVazia={setGaleriaVazia} />}
 
-        {/* Sem foto — ou com todos os links quebrados — o lugar da capa avisa em
-            vez de sumir, senao parece que o painel carregou pela metade. A faixa
-            e mais baixa que a capa e nao repete o nome: ele volta para o cabecalho. */}
+        {/* Sem foto — ou com todos os links quebrados — o lugar da capa avisa
+            em vez de sumir, senao parece que o painel carregou pela metade. */}
         {!temCapa && (
           <div className="capa-vazia">
             <Icone nome="imagem" tamanho={20} />
@@ -159,23 +233,21 @@ export function PainelDetalhe({
         )}
 
         <div className="detalhe">
+          {/* 1. Quem é o imóvel. O nome aparece sempre, com ou sem capa: era a
+              única informação que mudava de lugar conforme a galeria. */}
           <header className="detalhe__cabecalho">
-            {!temCapa && <h2 className="detalhe__nome">{e.nome}</h2>}
-            {e.construtora && <div className="detalhe__construtora">{e.construtora}</div>}
+            <h2 className="detalhe__nome">{e.nome}</h2>
+            {(e.construtora || e.tipo) && (
+              <div className="detalhe__construtora">{[e.construtora, e.tipo].filter(Boolean).join(' · ')}</div>
+            )}
             {local && (
               <div className="detalhe__local">
                 <Icone nome="local" tamanho={13} />
                 {local}
               </div>
             )}
-            {e.endereco && (
-              <div className="detalhe__local">
-                <Icone nome="pino" tamanho={13} />
-                {e.endereco}
-              </div>
-            )}
+
             <div className="detalhe__selos">
-              {!temCapa && e.tipo && <Selo cor="cinza">{e.tipo}</Selo>}
               {e.status_obra && (
                 <Selo cor={corDoStatus(e.status_obra)} icone="obra">
                   {e.status_obra}
@@ -186,87 +258,122 @@ export function PainelDetalhe({
                   Entrega {fmtEntrega(e.entrega)}
                 </Selo>
               )}
+              {temUnidades && (
+                <Selo cor="cinza" icone="predio">
+                  {resumo.total} {resumo.total === 1 ? 'unidade' : 'unidades'}
+                  {resumo.disponiveis > 0 && ` · ${resumo.disponiveis} disponível${resumo.disponiveis > 1 ? 'is' : ''}`}
+                </Selo>
+              )}
             </div>
           </header>
 
-          {e.valor_m2 !== null && (
-            <div className="destaque-valor">
-              <span className="destaque-valor__numero">{fmtMoeda(e.valor_m2, true)}</span>
-              <span className="destaque-valor__rotulo">valor médio do m²</span>
+          {/* 2. Quanto custa. Um cartão só, com o número grande e o m² ao lado
+              — antes o valor médio do m² aparecia sozinho e o preço da unidade
+              ficava perdido lá embaixo, no meio da lista. */}
+          {(precoPrincipal || m2Principal) && (
+            <div className="preco">
+              {precoPrincipal && (
+                <div className="preco__bloco">
+                  <span className="preco__rotulo">
+                    {resumo.valor.max !== null && resumo.valor.max !== resumo.valor.min ? 'A partir de' : 'Valor'}
+                  </span>
+                  <span className="preco__valor">{precoPrincipal}</span>
+                  {resumo.valor.max !== null && resumo.valor.max !== resumo.valor.min && (
+                    <span className="preco__dica">até {fmtMoeda(resumo.valor.max)}</span>
+                  )}
+                </div>
+              )}
+              {m2Principal && (
+                <div className="preco__bloco preco__bloco--secundario">
+                  <span className="preco__rotulo">Valor do m²</span>
+                  <span className="preco__valor preco__valor--menor">{m2Principal}</span>
+                  <span className="preco__dica">{temUnidades ? 'entre as unidades' : 'cadastrado no empreendimento'}</span>
+                </div>
+              )}
             </div>
           )}
 
-          <div className="ficha">
-            <ItemFicha
-              icone="cama"
-              rotulo="Dormitórios"
-              valor={
-                temUnidades
-                  ? fmtFaixaInteiro(resumo.dormitorios.min, resumo.dormitorios.max)
-                  : fmtInteiro(e.dormitorios)
-              }
-            />
-            <ItemFicha icone="predio" rotulo="Suítes" valor={fmtInteiro(e.suites)} />
-            <ItemFicha icone="banheira" rotulo="Banheiros" valor={fmtInteiro(e.banheiros)} />
-            <ItemFicha
-              icone="carro"
-              rotulo="Vagas"
-              valor={temUnidades ? fmtFaixaInteiro(resumo.vagas.min, resumo.vagas.max) : fmtInteiro(e.vagas)}
-            />
-            <ItemFicha
-              icone="regua"
-              rotulo="Metragem"
-              valor={
-                temUnidades
-                  ? fmtFaixaMetragem(resumo.metragem.min, resumo.metragem.max)
-                  : fmtFaixaMetragem(e.metragem_min, e.metragem_max)
-              }
-            />
-            <ItemFicha
-              icone="grafico"
-              rotulo="Metragem máx."
-              valor={temUnidades ? fmtArea(resumo.metragem.max) : fmtArea(e.metragem_max)}
-            />
-            <ItemFicha icone="obra" rotulo="Status" valor={fmtTexto(e.status_obra)} />
-            <ItemFicha icone="calendario" rotulo="Entrega" valor={fmtEntrega(e.entrega)} />
-          </div>
-
-          {temUnidades && (
-            <p className="campo__dica" style={{ marginTop: 'calc(var(--e4) * -1 + var(--e2))', marginBottom: 'var(--e4)' }}>
-              <Icone nome="info" tamanho={12} /> Dormitórios, vagas e metragem vêm das unidades cadastradas.
-            </p>
-          )}
-
+          {/* 3. O que fazer com ele. */}
           <div className="painel__ferramentas">
             {podeComparar && (
-              <button type="button" className="btn btn--secundario btn--bloco" onClick={onCompararCom}>
+              <button type="button" className="btn btn--secundario" onClick={onCompararCom}>
                 <Icone nome="balanca" tamanho={15} />
-                Comparar com outro empreendimento
+                Comparar
               </button>
             )}
-
-            <button type="button" className="btn btn--secundario btn--bloco" onClick={onSimularInvestimento}>
+            <button type="button" className="btn btn--secundario" onClick={onSimularInvestimento}>
               <Icone nome="grafico" tamanho={15} />
-              Simular investimento
+              Investimento
             </button>
-
-            <button type="button" className="btn btn--secundario btn--bloco" onClick={onCalcularCub}>
-              <Icone nome="grafico" tamanho={15} />
-              Calcular valor com CUB
+            <button type="button" className="btn btn--secundario" onClick={onCalcularCub}>
+              <Icone nome="cartao" tamanho={15} />
+              CUB
             </button>
           </div>
 
-          <section className="bloco">
-            <h3 className="bloco__titulo">
-              <Icone nome="predio" tamanho={13} />
-              Unidades
-              {temUnidades && <span className="bloco__contador">{resumo.total}</span>}
+          {/* 4. A ficha. */}
+          <Bloco
+            icone="lista"
+            titulo="Ficha técnica"
+            aberto={blocos.ficha}
+            onAlternar={() => alternar('ficha')}
+          >
+            <div className="ficha">
+              <ItemFicha
+                icone="cama"
+                rotulo="Dormitórios"
+                valor={
+                  temUnidades
+                    ? fmtFaixaInteiro(resumo.dormitorios.min, resumo.dormitorios.max)
+                    : fmtInteiro(e.dormitorios)
+                }
+              />
+              <ItemFicha icone="predio" rotulo="Suítes" valor={fmtInteiro(e.suites)} />
+              <ItemFicha icone="banheira" rotulo="Banheiros" valor={fmtInteiro(e.banheiros)} />
+              <ItemFicha
+                icone="carro"
+                rotulo="Vagas"
+                valor={temUnidades ? fmtFaixaInteiro(resumo.vagas.min, resumo.vagas.max) : fmtInteiro(e.vagas)}
+              />
+              <ItemFicha
+                icone="regua"
+                rotulo="Metragem"
+                valor={
+                  temUnidades
+                    ? fmtFaixaMetragem(resumo.metragem.min, resumo.metragem.max)
+                    : fmtFaixaMetragem(e.metragem_min, e.metragem_max)
+                }
+              />
+              <ItemFicha
+                icone="grafico"
+                rotulo="Metragem máx."
+                valor={temUnidades ? fmtArea(resumo.metragem.max) : fmtArea(e.metragem_max)}
+              />
+              <ItemFicha icone="obra" rotulo="Status" valor={fmtTexto(e.status_obra)} />
+              <ItemFicha icone="calendario" rotulo="Entrega" valor={fmtEntrega(e.entrega)} />
+            </div>
+
+            {temUnidades && (
+              <p className="campo__dica">
+                <Icone nome="info" tamanho={12} /> Dormitórios, vagas e metragem vêm das unidades cadastradas.
+              </p>
+            )}
+          </Bloco>
+
+          {/* 5. As unidades — o que o corretor vende de verdade. */}
+          <Bloco
+            icone="predio"
+            titulo="Unidades"
+            contador={temUnidades ? resumo.total : undefined}
+            aberto={blocos.unidades}
+            onAlternar={() => alternar('unidades')}
+            acao={
               <button type="button" className="btn btn--fantasma btn--pequeno" onClick={onAdicionarUnidade}>
                 <Icone nome="mais" tamanho={13} />
                 Adicionar
               </button>
-            </h3>
-
+            }
+          >
             {!temUnidades ? (
               <div className="observacao">
                 Nenhuma unidade cadastrada. Cadastre as plantas (metragem, dormitórios, vagas, posição e preço) e o
@@ -332,18 +439,18 @@ export function PainelDetalhe({
                 ))}
               </>
             )}
-          </section>
+          </Bloco>
 
           {/* Formato antigo: tabela do empreendimento inteiro. So aparece
               enquanto sobrar alguma — o cadastro novo e sempre por unidade. */}
           {e.fluxos.length > 0 && (
-            <section className="bloco">
-              <h3 className="bloco__titulo">
-                <Icone nome="cartao" tamanho={13} />
-                Tabelas gerais
-                <span className="bloco__contador">{e.fluxos.length}</span>
-              </h3>
-
+            <Bloco
+              icone="cartao"
+              titulo="Tabelas gerais"
+              contador={e.fluxos.length}
+              aberto={blocos.tabelas}
+              onAlternar={() => alternar('tabelas')}
+            >
               <div className="observacao">
                 O fluxo de pagamento agora é cadastrado dentro de cada unidade. Estas tabelas vieram do formato
                 anterior: copie para a unidade que atende e depois exclua.
@@ -390,23 +497,39 @@ export function PainelDetalhe({
                   )}
                 </div>
               ))}
-            </section>
+            </Bloco>
           )}
 
           {e.observacoes && (
-            <section className="bloco">
-              <h3 className="bloco__titulo">
-                <Icone nome="lista" tamanho={13} />
-                Observações
-              </h3>
+            <Bloco
+              icone="lista"
+              titulo="Observações"
+              aberto={blocos.notas}
+              onAlternar={() => alternar('notas')}
+            >
               <div className="observacao">{e.observacoes}</div>
-            </section>
+            </Bloco>
           )}
 
-          {(e.latitude !== null || e.longitude !== null) && (
-            <p className="campo__dica">
-              Coordenadas: {e.latitude ?? TRACO}, {e.longitude ?? TRACO}
-            </p>
+          {(e.endereco || e.latitude !== null || e.longitude !== null) && (
+            <Bloco
+              icone="pino"
+              titulo="Localização"
+              aberto={blocos.local}
+              onAlternar={() => alternar('local')}
+            >
+              <div className="ficha">
+                {e.endereco && <ItemFicha icone="pino" rotulo="Endereço" valor={e.endereco} />}
+                <ItemFicha icone="local" rotulo="Cidade" valor={fmtTexto(local)} />
+                {(e.latitude !== null || e.longitude !== null) && (
+                  <ItemFicha
+                    icone="alvo"
+                    rotulo="Coordenadas"
+                    valor={`${e.latitude ?? TRACO}, ${e.longitude ?? TRACO}`}
+                  />
+                )}
+              </div>
+            </Bloco>
           )}
         </div>
       </div>
