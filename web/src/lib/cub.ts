@@ -187,13 +187,24 @@ export function simular({
 /**
  * Aceita o que o usuario digita de verdade: "2.000,50", "2000.50", "R$ 2.000".
  * Devolve null quando nao da para ler um numero.
+ *
+ * ⚠️ O ponto e ambiguo. Com virgula na frase ele e milhar (pt-BR). Sozinho,
+ * so vale como milhar quando os grupos tem exatamente 3 digitos —
+ * "800.000" e oitocentos mil, mas "80.5" continua sendo 80,5. Antes disso
+ * "800.000" virava 800 e o valor do m² saia dividido por mil, calado.
  */
+const SO_MILHAR = /^-?\d{1,3}(\.\d{3})+$/
+
 export function lerNumero(texto: string): number | null {
   const limpo = texto.replace(/[^\d,.-]/g, '').trim()
   if (!limpo) return null
 
   // Com virgula, ela e o separador decimal e o ponto e milhar (pt-BR).
-  const normalizado = limpo.includes(',') ? limpo.replace(/\./g, '').replace(',', '.') : limpo
+  const normalizado = limpo.includes(',')
+    ? limpo.replace(/\./g, '').replace(',', '.')
+    : SO_MILHAR.test(limpo)
+      ? limpo.replace(/\./g, '')
+      : limpo
 
   const numero = Number(normalizado)
   return Number.isFinite(numero) ? numero : null

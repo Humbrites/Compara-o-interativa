@@ -73,6 +73,12 @@ export function CartaoFluxo({ fluxo, indice, onEditar, onExcluir }: Props) {
       </header>
 
       <div className="fluxo__grade">
+        {num(fluxo.cub_valor_imovel) && (
+          <CelulaFluxo
+            rotulo="Valor do imóvel"
+            celula={{ principal: fmtMoeda(fluxo.cub_valor_imovel), complemento: null }}
+          />
+        )}
         <CelulaFluxo rotulo="Entrada" celula={celulaEntrada(fluxo)} />
         <CelulaFluxo rotulo="Parcelas" celula={celulaParcelas(fluxo)} />
         <CelulaFluxo rotulo="Reforços" celula={celulaReforcos(fluxo)} />

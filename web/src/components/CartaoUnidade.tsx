@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import type { Unidade } from '../types'
 import { fmtArea, fmtInteiro, fmtMoeda, TRACO } from '../lib/format'
 import { corDoStatusUnidade } from '../lib/opcoes'
-import { localizacaoUnidade, posicaoUnidade, rotuloUnidade, valorM2Da } from '../lib/unidades'
+import { localizacaoUnidade, posicaoUnidade, precoDaUnidade, rotuloUnidade, valorM2Da } from '../lib/unidades'
 import { Icone, type NomeIcone } from './Icones'
 import { Selo } from './ui'
 
@@ -31,6 +31,10 @@ export function CartaoUnidade({ unidade, indice, onEditar, onExcluir, rodape }: 
   const local = localizacaoUnidade(unidade)
   const posicao = posicaoUnidade(unidade)
   const valorM2 = valorM2Da(unidade)
+  // `precoDaUnidade` e a unica definicao de preco: ler `unidade.valor` cru
+  // deixava sem preco a unidade cujo valor so existe na tabela de pagamento —
+  // e o m² dela, que sai do mesmo numero, aparecia do lado.
+  const preco = precoDaUnidade(unidade)
 
   return (
     <article className="unidade">
@@ -74,9 +78,9 @@ export function CartaoUnidade({ unidade, indice, onEditar, onExcluir, rodape }: 
         <Dado icone="carro" rotulo="Vagas" valor={fmtInteiro(unidade.vagas)} />
       </div>
 
-      {(unidade.valor !== null || valorM2 !== null) && (
+      {(preco !== null || valorM2 !== null) && (
         <div className="unidade__preco">
-          <span className="unidade__preco-valor">{fmtMoeda(unidade.valor)}</span>
+          <span className="unidade__preco-valor">{fmtMoeda(preco)}</span>
           {valorM2 !== null && <span className="unidade__preco-m2">{fmtMoeda(valorM2)}/m²</span>}
         </div>
       )}

@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import type { Unidade, UnidadeInput } from '../types'
 import { api } from '../lib/api'
 import { lerNumero } from '../lib/cub'
+import { fmtArea, fmtMoeda } from '../lib/format'
 import { FACES, POSICOES_SOLARES, STATUS_UNIDADE } from '../lib/opcoes'
 import { calcularValorM2, rotuloUnidade, valorNoFluxo } from '../lib/unidades'
 import { Campo, Estado } from './ui'
@@ -57,19 +58,42 @@ export function UnidadesDoEmpreendimento({ empreendimentoId, unidades, onMudou, 
 
   // O valor do m² se preenche sozinho ate alguem digitar outro numero ali.
   const [valorM2Manual, setValorM2Manual] = useState(false)
+  // Valor total do imovel sendo digitado no fluxo de pagamento aberto logo
+  // abaixo (edicao). Vem do filho porque o m² acompanha a tecla, sem salvar.
+  const [valorImovelDigitado, setValorImovelDigitado] = useState('')
 
   const emEdicao = editandoId !== null ? unidades.find((u) => u.id === editandoId) ?? null : null
 
   /**
+   * O preco que alimenta o m², na ordem em que a tela oferece: o "valor da
+   * unidade", o valor total do imovel que esta sendo digitado no fluxo de
+   * pagamento (unidade nova ou fluxo aberto na edicao) e, por fim, o que ja
+   * ficou gravado numa tabela da unidade.
+   */
+  const precoNoFormulario = useMemo(
+    () =>
+      lerNumero(form?.valor ?? '') ??
+      lerNumero(fluxoNovo.cub_valor_imovel ?? '') ??
+      lerNumero(valorImovelDigitado) ??
+      valorNoFluxo(emEdicao?.fluxos),
+    [form?.valor, fluxoNovo.cub_valor_imovel, valorImovelDigitado, emEdicao],
+  )
+
+  /** A metragem que a conta usou — a mesma ordem de `calcularValorM2`. */
+  const baseDoValorM2 = useMemo(
+    () => lerNumero(form?.metragem_total ?? '') ?? lerNumero(form?.metragem ?? ''),
+    [form?.metragem_total, form?.metragem],
+  )
+
+  /**
    * O m² que sai da conta: preco ÷ metragem total (privativa so na falta
-   * dela). O preco e o "valor da unidade" e, quando ele esta em branco, o
-   * valor do imovel que a tabela de pagamento guardou.
+   * dela). Recalcula a cada tecla na metragem OU no valor do imovel — nao ha
+   * botao nenhum a apertar.
    */
   const valorM2Automatico = useMemo(() => {
     if (!form) return null
-    const preco = lerNumero(form.valor) ?? valorNoFluxo(emEdicao?.fluxos)
-    return calcularValorM2(preco, lerNumero(form.metragem_total), lerNumero(form.metragem))
-  }, [form, emEdicao])
+    return calcularValorM2(precoNoFormulario, lerNumero(form.metragem_total), lerNumero(form.metragem))
+  }, [form, precoNoFormulario])
 
   /** O que aparece no campo: o digitado a mao ou o calculado. */
   const valorM2NoCampo = valorM2Manual
@@ -83,11 +107,14 @@ export function UnidadesDoEmpreendimento({ empreendimentoId, unidades, onMudou, 
     setForm({ ...VAZIO, status: 'Disponível' })
     setFluxoNovo({ ...FLUXO_VAZIO })
     setValorM2Manual(false)
+    setValorImovelDigitado('')
   }
 
   function abrirEdicao(unidade: Unidade) {
     setEditandoId(unidade.id)
     setForm(paraFormulario(unidade))
+    setFluxoNovo({ ...FLUXO_VAZIO })
+    setValorImovelDigitado('')
     // Unidade gravada com um m² que a conta nao devolve foi ajustada a mao —
     // recalcular por cima apagaria a escolha de quem cadastrou.
     const daConta = calcularValorM2(
@@ -105,7 +132,11 @@ export function UnidadesDoEmpreendimento({ empreendimentoId, unidades, onMudou, 
     setEditandoId(null)
     setFluxoNovo({ ...FLUXO_VAZIO })
     setValorM2Manual(false)
+    setValorImovelDigitado('')
   }
+
+  /** Estavel: o filho reporta no efeito, e funcao nova a cada render reexecutaria. */
+  const ouvirValorImovel = useCallback((texto: string) => setValorImovelDigitado(texto), [])
 
   /** Digitar no campo do m² assume o comando; o link devolve para a conta. */
   function mudarValorM2(valor: string) {
@@ -370,8 +401,8 @@ export function UnidadesDoEmpreendimento({ empreendimentoId, unidades, onMudou, 
                 valorM2Manual
                   ? 'informado à mão'
                   : lerNumero(form.metragem_total) !== null
-                    ? 'valor ÷ metragem total'
-                    : 'valor ÷ metragem'
+                    ? 'automático: valor ÷ metragem total'
+                    : 'automático: valor ÷ metragem'
               }
             >
               <input
@@ -394,12 +425,29 @@ export function UnidadesDoEmpreendimento({ empreendimentoId, unidades, onMudou, 
             </Campo>
           </div>
 
-          {valorM2Manual && (
+          {valorM2Manual ? (
             <p className="campo__dica linha-calculo">
               <Icone nome="lapis" tamanho={12} /> Valor do m² informado à mão.
               <button type="button" className="link-acao" onClick={voltarAoValorM2Automatico}>
                 Voltar ao cálculo automático
               </button>
+            </p>
+          ) : (
+            // A conta na tela: o corretor confere de onde saiu o numero sem
+            // precisar refazer no celular.
+            <p className="campo__dica linha-calculo">
+              <Icone nome="info" tamanho={12} />
+              {valorM2Automatico !== null ? (
+                <>
+                  {fmtMoeda(precoNoFormulario)}
+                  {precoNoFormulario !== null && lerNumero(form.valor) === null && ' (do fluxo de pagamento)'} ÷{' '}
+                  {fmtArea(baseDoValorM2)} = <strong>{fmtMoeda(valorM2Automatico)}/m²</strong>
+                </>
+              ) : precoNoFormulario === null ? (
+                'Informe o valor da unidade ou o valor total do imóvel no fluxo de pagamento para o m² sair sozinho.'
+              ) : (
+                'Informe a metragem total (ou a privativa) para o m² sair sozinho.'
+              )}
             </p>
           )}
 
@@ -423,6 +471,7 @@ export function UnidadesDoEmpreendimento({ empreendimentoId, unidades, onMudou, 
                 valorSugerido={emEdicao.valor}
                 fluxos={emEdicao.fluxos}
                 onMudou={(fluxos) => trocarFluxos(emEdicao.id, fluxos)}
+                onValorImovel={ouvirValorImovel}
                 avisar={avisar}
               />
             )

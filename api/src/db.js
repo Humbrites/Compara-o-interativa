@@ -10,6 +10,9 @@ const DB_FILE = process.env.DB_FILE || join(DATA_DIR, 'compara.db')
 /** Onde os arquivos de imagem enviados pelo formulario sao gravados. */
 export const UPLOAD_DIR = join(DATA_DIR, 'uploads')
 
+/** A pasta de dados (banco, uploads e caches) — fora do Git. */
+export const PASTA_DADOS = DATA_DIR
+
 mkdirSync(DATA_DIR, { recursive: true })
 mkdirSync(UPLOAD_DIR, { recursive: true })
 
@@ -170,6 +173,28 @@ const NUMERICOS = new Set([
 ])
 
 /**
+ * Numero digitado em pt-BR. A virgula e sempre decimal; o ponto so e milhar
+ * quando separa grupos de 3 digitos ("800.000" = oitocentos mil, "80.5" =
+ * 80,5). Antes de tratar isso, `Number('800.000')` gravava 800 no banco — e o
+ * valor do m² saia mil vezes menor sem nenhum aviso.
+ */
+const SO_MILHAR = /^-?\d{1,3}(\.\d{3})+$/
+
+function lerNumero(bruto) {
+  const texto = String(bruto).replace(/[^\d,.-]/g, '').trim()
+  if (!texto) return null
+
+  const normalizado = texto.includes(',')
+    ? texto.replace(/\./g, '').replace(',', '.')
+    : SO_MILHAR.test(texto)
+      ? texto.replace(/\./g, '')
+      : texto
+
+  const numero = Number(normalizado)
+  return Number.isFinite(numero) ? numero : null
+}
+
+/**
  * Normaliza o corpo da requisicao: mantem so as colunas conhecidas, converte
  * numero em numero e transforma string vazia em NULL (campo em branco no
  * formulario nao pode virar 0 e baguncar o comparativo).
@@ -183,8 +208,7 @@ export function sanitizar(body, campos) {
     if (valor === '' || valor === undefined) valor = null
 
     if (valor !== null && NUMERICOS.has(campo)) {
-      const num = typeof valor === 'number' ? valor : Number(String(valor).replace(',', '.'))
-      valor = Number.isFinite(num) ? num : null
+      valor = typeof valor === 'number' ? (Number.isFinite(valor) ? valor : null) : lerNumero(valor)
     }
 
     if (valor !== null && typeof valor === 'string') valor = valor.trim() || null

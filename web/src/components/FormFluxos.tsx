@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { FluxoInput, FluxoPagamento } from '../types'
 import { api } from '../lib/api'
 import { Campo, Estado } from './ui'
@@ -8,8 +8,14 @@ import { CalculadoraCub } from './CalculadoraCub'
 
 export type FormularioFluxo = Record<string, string>
 
+/**
+ * `cub_valor_imovel` e o VALOR TOTAL DO IMOVEL daquela tabela. O nome vem da
+ * calculadora do CUB, que foi quem passou a gravar a coluna primeiro, mas o
+ * campo e da tabela de venda: e dele que sai o preco da unidade
+ * (`precoDaUnidade`) e o valor do m².
+ */
 export const CAMPOS_FLUXO = [
-  'nome', 'entrada_pct', 'entrada_valor', 'parcelas', 'parcela_valor',
+  'nome', 'cub_valor_imovel', 'entrada_pct', 'entrada_valor', 'parcelas', 'parcela_valor',
   'reforcos_qtd', 'reforco_valor', 'chaves_pct', 'financiamento_pct',
   'descricao', 'observacoes',
 ]
@@ -76,6 +82,23 @@ export function CamposFluxo({ form, mudar, daUnidade = false, autoFocus = false 
               : 'Ex.: Tabela padrão, Plano obra, À vista'
           }
           autoFocus={autoFocus}
+        />
+      </Campo>
+
+      {/* Primeiro campo numerico de proposito: e o valor total do imovel que
+          define o preco da unidade e o valor do m², e os dois se atualizam
+          enquanto se digita aqui. */}
+      <Campo
+        rotulo="Valor total do imóvel"
+        className="col-inteira"
+        dica={daUnidade ? 'R$ — usado no valor do m² da unidade' : 'R$'}
+      >
+        <input
+          className="entrada"
+          value={form.cub_valor_imovel}
+          onChange={(e) => mudar('cub_valor_imovel', e.target.value)}
+          placeholder="800.000,00"
+          inputMode="decimal"
         />
       </Campo>
 
@@ -188,6 +211,12 @@ interface Props {
   valorSugerido?: number | null
   fluxos: FluxoPagamento[]
   onMudou: (fluxos: FluxoPagamento[]) => void
+  /**
+   * O valor total do imovel enquanto ele esta sendo DIGITADO (antes de salvar
+   * o fluxo). E o que deixa o valor do m² da unidade acompanhar a tecla, sem
+   * esperar um botao. Texto vazio = nada digitado aqui.
+   */
+  onValorImovel?: (texto: string) => void
   avisar: (texto: string, tipo?: 'sucesso' | 'erro') => void
 }
 
@@ -198,6 +227,7 @@ export function FluxosDoEmpreendimento({
   valorSugerido = null,
   fluxos,
   onMudou,
+  onValorImovel,
   avisar,
 }: Props) {
   const daUnidade = unidadeId !== null
@@ -205,6 +235,12 @@ export function FluxosDoEmpreendimento({
   const [editandoId, setEditandoId] = useState<number | null>(null)
   const [salvando, setSalvando] = useState(false)
   const [calculando, setCalculando] = useState(false)
+
+  // Formulario fechado nao tem valor digitado: quem ouve volta para o fluxo salvo.
+  const valorDigitado = form?.cub_valor_imovel ?? ''
+  useEffect(() => {
+    onValorImovel?.(valorDigitado)
+  }, [valorDigitado, onValorImovel])
 
   /** A calculadora do CUB devolve um fluxo pronto — so falta gravar. */
   async function gerarPelaCalculadora(dados: FluxoInput) {
