@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 
-import { NOME_DO_PAPEL, type Sessao } from '../lib/acesso'
+import { NOME_DO_PAPEL, type SessaoCliente } from '../lib/acesso'
 import { Icone } from './Icones'
 
 /**
@@ -9,7 +9,7 @@ import { Icone } from './Icones'
  */
 
 interface Props {
-  sessao: Sessao
+  sessao: SessaoCliente
   onAbrirConta: () => void
   onAbrirSeguranca: () => void
   onAbrirPlataforma: () => void
@@ -137,8 +137,8 @@ export function MenuUsuario({ sessao, onAbrirConta, onAbrirSeguranca, onAbrirPla
               >
                 <Icone nome="banco" tamanho={15} />
                 <span>
-                  Clientes e assinaturas
-                  <span className="usuario__item-dica">Todas as contas, planos e renovações</span>
+                  Administrador
+                  <span className="usuario__item-dica">Clientes, planos, licenças e usuários</span>
                 </span>
               </button>
             </>

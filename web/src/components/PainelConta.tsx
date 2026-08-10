@@ -36,21 +36,25 @@ export function PainelConta({ sessao, aoMudarSessao, avisar, onFechar, abaInicia
   return (
     <Modal
       titulo="Conta e acesso"
-      subtitulo={sessao.conta.nome}
+      subtitulo={sessao.conta?.nome}
       largo
       onFechar={onFechar}
       cabecalhoExtra={
         <div className="abas" role="tablist">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={aba === 'equipe'}
-            className={`aba${aba === 'equipe' ? ' aba--ativa' : ''}`}
-            onClick={() => setAba('equipe')}
-          >
-            <Icone nome="equipe" tamanho={15} />
-            Conta e equipe
-          </button>
+          {/* O master nao pertence a conta nenhuma: para ele so existe a
+              propria seguranca. */}
+          {sessao.conta && (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={aba === 'equipe'}
+              className={`aba${aba === 'equipe' ? ' aba--ativa' : ''}`}
+              onClick={() => setAba('equipe')}
+            >
+              <Icone nome="equipe" tamanho={15} />
+              Conta e equipe
+            </button>
+          )}
           <button
             type="button"
             role="tab"
@@ -64,7 +68,7 @@ export function PainelConta({ sessao, aoMudarSessao, avisar, onFechar, abaInicia
         </div>
       }
     >
-      {aba === 'equipe' ? (
+      {aba === 'equipe' && sessao.conta ? (
         <AbaEquipe sessao={sessao} aoMudarSessao={aoMudarSessao} avisar={avisar} />
       ) : (
         <AbaSeguranca sessao={sessao} aoMudarSessao={aoMudarSessao} avisar={avisar} />
@@ -590,7 +594,7 @@ function AbaSeguranca({
         <div className="aviso-faixa aviso-faixa--forte" role="status">
           <Icone nome="escudo" tamanho={15} />
           <span>
-            <strong>{sessao.conta.nome}</strong> exige verificação em duas etapas. Configure abaixo para voltar a usar
+            <strong>{sessao.conta?.nome}</strong> exige verificação em duas etapas. Configure abaixo para voltar a usar
             o sistema.
           </span>
         </div>
@@ -846,7 +850,7 @@ function Bloco2fa({
             <button type="button" className="btn btn--secundario btn--pequeno" onClick={() => setPedindoSenha('codigos')}>
               Gerar códigos novos
             </button>
-            {!sessao.conta.exigir2fa && (
+            {!sessao.conta?.exigir2fa && (
               <button type="button" className="btn btn--fantasma btn--pequeno" onClick={() => setPedindoSenha('desativar')}>
                 Desativar
               </button>

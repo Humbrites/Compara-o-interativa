@@ -4,7 +4,9 @@ Dashboard interno para a equipe **comercial e marketing** visualizar empreendime
 num mapa e **comparar dois deles lado a lado** — características e fluxos de pagamento,
 com o melhor indicador de cada linha destacado automaticamente.
 
-Uso interno, base única compartilhada, sem login (não é multiusuário).
+Sistema **multiempresa**: cada cliente tem a própria base, o próprio time e o próprio
+plano. O acesso é por login com senha e verificação em duas etapas opcional, e quem vende
+administra clientes, planos e renovações pela tela de **Administrador**.
 
 ---
 
@@ -536,6 +538,45 @@ trava, ele viraria conta ilimitada por descuido.
 Papéis: **dono** (administra a equipe e responde pelo contrato), **admin** (convida, remove e
 edita usuários) e **membro** (usa o sistema). O **operador do produto** fica fora das contas —
 não ocupa assento nem aparece na equipe do cliente.
+
+### Os dois tipos de gente no sistema
+
+| | Onde vive | O que vê |
+|---|---|---|
+| **Cliente** (dono, admin, membro) | dentro de uma conta | o dashboard: mapa, empreendimentos, comparativo, simulador |
+| **Master da plataforma** | **fora de todas as contas** (`conta_id` nulo) | só a administração: clientes, planos, licenças e renovações |
+
+O master é quem vende o sistema. Ele **não é cliente**: não tem plano, não ocupa
+assento de ninguém, não aparece na equipe de nenhuma conta e não tem base própria de
+empreendimentos — a API recusa essas rotas para ele com 403. Em compensação, é o único
+que enxerga todos os clientes.
+
+```bash
+npm run provisionar -- --master voce@empresa.com.br --nome "Seu Nome" --usuario apelido
+```
+
+Promover alguém que já existe **solta essa pessoa da conta em que estava** (a conta
+continua com os dados, mas fica sem aquele usuário) — o comando avisa antes.
+
+Ao entrar, o master cai direto na tela **Administrador**, com:
+
+- **Os números**: clientes ativos, pessoas usando, adoção de 2FA e assentos ocupados.
+- **Alertas de renovação** que são *filtros*: clicar em "3 vencidas" mostra quais.
+- **A lista de clientes ordenada por urgência**, com barra lateral colorida e uma cor
+  por plano; `+1 mês` / `+12` renovam na hora e `Editar` abre plano, limite, situação e
+  data de vencimento.
+- **Novo cliente** e **Adicionar usuário** dentro de um cliente — os dois devolvem o
+  link de primeiro acesso para você entregar. O teto do plano vale também para você:
+  furá-lo por aqui faria dele uma sugestão.
+- **Todos os usuários**: quem usa o sistema inteiro, com cliente, papel, último acesso e
+  quem **nunca acessou**.
+
+Duas contas de tempo que valem lembrar: **renovar parte do vencimento atual**, não de
+hoje (senão o cliente perde os dias que já pagou; só quando já venceu é que a base vira
+hoje), e **mês que não tem o dia cai no último dia dele** — 31/01 + 1 mês = 28/02.
+
+Existe ainda a marca `--operador`, que dá a mesma tela a alguém que **continua** dentro
+de uma conta-cliente. Serve para casos raros; o normal é o master.
 
 ### Provisionamento (o lado de quem vende)
 

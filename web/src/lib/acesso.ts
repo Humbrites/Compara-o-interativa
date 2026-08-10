@@ -43,10 +43,26 @@ export interface ContaSessao {
 
 export interface Sessao {
   usuario: UsuarioSessao
-  conta: ContaSessao
+  /**
+   * `null` quando o login e o MASTER da plataforma: ele administra os
+   * clientes e nao pertence a nenhum, entao nao tem plano, assento nem base
+   * de empreendimentos.
+   */
+  conta: ContaSessao | null
+  master: boolean
   /** Conta que exige 2FA e usuario que ainda nao configurou. */
   precisaConfigurar2fa: boolean
   aviso?: string | null
+}
+
+/** Sessao de quem pertence a um cliente — a unica que abre o dashboard. */
+export interface SessaoCliente extends Sessao {
+  conta: ContaSessao
+  master: false
+}
+
+export function ehSessaoDeCliente(sessao: Sessao): sessao is SessaoCliente {
+  return !sessao.master && sessao.conta !== null
 }
 
 /** O login pode terminar em sessao ou em "agora digite o código". */

@@ -299,6 +299,137 @@ test('encerrar a conta derruba as sessões de quem estava dentro', async () => {
   assert.equal((await cliente.pedir('/api/sessao')).status, 401, 'encerrar tem de tirar todo mundo na hora')
 })
 
+test('o usuário master não pertence a cliente nenhum', async () => {
+  const saida = await provisionar('--master', 'chefe@plataforma.com.br', '--nome', 'Chefe Geral', '--usuario', 'chefe')
+  const token = saida.match(/definir-senha\/([\w-]+)/)?.[1]
+  assert.ok(token, `esperava o link de senha do master:\n${saida}`)
+
+  const master = criarCliente()
+  await master.pedir('/api/auth/definir-senha', { metodo: 'POST', corpo: { token, senha: 'chefe-2026-forte' } })
+
+  const login = await master.pedir('/api/auth/login', {
+    metodo: 'POST',
+    corpo: { identificador: 'chefe', senha: 'chefe-2026-forte' },
+  })
+  assert.equal(login.status, 200)
+  assert.equal(login.corpo.master, true)
+  // Sem conta: nada de plano, assento ou vencimento.
+  assert.equal(login.corpo.conta, null)
+  assert.equal(login.corpo.precisaConfigurar2fa, false)
+
+  // Ele administra os clientes...
+  const painel = await master.pedir('/api/plataforma')
+  assert.equal(painel.status, 200)
+  assert.ok(painel.corpo.contas.length > 0)
+
+  // ...e cuida da própria segurança.
+  assert.equal((await master.pedir('/api/seguranca/sessoes')).status, 200)
+
+  // Mas não tem base de empreendimentos: se passasse, a consulta sairia sem
+  // filtro de conta — exatamente o buraco que a conta dona fecha.
+  for (const [caminho, metodo] of [
+    ['/api/empreendimentos', 'GET'],
+    ['/api/empreendimentos', 'POST'],
+    ['/api/conta', 'GET'],
+    ['/api/unidades', 'POST'],
+    ['/api/fluxos', 'POST'],
+  ]) {
+    const resposta = await master.pedir(caminho, { metodo, corpo: metodo === 'GET' ? undefined : { nome: 'X' } })
+    assert.equal(resposta.status, 403, `${metodo} ${caminho}`)
+    assert.equal(resposta.corpo.master, true)
+  }
+
+  // E não aparece como usuário de nenhum cliente, nem nos números.
+  const pessoas = painel.corpo.contas.flatMap((conta) => conta.usuarios.map((u) => u.email))
+  assert.ok(!pessoas.includes('chefe@plataforma.com.br'), 'o master não é usuário de cliente nenhum')
+})
+
+test('promover alguém a master o solta da conta em que estava', async () => {
+  await abrirConta({
+    conta: 'Vira Master',
+    nome: 'Gil Souza',
+    email: 'gil@viramaster.com.br',
+    senha: 'gil-2026-forte',
+    plano: 'equipe',
+  })
+
+  const operador = criarCliente()
+  await operador.pedir('/api/auth/login', {
+    metodo: 'POST',
+    corpo: { identificador: 'ana@operadora.com.br', senha: 'opera-2026-forte' },
+  })
+
+  const antes = await operador.pedir('/api/plataforma')
+  const contaAntes = antes.corpo.contas.find((conta) => conta.nome === 'Vira Master')
+  assert.equal(contaAntes.usuarios.length, 1)
+  assert.equal(contaAntes.assentos.usuarios, 1)
+
+  await provisionar('--master', 'gil@viramaster.com.br')
+
+  const depois = await operador.pedir('/api/plataforma')
+  const contaDepois = depois.corpo.contas.find((conta) => conta.nome === 'Vira Master')
+  // A conta continua existindo, com os dados — mas sem ninguém dentro, e o
+  // assento dele voltou para o plano.
+  assert.equal(contaDepois.usuarios.length, 0)
+  assert.equal(contaDepois.assentos.usuarios, 0)
+
+  // E ele entra direto na administração, sem passar por conta nenhuma.
+  const gil = criarCliente()
+  const login = await gil.pedir('/api/auth/login', {
+    metodo: 'POST',
+    corpo: { identificador: 'gil@viramaster.com.br', senha: 'gil-2026-forte' },
+  })
+  assert.equal(login.corpo.master, true)
+  assert.equal(login.corpo.conta, null)
+})
+
+test('o operador acrescenta usuário a um cliente, respeitando o teto', async () => {
+  const operador = criarCliente()
+  await operador.pedir('/api/auth/login', {
+    metodo: 'POST',
+    corpo: { identificador: 'ana@operadora.com.br', senha: 'opera-2026-forte' },
+  })
+
+  // Uma conta pequena de propósito, para o teto aparecer rápido.
+  await provisionar('--conta', 'Casa Pequena', '--plano', 'individual', '--nome', 'Elis', '--email', 'elis@pequena.com.br')
+
+  const antes = await operador.pedir('/api/plataforma')
+  const alvo = antes.corpo.contas.find((conta) => conta.nome === 'Casa Pequena')
+  assert.equal(alvo.assentos.limite, 1)
+
+  // O plano Individual já está cheio com o dono.
+  const estourou = await operador.pedir(`/api/plataforma/contas/${alvo.id}/usuarios`, {
+    metodo: 'POST',
+    corpo: { nome: 'Fábio', email: 'fabio@pequena.com.br', papel: 'membro' },
+  })
+  assert.equal(estourou.status, 409, 'o teto vale também para quem vende')
+  assert.match(estourou.corpo.erro, /permite 1 usuário/)
+
+  // Aumentar o plano abre a vaga.
+  await operador.pedir(`/api/plataforma/contas/${alvo.id}`, { metodo: 'PUT', corpo: { plano: 'equipe' } })
+
+  const criado = await operador.pedir(`/api/plataforma/contas/${alvo.id}/usuarios`, {
+    metodo: 'POST',
+    corpo: { nome: 'Fábio Nunes', email: 'fabio@pequena.com.br', papel: 'admin' },
+  })
+  assert.equal(criado.status, 201)
+  assert.match(criado.corpo.link, /^\/definir-senha\//)
+
+  const depois = criado.corpo.contas.find((conta) => conta.nome === 'Casa Pequena')
+  assert.equal(depois.usuarios.length, 2)
+
+  const novo = depois.usuarios.find((usuario) => usuario.email === 'fabio@pequena.com.br')
+  assert.equal(novo.papel, 'admin')
+  // Nasce sem senha: ela é definida pelo link, no navegador de quem vai usar.
+  assert.equal(novo.senhaDefinida, false)
+
+  const repetido = await operador.pedir(`/api/plataforma/contas/${alvo.id}/usuarios`, {
+    metodo: 'POST',
+    corpo: { nome: 'Outro', email: 'fabio@pequena.com.br', papel: 'membro' },
+  })
+  assert.equal(repetido.status, 400)
+})
+
 test('o operador cria o cliente e recebe o link de primeiro acesso', async () => {
   const operador = criarCliente()
   await operador.pedir('/api/auth/login', {

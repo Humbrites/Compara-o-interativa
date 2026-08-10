@@ -17,7 +17,7 @@ import { Carregando, Estado, Toasts, type Aviso } from './components/ui'
 import { MenuUsuario } from './components/MenuUsuario'
 import { PainelConta } from './components/PainelConta'
 import { PainelPlataforma } from './components/PainelPlataforma'
-import type { Sessao } from './lib/acesso'
+import type { Sessao, SessaoCliente } from './lib/acesso'
 
 interface EstadoForm {
   empreendimento: Empreendimento | null
@@ -25,7 +25,8 @@ interface EstadoForm {
 }
 
 interface AppProps {
-  sessao: Sessao
+  /** Só cliente chega aqui: o master não tem base de empreendimentos. */
+  sessao: SessaoCliente
   aoMudarSessao: (sessao: Sessao) => void
   aoSair: () => Promise<void>
 }

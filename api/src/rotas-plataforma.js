@@ -8,13 +8,14 @@ import {
   agora,
   buscarConta,
   buscarUsuario,
+  conferirVaga,
   criarConta,
   criarTokenSenha,
   criarUsuario,
   encerrarTodasAsSessoes,
 } from './contas.js'
 import { ehOperador, novaDataDeRenovacao, panorama } from './plataforma.js'
-import { PLANOS, STATUS_CONTA, validarPlano } from './planos.js'
+import { PAPEIS, PLANOS, STATUS_CONTA, validarPlano } from './planos.js'
 
 /** Prefixo que a guarda de sessão trata em separado (ver `rotas-auth.js`). */
 export const PREFIXO_PLATAFORMA = '/api/plataforma'
@@ -160,6 +161,42 @@ export function registrarPlataforma(app) {
     }
 
     // A senha nunca é escolhida por nós: ela nasce no navegador do cliente.
+    const token = criarTokenSenha(usuario.id, 'primeiro-acesso')
+
+    return reply.code(201).send({ link: `/definir-senha/${token}`, ...panorama() })
+  })
+
+  /**
+   * Acrescenta alguem a uma conta que ja existe, sem passar por convite.
+   *
+   * O convite serve para o cliente montar a propria equipe; isto serve para
+   * quando quem vende cadastra a pessoa junto com o contrato. O TETO vale
+   * igual: furar o limite por aqui faria dele uma sugestao.
+   */
+  app.post(`${PREFIXO_PLATAFORMA}/contas/:id/usuarios`, guarda, async (req, reply) => {
+    const conta = buscarConta.get(Number(req.params.id))
+    if (!conta) return reply.code(404).send({ erro: 'Conta não encontrada' })
+
+    const semVaga = conferirVaga(conta)
+    if (semVaga) return reply.code(409).send({ erro: semVaga })
+
+    const papel = String(req.body?.papel || 'membro')
+    if (!PAPEIS.includes(papel)) return reply.code(400).send({ erro: 'Papel inválido' })
+
+    let usuario
+    try {
+      usuario = await criarUsuario({
+        contaId: conta.id,
+        nome: String(req.body?.nome || ''),
+        email: String(req.body?.email || ''),
+        usuario: req.body?.usuario || null,
+        papel,
+      })
+    } catch (erro) {
+      return reply.code(400).send({ erro: erro.message })
+    }
+
+    // A senha nasce no navegador de quem vai usá-la, nunca aqui.
     const token = criarTokenSenha(usuario.id, 'primeiro-acesso')
 
     return reply.code(201).send({ link: `/definir-senha/${token}`, ...panorama() })

@@ -23,6 +23,7 @@ import {
   definirSenha,
   DIAS_SESSAO,
   encerrarSessao,
+  ehMaster,
   encerrarTodasAsSessoes,
   gerarCodigosRecuperacao,
   lerSessao,
@@ -177,9 +178,18 @@ function pendencia2fa(usuario, conta) {
 function sessaoPublica({ usuario, conta }) {
   return {
     usuario: usuarioPublico(usuario),
-    conta: contaPublica(conta),
-    precisaConfigurar2fa: pendencia2fa(usuario, conta),
+    // `null` diz ao front que este login é o master: ele abre direto na
+    // administração, sem mapa nem empreendimentos.
+    conta: conta ? contaPublica(conta) : null,
+    master: ehMaster(usuario),
+    precisaConfigurar2fa: conta ? pendencia2fa(usuario, conta) : false,
   }
+}
+
+/** Usuario + conta recem-lidos do banco (a conta e `null` para o master). */
+function montarContexto(usuarioId) {
+  const usuario = buscarUsuario.get(usuarioId)
+  return { usuario, conta: ehMaster(usuario) ? null : buscarConta.get(usuario.conta_id) }
 }
 
 const espera = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -202,6 +212,28 @@ export function registrarAutenticacao(app) {
     }
 
     req.contexto = contexto
+
+    /**
+     * O MASTER não tem conta: ele administra clientes, não usa o dashboard.
+     * Sem esta parada, `contaDe(req)` leria `undefined` e as consultas de
+     * empreendimento sairiam sem filtro — que é exatamente o buraco que a
+     * conta dona fecha.
+     */
+    if (ehMaster(contexto.usuario)) {
+      const permitido =
+        caminho.startsWith('/api/plataforma') ||
+        caminho.startsWith('/api/seguranca') ||
+        caminho === '/api/sessao' ||
+        caminho === '/api/indicadores'
+
+      if (!permitido) {
+        return reply.code(403).send({
+          erro: 'Este login administra os clientes e não tem base própria de empreendimentos.',
+          master: true,
+        })
+      }
+      return
+    }
 
     const escrita = req.method !== 'GET' && req.method !== 'HEAD'
     if (!escrita) return
@@ -259,8 +291,9 @@ export function registrarAutenticacao(app) {
       return reply.code(401).send({ erro: 'Usuário ou senha incorretos' })
     }
 
-    const conta = buscarConta.get(usuario.conta_id)
-    if (statusEfetivo(conta) === 'cancelada') {
+    // O master nao tem conta; so o cliente pode estar encerrado.
+    const conta = ehMaster(usuario) ? null : buscarConta.get(usuario.conta_id)
+    if (conta && statusEfetivo(conta) === 'cancelada') {
       registrarTentativa(chave)
       return reply.code(403).send({ erro: 'Esta conta está encerrada. Fale com o suporte.' })
     }
@@ -273,7 +306,7 @@ export function registrarAutenticacao(app) {
 
     const token = criarSessao(usuario.id, { agente: req.headers['user-agent'] || null, ip: req.ip })
     gravarCookie(reply, token)
-    return sessaoPublica({ usuario: buscarUsuario.get(usuario.id), conta })
+    return sessaoPublica(montarContexto(usuario.id))
   })
 
   app.post('/api/auth/2fa', async (req, reply) => {
@@ -324,7 +357,7 @@ export function registrarAutenticacao(app) {
     gravarCookie(reply, token)
 
     return {
-      ...sessaoPublica({ usuario: buscarUsuario.get(usuario.id), conta: buscarConta.get(usuario.conta_id) }),
+      ...sessaoPublica(montarContexto(usuario.id)),
       aviso: avisoRecuperacao,
     }
   })

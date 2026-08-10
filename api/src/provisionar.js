@@ -177,6 +177,65 @@ if (opcoes['usuario-na-conta']) {
   process.exit(0)
 }
 
+/* Criar (ou promover) o usuário MASTER da plataforma. */
+if (opcoes.master && opcoes.master !== true) {
+  const identificador = String(opcoes.master)
+  let usuario = buscarUsuarioPorIdentificador(identificador)
+
+  if (usuario) {
+    // Promover quem já existe SOLTA ele da conta atual: master não é cliente.
+    const conta = usuario.conta_id ? buscarConta.get(usuario.conta_id) : null
+
+    if (conta) {
+      const sobra = db
+        .prepare('SELECT COUNT(*) AS total FROM usuarios WHERE conta_id = ? AND id != ? AND ativo = 1')
+        .get(conta.id, usuario.id).total
+
+      console.log(`\n⚠ ${usuario.nome} sai de "${conta.nome}" — master não pertence a cliente nenhum.`)
+      if (sobra === 0) {
+        console.log(
+          `  A conta "${conta.nome}" fica SEM nenhum usuário (os dados dela continuam lá).\n` +
+            '  Para voltar a usá-la, acrescente alguém pelo painel Administrador ou por --usuario-na-conta.',
+        )
+      }
+    }
+
+    db.prepare("UPDATE usuarios SET conta_id = NULL, operador = 1, atualizado_em = datetime('now') WHERE id = ?").run(
+      usuario.id,
+    )
+  } else {
+    if (!opcoes.nome || opcoes.nome === true) encerrar('Informe --nome para criar o master')
+
+    try {
+      usuario = await criarUsuario({
+        contaId: null,
+        nome: String(opcoes.nome),
+        email: identificador,
+        usuario: opcoes.usuario && opcoes.usuario !== true ? String(opcoes.usuario) : null,
+      })
+    } catch (erro) {
+      encerrar(erro.message)
+    }
+
+    db.prepare('UPDATE usuarios SET operador = 1 WHERE id = ?').run(usuario.id)
+  }
+
+  const atualizado = buscarUsuarioPorIdentificador(identificador)
+  console.log(
+    `\n✓ ${atualizado.nome} <${atualizado.email}>${atualizado.usuario ? ` (@${atualizado.usuario})` : ''} é o MASTER da plataforma.\n` +
+      '  Ele administra os clientes, os planos e as licenças — e não tem base de\n' +
+      '  empreendimentos própria, nem ocupa assento de ninguém.\n',
+  )
+
+  if (!atualizado.senha_hash) {
+    console.log('  Falta definir a senha:\n')
+    console.log(`  ${URL_BASE}/definir-senha/${criarTokenSenha(atualizado.id, 'primeiro-acesso')}\n`)
+  } else {
+    console.log('  (se já estava logado, saia e entre de novo para o menu mudar)\n')
+  }
+  process.exit(0)
+}
+
 /* Corrigir nome ou apelido de quem já existe. */
 if (opcoes['editar-usuario'] && opcoes['editar-usuario'] !== true) {
   const usuario = buscarUsuarioPorIdentificador(String(opcoes['editar-usuario']))
@@ -319,8 +378,15 @@ Provisionamento do Compara Interativa
 
   --link-senha <e-mail|apelido>     gera um link novo de definição de senha
 
-  --operador <e-mail|apelido>       dá acesso à área da plataforma (ver TODAS
-                                    as contas, planos e renovações)
+  --master <e-mail>                 cria (ou promove) o USUÁRIO MASTER: quem
+                                    administra os clientes, planos e licenças.
+                                    Não pertence a cliente nenhum, não ocupa
+                                    assento e não tem base própria.
+    --nome "Nome"                   obrigatório se o usuário ainda não existe
+    [--usuario apelido]
+
+  --operador <e-mail|apelido>       dá a área de administração a alguém que
+                                    CONTINUA dentro de uma conta-cliente
     --tirar                         remove esse acesso
 
 Endereço usado nos links: ${URL_BASE} (mude com URL_BASE=...)

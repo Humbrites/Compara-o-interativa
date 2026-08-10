@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 
-import { NOME_DO_PAPEL, type StatusConta } from '../lib/acesso'
+import { DESCRICAO_DO_PAPEL, NOME_DO_PAPEL, type Papel, type StatusConta } from '../lib/acesso'
 import { mensagemDoErro } from '../lib/http'
 import {
   COR_DO_PLANO,
@@ -28,7 +28,12 @@ import { Campo, Carregando, Estado, Modal, Selo } from './ui'
 
 interface Props {
   avisar: (texto: string, tipo?: 'sucesso' | 'erro') => void
-  onFechar: () => void
+  /**
+   * Sem `onFechar`, o painel deixa de ser modal e vira a PAGINA inteira — que
+   * e como o usuario master ve o sistema: ele administra clientes, nao usa o
+   * dashboard, entao nao ha nada por baixo para o modal cobrir.
+   */
+  onFechar?: () => void
 }
 
 const PLANOS_DISPONIVEIS = [
@@ -110,33 +115,25 @@ export function PainelPlataforma({ avisar, onFechar }: Props) {
     }
   }
 
-  return (
-    <Modal
-      titulo="Clientes e assinaturas"
-      subtitulo={dados ? `${dados.resumo.contas} conta(s) · ${dados.resumo.usuariosAtivos} pessoa(s) usando` : undefined}
-      largo
-      onFechar={onFechar}
-      cabecalhoExtra={
-        <div className="abas">
-          <button
-            type="button"
-            className={`aba${aba === 'contas' ? ' aba--ativa' : ''}`}
-            onClick={() => setAba('contas')}
-          >
-            <Icone nome="banco" tamanho={15} />
-            Contas
-          </button>
-          <button
-            type="button"
-            className={`aba${aba === 'usuarios' ? ' aba--ativa' : ''}`}
-            onClick={() => setAba('usuarios')}
-          >
-            <Icone nome="equipe" tamanho={15} />
-            Todos os usuários
-          </button>
-        </div>
-      }
-    >
+  const abas = (
+    <div className="abas">
+      <button type="button" className={`aba${aba === 'contas' ? ' aba--ativa' : ''}`} onClick={() => setAba('contas')}>
+        <Icone nome="banco" tamanho={15} />
+        Contas
+      </button>
+      <button
+        type="button"
+        className={`aba${aba === 'usuarios' ? ' aba--ativa' : ''}`}
+        onClick={() => setAba('usuarios')}
+      >
+        <Icone nome="equipe" tamanho={15} />
+        Todos os usuários
+      </button>
+    </div>
+  )
+
+  const corpo = (
+    <>
       {erro ? (
         <Estado icone="alerta" variante="erro" titulo="Falha ao carregar" texto={erro} />
       ) : !dados ? (
@@ -220,6 +217,12 @@ export function PainelPlataforma({ avisar, onFechar }: Props) {
                         avisar(mensagemDoErro(falha), 'erro')
                       }
                     }}
+                    onCriarUsuario={async (novo) => {
+                      const resposta = await plataforma.criarUsuario(conta.id, novo)
+                      setDados(resposta)
+                      setLink({ caminho: resposta.link, rotulo: `Primeiro acesso de ${novo.nome}` })
+                      avisar('Usuário criado — mande o link de primeiro acesso')
+                    }}
                   />
                 ))}
               </ul>
@@ -229,6 +232,31 @@ export function PainelPlataforma({ avisar, onFechar }: Props) {
           )}
         </div>
       )}
+    </>
+  )
+
+  if (!onFechar) {
+    return (
+      <div className="plataforma-pagina">
+        {abas}
+        <div className="plataforma-pagina__corpo">{corpo}</div>
+      </div>
+    )
+  }
+
+  return (
+    <Modal
+      titulo="Administrador"
+      subtitulo={
+        dados
+          ? `${dados.resumo.contas} cliente(s) · ${dados.resumo.usuariosAtivos} pessoa(s) usando o sistema`
+          : undefined
+      }
+      largo
+      onFechar={onFechar}
+      cabecalhoExtra={abas}
+    >
+      {corpo}
     </Modal>
   )
 }
@@ -342,9 +370,21 @@ interface LinhaProps {
   onRenovar: (meses: number) => void
   onSalvar: (alteracao: Parameters<typeof plataforma.salvarConta>[1]) => Promise<void>
   onLinkDeSenha: (usuarioId: number, nome: string) => Promise<void>
+  onCriarUsuario: (dados: { nome: string; email: string; papel: Papel }) => Promise<void>
 }
 
-function LinhaDeConta({ conta, aberta, editando, onAbrir, onEditar, onRenovar, onSalvar, onLinkDeSenha }: LinhaProps) {
+function LinhaDeConta({
+  conta,
+  aberta,
+  editando,
+  onAbrir,
+  onEditar,
+  onRenovar,
+  onSalvar,
+  onLinkDeSenha,
+  onCriarUsuario,
+}: LinhaProps) {
+  const [adicionando, setAdicionando] = useState(false)
   const faixa = FAIXAS[conta.faixa]
   const semVaga = conta.assentos.disponiveis !== null && conta.assentos.disponiveis <= 0
 
@@ -400,11 +440,44 @@ function LinhaDeConta({ conta, aberta, editando, onAbrir, onEditar, onRenovar, o
 
       {aberta && (
         <div className="conta-linha__detalhe">
-          <div className="conta-linha__meta">
-            Cliente desde {formatarData(conta.criadoEm)} · último acesso da equipe {textoDoUltimoAcesso(conta.ultimoAcesso)}
-            {conta.assentos.convitesPendentes > 0 && ` · ${conta.assentos.convitesPendentes} convite(s) em aberto`}
-            {conta.exigir2fa && ' · exige 2FA'}
+          <div className="conta-linha__cabecalho-detalhe">
+            <div className="conta-linha__meta">
+              Cliente desde {formatarData(conta.criadoEm)} · último acesso da equipe{' '}
+              {textoDoUltimoAcesso(conta.ultimoAcesso)}
+              {conta.assentos.convitesPendentes > 0 && ` · ${conta.assentos.convitesPendentes} convite(s) em aberto`}
+              {conta.exigir2fa && ' · exige 2FA'}
+            </div>
+
+            {!adicionando && (
+              <button
+                type="button"
+                className="btn btn--secundario btn--pequeno"
+                onClick={() => setAdicionando(true)}
+                disabled={semVaga}
+                title={semVaga ? 'O plano deste cliente está completo' : undefined}
+              >
+                <Icone nome="mais" tamanho={13} />
+                Adicionar usuário
+              </button>
+            )}
           </div>
+
+          {semVaga && (
+            <p className="conta-linha__sem-vaga">
+              O plano deste cliente está completo ({conta.assentos.ocupados} de {conta.assentos.limite}). Aumente o
+              plano em "Editar" para acrescentar mais alguém.
+            </p>
+          )}
+
+          {adicionando && (
+            <FormNovoUsuario
+              aoCancelar={() => setAdicionando(false)}
+              aoCriar={async (dados) => {
+                await onCriarUsuario(dados)
+                setAdicionando(false)
+              }}
+            />
+          )}
 
           <ul className="mini-usuarios">
             {conta.usuarios.map((usuario) => (
@@ -565,6 +638,89 @@ function FormEditarConta({
       <div className="form-convite__acoes">
         <button type="submit" className="btn btn--primario btn--pequeno" disabled={salvando}>
           {salvando ? 'Salvando…' : 'Salvar alterações'}
+        </button>
+      </div>
+    </form>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Novo usuário dentro de um cliente existente                          */
+/* ------------------------------------------------------------------ */
+
+function FormNovoUsuario({
+  aoCriar,
+  aoCancelar,
+}: {
+  aoCriar: (dados: { nome: string; email: string; papel: Papel }) => Promise<void>
+  aoCancelar: () => void
+}) {
+  const [nome, setNome] = useState('')
+  const [email, setEmail] = useState('')
+  const [papel, setPapel] = useState<Papel>('membro')
+  const [erro, setErro] = useState<string | null>(null)
+  const [salvando, setSalvando] = useState(false)
+
+  async function enviar(evento: FormEvent) {
+    evento.preventDefault()
+    setErro(null)
+    setSalvando(true)
+    try {
+      await aoCriar({ nome: nome.trim(), email: email.trim(), papel })
+    } catch (falha) {
+      setErro(mensagemDoErro(falha))
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  return (
+    <form className="form-convite" onSubmit={enviar}>
+      <div className="grade grade--2">
+        <Campo rotulo="Nome" obrigatorio>
+          <input
+            className="entrada"
+            value={nome}
+            onChange={(e) => setNome(e.target.value)}
+            placeholder="Carla Dias"
+            autoFocus
+            required
+          />
+        </Campo>
+
+        <Campo rotulo="E-mail" obrigatorio>
+          <input
+            className="entrada"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="carla@cliente.com.br"
+            required
+          />
+        </Campo>
+
+        <Campo rotulo="Papel" dica={DESCRICAO_DO_PAPEL[papel]} className="col-inteira">
+          <select className="filtros__select" value={papel} onChange={(e) => setPapel(e.target.value as Papel)}>
+            <option value="membro">{NOME_DO_PAPEL.membro}</option>
+            <option value="admin">{NOME_DO_PAPEL.admin}</option>
+            <option value="dono">{NOME_DO_PAPEL.dono}</option>
+          </select>
+        </Campo>
+      </div>
+
+      {erro && (
+        <div className="acesso__erro" role="alert">
+          <Icone nome="alerta" tamanho={15} />
+          <span>{erro}</span>
+        </div>
+      )}
+
+      <div className="form-convite__acoes">
+        <button type="button" className="btn btn--fantasma btn--pequeno" onClick={aoCancelar}>
+          Cancelar
+        </button>
+        <button type="submit" className="btn btn--primario btn--pequeno" disabled={salvando}>
+          {salvando ? 'Criando…' : 'Criar e gerar link'}
         </button>
       </div>
     </form>

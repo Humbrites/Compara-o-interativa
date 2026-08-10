@@ -160,7 +160,15 @@ export const listarUsuariosDaConta = db.prepare(
      FROM usuarios WHERE conta_id = ? ORDER BY nome COLLATE NOCASE`,
 )
 
-export async function criarUsuario({ contaId, nome, email, usuario = null, papel = 'membro', senha = null }) {
+/**
+ * Usuario sem conta e o MASTER da plataforma: quem vende o sistema. Ele nao
+ * ocupa assento, nao aparece na equipe de ninguem e nao tem base propria.
+ */
+export function ehMaster(usuario) {
+  return Boolean(usuario) && (usuario.conta_id === null || usuario.conta_id === undefined)
+}
+
+export async function criarUsuario({ contaId = null, nome, email, usuario = null, papel = 'membro', senha = null }) {
   if (!PAPEIS.includes(papel)) throw new Error(`Papel invalido: ${papel}`)
   if (!nome?.trim()) throw new Error('O usuário precisa de um nome')
 
@@ -272,8 +280,10 @@ export function lerSessao(token) {
   const usuario = buscarUsuario.get(sessao.usuario_id)
   if (!usuario || !usuario.ativo) return null
 
-  const conta = buscarConta.get(usuario.conta_id)
-  if (!conta || !podeEntrar(conta)) return null
+  // O master nao tem conta — e por isso a sessao dele nao passa pelas regras
+  // de plano, vencimento e suspensao, que sao do CLIENTE.
+  const conta = ehMaster(usuario) ? null : buscarConta.get(usuario.conta_id)
+  if (!ehMaster(usuario) && (!conta || !podeEntrar(conta))) return null
 
   // So reescreve de hora em hora: renovar a cada requisicao seria uma escrita
   // no banco por clique, sem nenhum ganho.

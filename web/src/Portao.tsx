@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import App from './App'
+import { TelaMaster } from './TelaMaster'
 import { TelaConvite, TelaDefinirSenha, TelaLogin } from './components/TelaAcesso'
 import { Icone } from './components/Icones'
-import { acesso, type Sessao } from './lib/acesso'
+import { acesso, ehSessaoDeCliente, type Sessao } from './lib/acesso'
 import { EVENTO_SEM_SESSAO } from './lib/http'
 
 /**
@@ -90,8 +91,8 @@ export function Portao() {
           <div className="acesso__cartao">
             <h1 className="acesso__titulo">Você já está conectado</h1>
             <p className="acesso__sub">
-              Este convite cria um acesso novo, de outra conta. Saia de <strong>{sessao.conta.nome}</strong> antes de
-              aceitá-lo.
+              Este convite cria um acesso novo, de outra conta. Saia de{' '}
+              <strong>{sessao.conta?.nome ?? 'sua conta atual'}</strong> antes de aceitá-lo.
             </p>
             <button type="button" className="btn btn--primario btn--bloco" onClick={() => void sair()}>
               Sair desta conta
@@ -118,6 +119,11 @@ export function Portao() {
   }
 
   if (!sessao) return <TelaLogin onEntrou={entrar} />
+
+  // O master nao tem conta: para ele o sistema E a administracao dos clientes.
+  if (!ehSessaoDeCliente(sessao)) {
+    return <TelaMaster sessao={sessao} aoMudarSessao={setSessao} aoSair={sair} />
+  }
 
   return <App sessao={sessao} aoMudarSessao={setSessao} aoSair={sair} />
 }

@@ -262,6 +262,70 @@ if (!colunasUsuario.some((coluna) => coluna.name === 'operador')) {
 }
 
 /**
+ * O usuario MASTER nao pertence a cliente nenhum: ele administra os clientes.
+ *
+ * Enquanto `conta_id` era NOT NULL, quem vende precisava morar dentro de uma
+ * conta como se fosse um cliente — com plano, assentos e base propria. Agora
+ * `conta_id` nulo significa "esta acima das contas": sem plano, sem assento,
+ * sem base, e a API so lhe abre a area de administracao.
+ *
+ * SQLite nao remove NOT NULL por ALTER, entao a tabela e reconstruida (a
+ * receita oficial de 12 passos). Roda uma vez so.
+ */
+const contaIdObrigatorio = colunasUsuario.find((coluna) => coluna.name === 'conta_id')?.notnull === 1
+
+if (contaIdObrigatorio) {
+  // As chaves estrangeiras ficam fora durante a troca, senao o DROP da tabela
+  // antiga levaria junto as linhas que apontam para ela.
+  db.pragma('foreign_keys = OFF')
+
+  const reconstruir = db.transaction(() => {
+    db.exec(`
+      CREATE TABLE usuarios_novo (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        conta_id       INTEGER REFERENCES contas(id) ON DELETE CASCADE,
+        nome           TEXT NOT NULL,
+        email          TEXT NOT NULL,
+        usuario        TEXT,
+        senha_hash     TEXT,
+        papel          TEXT NOT NULL DEFAULT 'membro',
+        totp_segredo   TEXT,
+        totp_ativo     INTEGER NOT NULL DEFAULT 0,
+        totp_passo     INTEGER,
+        ativo          INTEGER NOT NULL DEFAULT 1,
+        operador       INTEGER NOT NULL DEFAULT 0,
+        ultimo_acesso  TEXT,
+        criado_em      TEXT NOT NULL DEFAULT (datetime('now')),
+        atualizado_em  TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      INSERT INTO usuarios_novo (id, conta_id, nome, email, usuario, senha_hash, papel,
+                                 totp_segredo, totp_ativo, totp_passo, ativo, operador,
+                                 ultimo_acesso, criado_em, atualizado_em)
+        SELECT id, conta_id, nome, email, usuario, senha_hash, papel,
+               totp_segredo, totp_ativo, totp_passo, ativo, operador,
+               ultimo_acesso, criado_em, atualizado_em
+          FROM usuarios;
+
+      DROP TABLE usuarios;
+      ALTER TABLE usuarios_novo RENAME TO usuarios;
+
+      CREATE UNIQUE INDEX idx_usuarios_email ON usuarios(email);
+      CREATE UNIQUE INDEX idx_usuarios_usuario ON usuarios(usuario) WHERE usuario IS NOT NULL;
+      CREATE INDEX idx_usuarios_conta ON usuarios(conta_id);
+    `)
+  })
+  reconstruir()
+
+  // Confere antes de religar: tabela quebrada aqui derruba o login inteiro.
+  const problemas = db.pragma('foreign_key_check')
+  db.pragma('foreign_keys = ON')
+  if (problemas.length > 0) {
+    throw new Error(`migracao de usuarios deixou referencias quebradas: ${JSON.stringify(problemas)}`)
+  }
+}
+
+/**
  * Base que ja existia (o dashboard rodou meses sem login) fica sem dono no
  * momento em que a coluna nasce. Em vez de exigir um comando manual antes de o
  * sistema voltar a subir, adotamos os orfaos numa conta e registramos no log —

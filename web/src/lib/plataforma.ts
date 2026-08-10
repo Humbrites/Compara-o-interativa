@@ -97,6 +97,13 @@ export const plataforma = {
       body: JSON.stringify(dados),
     }),
 
+  /** Acrescenta alguém a um cliente que já existe (respeita o teto do plano). */
+  criarUsuario: (contaId: number, dados: { nome: string; email: string; papel: Papel; usuario?: string | null }) =>
+    request<Panorama & { link: string }>(`/api/plataforma/contas/${contaId}/usuarios`, {
+      method: 'POST',
+      body: JSON.stringify(dados),
+    }),
+
   linkDeSenha: (usuarioId: number) =>
     request<{ link: string; expiraEmHoras: number }>(`/api/plataforma/usuarios/${usuarioId}/link-senha`, {
       method: 'POST',
