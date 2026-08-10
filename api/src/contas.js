@@ -13,7 +13,7 @@ import {
   hashDeToken,
   normalizarCodigoRecuperacao,
 } from './senhas.js'
-import { limiteDeUsuarios, PAPEIS, validarPlano } from './planos.js'
+import { limiteDeUsuarios, PAPEIS, PERIODICIDADE_PADRAO, validarPeriodicidade, validarPlano } from './planos.js'
 
 /** Sessao longa com renovacao a cada uso. */
 export const DIAS_SESSAO = 30
@@ -40,8 +40,15 @@ const DIA_MS = 24 * 60 * 60 * 1000
 
 export const buscarConta = db.prepare('SELECT * FROM contas WHERE id = ?')
 
-export function criarConta({ nome, plano = 'individual', limiteUsuarios = null, status = 'trial', diasTeste = null }) {
-  const problema = validarPlano(plano, limiteUsuarios)
+export function criarConta({
+  nome,
+  plano = 'individual',
+  limiteUsuarios = null,
+  status = 'trial',
+  diasTeste = null,
+  periodicidade = PERIODICIDADE_PADRAO,
+}) {
+  const problema = validarPlano(plano, limiteUsuarios) || validarPeriodicidade(periodicidade)
   if (problema) throw new Error(problema)
   if (!nome?.trim()) throw new Error('A conta precisa de um nome')
 
@@ -49,10 +56,10 @@ export function criarConta({ nome, plano = 'individual', limiteUsuarios = null, 
 
   const id = db
     .prepare(
-      `INSERT INTO contas (nome, plano, limite_usuarios, status, expira_em)
-       VALUES (@nome, @plano, @limite, @status, @expiraEm)`,
+      `INSERT INTO contas (nome, plano, limite_usuarios, status, expira_em, periodicidade)
+       VALUES (@nome, @plano, @limite, @status, @expiraEm, @periodicidade)`,
     )
-    .run({ nome: nome.trim(), plano, limite: limiteUsuarios, status, expiraEm }).lastInsertRowid
+    .run({ nome: nome.trim(), plano, limite: limiteUsuarios, status, expiraEm, periodicidade }).lastInsertRowid
 
   return buscarConta.get(id)
 }

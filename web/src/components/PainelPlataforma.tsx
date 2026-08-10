@@ -5,6 +5,7 @@ import { mensagemDoErro } from '../lib/http'
 import {
   COR_DO_PLANO,
   FAIXAS,
+  PERIODICIDADES,
   formatarData,
   paraCampoDeData,
   plataforma,
@@ -204,8 +205,11 @@ export function PainelPlataforma({ avisar, onFechar }: Props) {
                     editando={editando === conta.id}
                     onAbrir={() => setAberta(aberta === conta.id ? null : conta.id)}
                     onEditar={() => setEditando(editando === conta.id ? null : conta.id)}
-                    onRenovar={(meses) =>
-                      void agir(() => plataforma.renovar(conta.id, meses), `${conta.nome} renovada por ${meses} mês(es)`)
+                    onRenovar={(ciclos) =>
+                      void agir(
+                        () => plataforma.renovar(conta.id, ciclos),
+                        `${conta.nome} renovada por mais ${conta.cobranca.meses * ciclos} mês(es)`,
+                      )
                     }
                     onSalvar={async (alteracao) => {
                       await agir(() => plataforma.salvarConta(conta.id, alteracao), 'Conta atualizada')
@@ -376,7 +380,8 @@ interface LinhaProps {
   editando: boolean
   onAbrir: () => void
   onEditar: () => void
-  onRenovar: (meses: number) => void
+  /** Quantos CICLOS de cobrança da conta somar (1 = o padrão). */
+  onRenovar: (ciclos: number) => void
   onSalvar: (alteracao: Parameters<typeof plataforma.salvarConta>[1]) => Promise<void>
   onLinkDeSenha: (usuarioId: number, nome: string) => Promise<void>
   onCriarUsuario: (dados: { nome: string; email: string; papel: Papel }) => Promise<void>
@@ -411,6 +416,7 @@ function LinhaDeConta({
 
         <div className="conta-linha__selos">
           <Selo cor={COR_DO_PLANO[conta.plano.slug] || 'cinza'}>{conta.plano.nome}</Selo>
+          <Selo cor="contorno">{conta.cobranca.nome}</Selo>
           <Selo cor={faixa.cor}>{faixa.rotulo}</Selo>
         </div>
 
@@ -434,11 +440,18 @@ function LinhaDeConta({
         </div>
 
         <div className="conta-linha__acoes">
-          <button type="button" className="btn btn--secundario btn--pequeno" onClick={() => onRenovar(1)}>
-            +1 mês
-          </button>
-          <button type="button" className="btn btn--secundario btn--pequeno" onClick={() => onRenovar(12)}>
-            +12
+          {/* Um botão só: ele soma o ciclo CONTRATADO. Dois botões fixos
+              ("+1 mês" / "+12") obrigavam quem cobra a lembrar de cor a
+              periodicidade de cada cliente — e lembrar errado gera cobrança
+              fora de hora. */}
+          <button
+            type="button"
+            className="btn btn--secundario btn--pequeno"
+            onClick={() => onRenovar(1)}
+            title={`Renovar mais um ${conta.cobranca.abreviado} (${conta.cobranca.meses} ${conta.cobranca.meses === 1 ? 'mês' : 'meses'})`}
+          >
+            <Icone nome="atualizar" tamanho={13} />
+            Renovar {conta.cobranca.meses === 1 ? '1 mês' : `${conta.cobranca.meses} meses`}
           </button>
           <button
             type="button"
@@ -553,6 +566,7 @@ function FormEditarConta({
   const [plano, setPlano] = useState(conta.plano.slug)
   const [limite, setLimite] = useState(conta.plano.personalizado ? String(conta.assentos.limite ?? 0) : '')
   const [status, setStatus] = useState<StatusConta>(conta.statusGravado)
+  const [periodicidade, setPeriodicidade] = useState(conta.cobranca.slug)
   const [vencimento, setVencimento] = useState(paraCampoDeData(conta.expiraEm))
   const [observacoes, setObservacoes] = useState(conta.observacoes ?? '')
   const [salvando, setSalvando] = useState(false)
@@ -575,6 +589,7 @@ function FormEditarConta({
       await onSalvar({
         nome: nome.trim(),
         plano,
+        periodicidade,
         limiteUsuarios: limite.trim() === '' ? null : Number(limite),
         status,
         expiraEm: vencimento || '',
@@ -617,6 +632,20 @@ function FormEditarConta({
             onChange={(e) => setLimite(e.target.value)}
             placeholder={exigeLimite ? '25' : String(conta.plano.limite ?? '')}
           />
+        </Campo>
+
+        <Campo rotulo="Cobrança" dica="define quanto o botão Renovar soma">
+          <select
+            className="filtros__select"
+            value={periodicidade}
+            onChange={(e) => setPeriodicidade(e.target.value)}
+          >
+            {PERIODICIDADES.map((opcao) => (
+              <option key={opcao.slug} value={opcao.slug}>
+                {opcao.nome} ({opcao.meses} {opcao.meses === 1 ? 'mês' : 'meses'})
+              </option>
+            ))}
+          </select>
         </Campo>
 
         <Campo rotulo="Situação">
@@ -760,6 +789,7 @@ function FormNovoCliente({
 }) {
   const [nome, setNome] = useState('')
   const [plano, setPlano] = useState('equipe')
+  const [periodicidade, setPeriodicidade] = useState('mensal')
   const [limite, setLimite] = useState('')
   const [responsavel, setResponsavel] = useState('')
   const [email, setEmail] = useState('')
@@ -782,6 +812,7 @@ function FormNovoCliente({
       await aoCriar({
         nome: nome.trim(),
         plano,
+        periodicidade,
         limiteUsuarios: limite.trim() === '' ? null : Number(limite),
         responsavel: responsavel.trim(),
         email: email.trim(),
@@ -813,6 +844,20 @@ function FormNovoCliente({
             {PLANOS_DISPONIVEIS.map((opcao) => (
               <option key={opcao.slug} value={opcao.slug}>
                 {opcao.nome}
+              </option>
+            ))}
+          </select>
+        </Campo>
+
+        <Campo rotulo="Cobrança" dica="de quanto em quanto tempo ele paga">
+          <select
+            className="filtros__select"
+            value={periodicidade}
+            onChange={(e) => setPeriodicidade(e.target.value)}
+          >
+            {PERIODICIDADES.map((opcao) => (
+              <option key={opcao.slug} value={opcao.slug}>
+                {opcao.nome} ({opcao.meses} {opcao.meses === 1 ? 'mês' : 'meses'})
               </option>
             ))}
           </select>

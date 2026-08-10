@@ -522,6 +522,12 @@ Detalhes que valem lembrar:
 | Profissional | 10 |
 | Personalizado | o que estiver gravado na conta |
 
+O plano diz **quantas pessoas**; a **periodicidade** diz **de quanto em quanto tempo o
+cliente paga** — mensal, trimestral, semestral ou anual. As duas coisas são contrato e ficam
+na conta, então o botão **Renovar** já sabe quanto somar: *"Renovar 3 meses"* num cliente
+trimestral. Dois botões fixos (`+1 mês` / `+12`) obrigariam quem cobra a lembrar de cor o
+ciclo de cada cliente — e lembrar errado é o que gera cobrança fora de hora.
+
 A regra do limite, em ordem: **o valor gravado na conta vence o plano** (é o que atende quem
 negociou 15 assentos sem inventar um plano novo), `0` é "sem teto" dito explicitamente, e só
 na ausência dos dois o plano responde. Plano personalizado **exige** o número — sem essa
@@ -583,6 +589,9 @@ cliente está vendo, que é o pior lugar possível para uma divergência.
 Duas contas de tempo que valem lembrar: **renovar parte do vencimento atual**, não de
 hoje (senão o cliente perde os dias que já pagou; só quando já venceu é que a base vira
 hoje), e **mês que não tem o dia cai no último dia dele** — 31/01 + 1 mês = 28/02.
+A periodicidade é editada no mesmo formulário do plano, e o cliente vê o próprio ciclo em
+"Conta e equipe" (*"válido até 24/11/2026 · renovação trimestral"*) — a data sozinha não diz
+se a próxima cobrança é daqui a um mês ou a um ano.
 
 Existe ainda a marca `--operador`, que dá a mesma tela a alguém que **continua** dentro
 de uma conta-cliente. Serve para casos raros; o normal é o master.
@@ -591,7 +600,7 @@ de uma conta-cliente. Serve para casos raros; o normal é o master.
 
 ```bash
 npm run provisionar -- --listar
-npm run provisionar -- --conta "Imobiliária Alfa" --plano equipe \
+npm run provisionar -- --conta "Imobiliária Alfa" --plano equipe --periodicidade trimestral \
                        --nome "Ana" --email ana@alfa.com.br [--dias-teste 14]
 npm run provisionar -- --usuario-na-conta 1 --nome "Bruno" --email bruno@alfa.com.br
 npm run provisionar -- --plano-da-conta 1 --plano personalizado --usuarios 25

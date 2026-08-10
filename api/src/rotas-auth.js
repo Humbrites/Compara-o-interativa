@@ -41,7 +41,7 @@ import {
   statusEfetivo,
   usarCodigoRecuperacao,
 } from './contas.js'
-import { descreverPlano, podeGerirEquipe, PAPEIS } from './planos.js'
+import { descreverCobranca, descreverPlano, podeGerirEquipe, PAPEIS } from './planos.js'
 import { conferirSenha, gerarToken, validarSenha } from './senhas.js'
 import { conferirCodigo, gerarSegredo, urlOtpauth } from './totp.js'
 
@@ -162,6 +162,7 @@ function contaPublica(conta) {
     expiraEm: conta.expira_em,
     exigir2fa: Boolean(conta.exigir_2fa),
     plano: descreverPlano(conta),
+    cobranca: descreverCobranca(conta),
     assentos: resumoAssentos(conta),
   }
 }

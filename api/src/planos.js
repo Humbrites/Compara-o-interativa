@@ -33,6 +33,41 @@ export const PLANOS = {
 
 export const SEM_TETO = 0
 
+/**
+ * De quanto em quanto tempo o cliente paga.
+ *
+ * Fica na CONTA, não na hora de renovar: é combinado comercial, igual ao
+ * plano. Guardar aqui é o que permite o botão dizer "Renovar · 3 meses" em vez
+ * de obrigar quem cobra a lembrar o ciclo de cada cliente — e é lembrar errado
+ * que gera cobrança fora de hora.
+ */
+export const PERIODICIDADES = {
+  mensal: { nome: 'Mensal', meses: 1, abreviado: 'mês' },
+  trimestral: { nome: 'Trimestral', meses: 3, abreviado: 'trimestre' },
+  semestral: { nome: 'Semestral', meses: 6, abreviado: 'semestre' },
+  anual: { nome: 'Anual', meses: 12, abreviado: 'ano' },
+}
+
+export const PERIODICIDADE_PADRAO = 'mensal'
+
+/** Quantos meses um ciclo de cobrança desta conta representa. */
+export function mesesDoCiclo(conta) {
+  return PERIODICIDADES[conta?.periodicidade]?.meses ?? PERIODICIDADES[PERIODICIDADE_PADRAO].meses
+}
+
+export function descreverCobranca(conta) {
+  const slug = PERIODICIDADES[conta?.periodicidade] ? conta.periodicidade : PERIODICIDADE_PADRAO
+  const periodicidade = PERIODICIDADES[slug]
+  return { slug, nome: periodicidade.nome, meses: periodicidade.meses, abreviado: periodicidade.abreviado }
+}
+
+export function validarPeriodicidade(periodicidade) {
+  if (!PERIODICIDADES[periodicidade]) {
+    return `Periodicidade desconhecida: ${periodicidade}. Use uma de ${Object.keys(PERIODICIDADES).join(', ')}`
+  }
+  return null
+}
+
 /** Status em que a conta pode gravar; fora deles, so leitura (ou nem entra). */
 export const STATUS_CONTA = ['trial', 'ativa', 'suspensa', 'cancelada']
 

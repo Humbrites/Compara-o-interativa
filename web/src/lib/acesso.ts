@@ -33,6 +33,8 @@ export interface AssentosResumo {
 export interface ContaSessao {
   id: number
   nome: string
+  /** O ciclo de cobrança contratado (mensal, trimestral, semestral, anual). */
+  cobranca: { slug: string; nome: string; meses: number; abreviado: string }
   status: StatusConta
   somenteLeitura: boolean
   expiraEm: string | null

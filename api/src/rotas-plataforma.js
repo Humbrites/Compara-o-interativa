@@ -16,7 +16,7 @@ import {
   encerrarTodasAsSessoes,
 } from './contas.js'
 import { ehOperador, novaDataDeRenovacao, panorama } from './plataforma.js'
-import { PAPEIS, PLANOS, STATUS_CONTA, validarPlano } from './planos.js'
+import { mesesDoCiclo, PAPEIS, PERIODICIDADES, PLANOS, STATUS_CONTA, validarPeriodicidade, validarPlano } from './planos.js'
 
 /** Prefixo que a guarda de sessão trata em separado (ver `rotas-auth.js`). */
 export const PREFIXO_PLATAFORMA = '/api/plataforma'
@@ -72,6 +72,10 @@ export function registrarPlataforma(app) {
       return reply.code(400).send({ erro: `Status inválido. Use um de: ${STATUS_CONTA.join(', ')}` })
     }
 
+    const periodicidade = corpo.periodicidade === undefined ? conta.periodicidade : String(corpo.periodicidade)
+    const problemaCiclo = validarPeriodicidade(periodicidade)
+    if (problemaCiclo) return reply.code(400).send({ erro: problemaCiclo })
+
     let expiraEm = conta.expira_em
     if (corpo.expiraEm !== undefined) {
       // String vazia limpa o vencimento (conta sem data para vencer).
@@ -82,7 +86,8 @@ export function registrarPlataforma(app) {
     db.prepare(
       `UPDATE contas
           SET nome = @nome, plano = @plano, limite_usuarios = @limite, status = @status,
-              expira_em = @expiraEm, observacoes = @observacoes, atualizado_em = datetime('now')
+              expira_em = @expiraEm, periodicidade = @periodicidade, observacoes = @observacoes,
+              atualizado_em = datetime('now')
         WHERE id = @id`,
     ).run({
       nome,
@@ -90,6 +95,7 @@ export function registrarPlataforma(app) {
       limite,
       status,
       expiraEm,
+      periodicidade,
       observacoes: corpo.observacoes === undefined ? conta.observacoes : String(corpo.observacoes).trim() || null,
       id: conta.id,
     })
@@ -105,12 +111,23 @@ export function registrarPlataforma(app) {
     return panorama()
   })
 
-  /** Renova N meses a partir do vencimento atual (ou de hoje, se já passou). */
+  /**
+   * Renova a partir do vencimento atual (ou de hoje, se já passou).
+   *
+   * Sem `meses`, renova UM ciclo de cobrança da conta — mensal soma 1, anual
+   * soma 12. Quem cobra não deveria ter de lembrar o ciclo de cada cliente na
+   * hora do clique; lembrar errado é o que gera cobrança fora de hora.
+   */
   app.post(`${PREFIXO_PLATAFORMA}/contas/:id/renovar`, guarda, (req, reply) => {
     const conta = buscarConta.get(Number(req.params.id))
     if (!conta) return reply.code(404).send({ erro: 'Conta não encontrada' })
 
-    const meses = Number(req.body?.meses ?? 1)
+    const ciclos = req.body?.ciclos === undefined ? null : Number(req.body.ciclos)
+    if (ciclos !== null && (!Number.isInteger(ciclos) || ciclos < 1 || ciclos > 12)) {
+      return reply.code(400).send({ erro: 'Informe de 1 a 12 ciclos' })
+    }
+
+    const meses = req.body?.meses !== undefined ? Number(req.body.meses) : mesesDoCiclo(conta) * (ciclos ?? 1)
     if (!Number.isInteger(meses) || meses < 1 || meses > 60) {
       return reply.code(400).send({ erro: 'Informe de 1 a 60 meses' })
     }
@@ -133,7 +150,8 @@ export function registrarPlataforma(app) {
         ? null
         : Number(corpo.limiteUsuarios)
 
-    const problema = validarPlano(plano, limite)
+    const periodicidade = String(corpo.periodicidade || 'mensal')
+    const problema = validarPlano(plano, limite) || validarPeriodicidade(periodicidade)
     if (problema) return reply.code(400).send({ erro: problema })
 
     let conta
@@ -145,6 +163,7 @@ export function registrarPlataforma(app) {
         limiteUsuarios: limite,
         status: corpo.diasTeste ? 'trial' : 'ativa',
         diasTeste: corpo.diasTeste ? Number(corpo.diasTeste) : null,
+        periodicidade,
       })
 
       // O primeiro é sempre dono: alguém precisa poder convidar o resto.
@@ -245,6 +264,7 @@ export function registrarPlataforma(app) {
   /** O catálogo, para a tela montar os seletores sem repetir os números. */
   app.get(`${PREFIXO_PLATAFORMA}/planos`, guarda, () => ({
     planos: Object.entries(PLANOS).map(([slug, plano]) => ({ slug, ...plano })),
+    periodicidades: Object.entries(PERIODICIDADES).map(([slug, p]) => ({ slug, ...p })),
     status: STATUS_CONTA,
     agora: agora(),
   }))

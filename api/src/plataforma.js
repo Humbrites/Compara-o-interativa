@@ -9,7 +9,7 @@
  */
 import { db } from './db.js'
 import { agora, resumoAssentos, statusEfetivo } from './contas.js'
-import { descreverPlano, PLANOS } from './planos.js'
+import { descreverCobranca, descreverPlano, mesesDoCiclo, PLANOS } from './planos.js'
 
 const DIA_MS = 24 * 60 * 60 * 1000
 
@@ -84,6 +84,7 @@ export function panorama() {
       id: conta.id,
       nome: conta.nome,
       plano: descreverPlano(conta),
+      cobranca: descreverCobranca(conta),
       status: statusEfetivo(conta),
       statusGravado: conta.status,
       expiraEm: conta.expira_em,
@@ -176,7 +177,7 @@ function resumir(linhas) {
  * conta ainda esta em dia faria o cliente perder os dias que ja pagou; a base
  * certa e o vencimento atual, e so quando ele ja passou e que vale hoje.
  */
-export function novaDataDeRenovacao(conta, meses) {
+export function novaDataDeRenovacao(conta, meses = mesesDoCiclo(conta)) {
   const atual = conta.expira_em ? new Date(`${conta.expira_em.replace(' ', 'T')}Z`) : null
   const base = atual && atual.getTime() > Date.now() ? atual : new Date()
 

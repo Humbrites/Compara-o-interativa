@@ -243,6 +243,100 @@ test('o operador muda o plano e a data, e a validação segura o descuido', asyn
   assert.equal(invalida.status, 400)
 })
 
+test('renovar soma o CICLO contratado, não um mês fixo', async () => {
+  const operador = criarCliente()
+  await operador.pedir('/api/auth/login', {
+    metodo: 'POST',
+    corpo: { identificador: 'ana@operadora.com.br', senha: 'opera-2026-forte' },
+  })
+
+  // Um cliente de cada ciclo, para conferir os quatro de uma vez.
+  const casos = [
+    { nome: 'Ciclo Mensal', periodicidade: 'mensal', meses: 1 },
+    { nome: 'Ciclo Trimestral', periodicidade: 'trimestral', meses: 3 },
+    { nome: 'Ciclo Semestral', periodicidade: 'semestral', meses: 6 },
+    { nome: 'Ciclo Anual', periodicidade: 'anual', meses: 12 },
+  ]
+
+  for (const caso of casos) {
+    const criada = await operador.pedir('/api/plataforma/contas', {
+      metodo: 'POST',
+      corpo: {
+        nome: caso.nome,
+        plano: 'individual',
+        periodicidade: caso.periodicidade,
+        responsavel: `Dono ${caso.meses}`,
+        email: `dono${caso.meses}@ciclos.com.br`,
+      },
+    })
+    assert.equal(criada.status, 201, JSON.stringify(criada.corpo))
+
+    const conta = criada.corpo.contas.find((c) => c.nome === caso.nome)
+    assert.equal(conta.cobranca.slug, caso.periodicidade)
+    assert.equal(conta.cobranca.meses, caso.meses)
+    // Conta nova sem período de teste nasce sem vencimento.
+    assert.equal(conta.expiraEm, null)
+
+    // Renovar SEM dizer quantos meses: usa o ciclo da conta.
+    const renovada = await operador.pedir(`/api/plataforma/contas/${conta.id}/renovar`, { metodo: 'POST', corpo: {} })
+    assert.equal(renovada.status, 200)
+
+    const depois = renovada.corpo.contas.find((c) => c.nome === caso.nome)
+    const esperado = new Date()
+    esperado.setUTCMonth(esperado.getUTCMonth() + caso.meses)
+
+    assert.equal(
+      depois.expiraEm.slice(0, 7),
+      esperado.toISOString().slice(0, 7),
+      `${caso.nome}: esperava vencer em ${caso.meses} mês(es)`,
+    )
+  }
+})
+
+test('dois ciclos somam o dobro, e o ciclo muda pela edição', async () => {
+  const operador = criarCliente()
+  await operador.pedir('/api/auth/login', {
+    metodo: 'POST',
+    corpo: { identificador: 'ana@operadora.com.br', senha: 'opera-2026-forte' },
+  })
+
+  const antes = await operador.pedir('/api/plataforma')
+  const trimestral = antes.corpo.contas.find((c) => c.nome === 'Ciclo Trimestral')
+  const partida = trimestral.expiraEm
+
+  // 2 ciclos de 3 meses = 6 meses a partir do vencimento que já existe.
+  const renovada = await operador.pedir(`/api/plataforma/contas/${trimestral.id}/renovar`, {
+    metodo: 'POST',
+    corpo: { ciclos: 2 },
+  })
+  const depois = renovada.corpo.contas.find((c) => c.nome === 'Ciclo Trimestral')
+
+  const esperado = new Date(`${partida.replace(' ', 'T')}Z`)
+  esperado.setUTCMonth(esperado.getUTCMonth() + 6)
+  assert.equal(depois.expiraEm.slice(0, 10), esperado.toISOString().slice(0, 10))
+
+  // Trocar o ciclo pela edição muda o que a próxima renovação vai somar.
+  const editada = await operador.pedir(`/api/plataforma/contas/${trimestral.id}`, {
+    metodo: 'PUT',
+    corpo: { periodicidade: 'anual' },
+  })
+  assert.equal(editada.status, 200)
+  assert.equal(editada.corpo.contas.find((c) => c.nome === 'Ciclo Trimestral').cobranca.meses, 12)
+
+  const invalida = await operador.pedir(`/api/plataforma/contas/${trimestral.id}`, {
+    metodo: 'PUT',
+    corpo: { periodicidade: 'quinzenal' },
+  })
+  assert.equal(invalida.status, 400)
+  assert.match(invalida.corpo.erro, /Periodicidade desconhecida/)
+
+  const ciclosDemais = await operador.pedir(`/api/plataforma/contas/${trimestral.id}/renovar`, {
+    metodo: 'POST',
+    corpo: { ciclos: 99 },
+  })
+  assert.equal(ciclosDemais.status, 400)
+})
+
 test('renovar reativa a conta suspensa', async () => {
   const operador = criarCliente()
   await operador.pedir('/api/auth/login', {

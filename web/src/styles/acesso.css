@@ -1735,3 +1735,8 @@
 .suporte-fluxo__conferencia svg {
   flex: none;
 }
+
+.plano__ciclo {
+  font-weight: 400;
+  color: var(--texto-3);
+}

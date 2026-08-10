@@ -27,10 +27,20 @@ export interface UsuarioDaPlataforma {
   criadoEm: string
 }
 
+/** De quanto em quanto tempo o cliente paga — é combinado, fica na conta. */
+export interface CobrancaResumo {
+  slug: string
+  nome: string
+  meses: number
+  /** "mês", "trimestre"… para o botão dizer o que vai somar. */
+  abreviado: string
+}
+
 export interface ContaDaPlataforma {
   id: number
   nome: string
   plano: PlanoResumo
+  cobranca: CobrancaResumo
   status: StatusConta
   statusGravado: StatusConta
   expiraEm: string | null
@@ -70,6 +80,7 @@ export interface AlteracaoDeConta {
   plano?: string
   limiteUsuarios?: number | null
   status?: StatusConta
+  periodicidade?: string
   /** `YYYY-MM-DD`; string vazia limpa o vencimento. */
   expiraEm?: string | null
   observacoes?: string
@@ -94,12 +105,14 @@ export const plataforma = {
   salvarConta: (id: number, dados: AlteracaoDeConta) =>
     request<Panorama>(`/api/plataforma/contas/${id}`, { method: 'PUT', body: JSON.stringify(dados) }),
 
-  renovar: (id: number, meses: number) =>
-    request<Panorama>(`/api/plataforma/contas/${id}/renovar`, { method: 'POST', body: JSON.stringify({ meses }) }),
+  /** Sem `ciclos`, renova UM ciclo de cobrança da conta. */
+  renovar: (id: number, ciclos = 1) =>
+    request<Panorama>(`/api/plataforma/contas/${id}/renovar`, { method: 'POST', body: JSON.stringify({ ciclos }) }),
 
   criarConta: (dados: {
     nome: string
     plano: string
+    periodicidade?: string
     limiteUsuarios?: number | null
     responsavel: string
     email: string
@@ -125,6 +138,13 @@ export const plataforma = {
       method: 'POST',
     }),
 }
+
+export const PERIODICIDADES = [
+  { slug: 'mensal', nome: 'Mensal', meses: 1 },
+  { slug: 'trimestral', nome: 'Trimestral', meses: 3 },
+  { slug: 'semestral', nome: 'Semestral', meses: 6 },
+  { slug: 'anual', nome: 'Anual', meses: 12 },
+]
 
 /** Cada plano tem a sua cor — é o que deixa a lista legível de relance. */
 export const COR_DO_PLANO: Record<string, string> = {

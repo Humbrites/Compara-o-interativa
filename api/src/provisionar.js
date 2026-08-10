@@ -28,7 +28,7 @@ import {
   resumoAssentos,
   statusEfetivo,
 } from './contas.js'
-import { descreverPlano, PLANOS, STATUS_CONTA, validarPlano } from './planos.js'
+import { descreverCobranca, descreverPlano, PERIODICIDADES, PLANOS, STATUS_CONTA, validarPeriodicidade, validarPlano } from './planos.js'
 
 const URL_BASE = process.env.URL_BASE || 'http://localhost:5273'
 
@@ -62,10 +62,12 @@ function mostrarConta(conta) {
   const limite = assentos.limite === null ? 'sem teto' : assentos.limite
   const vencimento = conta.expira_em ? ` · vence ${conta.expira_em}` : ''
 
+  const cobranca = descreverCobranca(conta)
+
   console.log(
     `  #${String(conta.id).padStart(3)} ${conta.nome}\n` +
-      `        ${plano.nome} · ${assentos.usuarios} usuário(s) + ${assentos.convitesPendentes} convite(s) de ${limite}` +
-      ` · ${statusEfetivo(conta)}${vencimento}`,
+      `        ${plano.nome} · ${cobranca.nome} · ${assentos.usuarios} usuário(s) + ` +
+      `${assentos.convitesPendentes} convite(s) de ${limite} · ${statusEfetivo(conta)}${vencimento}`,
   )
 }
 
@@ -93,16 +95,20 @@ if (opcoes['plano-da-conta']) {
   const plano = opcoes.plano === undefined || opcoes.plano === true ? conta.plano : String(opcoes.plano)
   const limite = opcoes.usuarios === undefined ? conta.limite_usuarios : numero(opcoes.usuarios)
 
-  const problema = validarPlano(plano, limite)
+  const periodicidade =
+    opcoes.periodicidade === undefined || opcoes.periodicidade === true
+      ? conta.periodicidade
+      : String(opcoes.periodicidade)
+
+  const problema = validarPlano(plano, limite) || validarPeriodicidade(periodicidade)
   if (problema) encerrar(problema)
 
   // Reduzir o plano NAO desliga ninguem automaticamente: quem decide quem sai
   // e o cliente. O sistema so para de aceitar gente nova ate caber.
-  db.prepare("UPDATE contas SET plano = ?, limite_usuarios = ?, atualizado_em = datetime('now') WHERE id = ?").run(
-    plano,
-    limite,
-    conta.id,
-  )
+  db.prepare(
+    `UPDATE contas SET plano = ?, limite_usuarios = ?, periodicidade = ?, atualizado_em = datetime('now')
+      WHERE id = ?`,
+  ).run(plano, limite, periodicidade, conta.id)
 
   const atualizada = buscarConta.get(conta.id)
   const assentos = resumoAssentos(atualizada)
@@ -303,7 +309,10 @@ if (opcoes.conta && opcoes.conta !== true) {
   const limite = opcoes.usuarios === undefined ? null : numero(opcoes.usuarios)
   const diasTeste = numero(opcoes['dias-teste'])
 
-  const problema = validarPlano(plano, limite)
+  const periodicidade =
+    opcoes.periodicidade === undefined || opcoes.periodicidade === true ? 'mensal' : String(opcoes.periodicidade)
+
+  const problema = validarPlano(plano, limite) || validarPeriodicidade(periodicidade)
   if (problema) encerrar(problema)
 
   if (!opcoes.nome || opcoes.nome === true) encerrar('Informe --nome do primeiro usuário')
@@ -319,6 +328,7 @@ if (opcoes.conta && opcoes.conta !== true) {
       limiteUsuarios: limite,
       status: diasTeste ? 'trial' : 'ativa',
       diasTeste,
+      periodicidade,
     })
 
     // O primeiro usuário é sempre o dono: alguém precisa poder convidar o resto.
@@ -357,6 +367,8 @@ Provisionamento do Compara Interativa
     --plano <${Object.keys(PLANOS).join('|')}>
     --usuarios <n>                  limite próprio da conta (0 = sem teto);
                                     obrigatório no plano personalizado
+    --periodicidade <mensal|trimestral|semestral|anual>
+                                    de quanto em quanto tempo ele paga
     --nome "Nome da pessoa"
     --email pessoa@empresa.com.br
     --usuario apelido               opcional, para entrar sem digitar o e-mail
@@ -366,8 +378,8 @@ Provisionamento do Compara Interativa
     --nome "Nome" --email pessoa@empresa.com.br
     [--usuario apelido] [--papel dono|admin|membro]   (padrão: dono)
 
-  --plano-da-conta <id>             muda o plano/limite de uma conta
-    --plano <slug> [--usuarios <n>]
+  --plano-da-conta <id>             muda o plano/limite/ciclo de uma conta
+    --plano <slug> [--usuarios <n>] [--periodicidade <slug>]
 
   --status-da-conta <id>            muda o status
     --status <${STATUS_CONTA.join('|')}>

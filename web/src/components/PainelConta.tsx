@@ -207,6 +207,9 @@ function AbaEquipe({
             <div className="plano__vencimento">
               {dados.somenteLeitura ? 'Venceu em ' : 'Válido até '}
               {formatarData(dados.expiraEm)}
+              {/* O ciclo explica a data: "vence em 30/09" sozinho não diz se a
+                  próxima cobrança é daqui a um mês ou a um ano. */}
+              <span className="plano__ciclo"> · renovação {dados.cobranca.nome.toLowerCase()}</span>
             </div>
           )}
 

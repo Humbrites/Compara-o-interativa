@@ -256,6 +256,13 @@ db.exec('CREATE INDEX IF NOT EXISTS idx_empreendimentos_conta ON empreendimentos
 // (quem compra). E a unica marca que a interface nao concede: sai so pela
 // linha de comando, porque quem pudesse se promover por tela veria a base
 // inteira de todos os clientes.
+// De quanto em quanto tempo o cliente paga. Nasce mensal para as contas que ja
+// existiam — que e o ciclo mais curto, entao ninguem ganha tempo de graca.
+const colunasConta = db.prepare('PRAGMA table_info(contas)').all()
+if (!colunasConta.some((coluna) => coluna.name === 'periodicidade')) {
+  db.exec("ALTER TABLE contas ADD COLUMN periodicidade TEXT NOT NULL DEFAULT 'mensal';")
+}
+
 const colunasUsuario = db.prepare('PRAGMA table_info(usuarios)').all()
 if (!colunasUsuario.some((coluna) => coluna.name === 'operador')) {
   db.exec('ALTER TABLE usuarios ADD COLUMN operador INTEGER NOT NULL DEFAULT 0;')
