@@ -826,3 +826,440 @@
   font-size: 11.5px;
   color: var(--texto-3);
 }
+
+/* ==========================================================================
+   Painel da plataforma — a área de quem VENDE
+   ========================================================================== */
+
+/* Selo vermelho: só a renovação vencida usa. O verde do projeto é reservado
+   ao "melhor indicador" do comparativo, e o vermelho, a isto. */
+.selo--vermelho {
+  background: var(--perigo-fundo);
+  color: var(--perigo);
+}
+
+.plataforma {
+  display: grid;
+  gap: var(--e5);
+}
+
+/* --- Cartões de resumo ---------------------------------------------------- */
+
+.resumo-cartoes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: var(--e3);
+}
+
+.cartao-resumo {
+  padding: var(--e4);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  background: var(--superficie-2);
+}
+
+.cartao-resumo__rotulo {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--texto-3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.cartao-resumo__valor {
+  margin-top: var(--e1);
+  font-family: var(--fonte-num);
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--texto);
+  line-height: 1.1;
+}
+
+.cartao-resumo__apoio {
+  margin-top: var(--e1);
+  font-size: 11.5px;
+  color: var(--texto-2);
+}
+
+.cartao-resumo--planos {
+  grid-column: span 2;
+}
+
+.mini-planos {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--e1) var(--e3);
+  margin-top: var(--e2);
+  padding: 0;
+  list-style: none;
+}
+
+.mini-planos li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e2);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--texto);
+}
+
+.mini-planos__pessoas {
+  font-weight: 400;
+  color: var(--texto-3);
+}
+
+/* --- Alertas de renovação (são filtros) ----------------------------------- */
+
+.alertas {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  flex-wrap: wrap;
+}
+
+.alertas--vazio {
+  padding: var(--e3) var(--e4);
+  border: 1px solid var(--vitoria-borda);
+  border-radius: var(--raio);
+  background: var(--vitoria-fundo);
+  color: var(--vitoria);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.alerta {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--e2);
+  padding: var(--e2) var(--e4);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-pill);
+  background: var(--superficie);
+  font-size: 12.5px;
+  color: var(--texto-2);
+  transition: border-color var(--transicao), box-shadow var(--transicao);
+}
+
+.alerta:hover {
+  border-color: var(--borda-forte);
+}
+
+.alerta__numero {
+  font-family: var(--fonte-num);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.alerta--perigo {
+  border-color: var(--perigo);
+  background: var(--perigo-fundo);
+  color: var(--perigo);
+}
+
+.alerta--alerta {
+  border-color: var(--alerta);
+  background: var(--alerta-fundo);
+  color: var(--alerta);
+}
+
+.alerta--info {
+  border-color: var(--info);
+  background: var(--info-fundo);
+  color: var(--info);
+}
+
+/* Filtro ligado precisa se distinguir de "só existe" — daí o anel. */
+.alerta--ativo {
+  box-shadow: var(--foco);
+}
+
+/* --- Barra de busca ------------------------------------------------------- */
+
+.plataforma__barra {
+  display: flex;
+  align-items: center;
+  gap: var(--e3);
+}
+
+.plataforma__barra .busca {
+  flex: 1;
+}
+
+/* --- Lista de contas ------------------------------------------------------ */
+
+.contas-lista {
+  display: grid;
+  gap: var(--e2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.conta-linha {
+  border: 1px solid var(--borda);
+  border-left: 3px solid var(--borda);
+  border-radius: var(--raio);
+  background: var(--superficie);
+}
+
+/* A barra lateral dá a urgência antes de ler qualquer texto. */
+.conta-linha--vencida {
+  border-left-color: var(--perigo);
+}
+.conta-linha--vence-em-7,
+.conta-linha--suspensa {
+  border-left-color: var(--alerta);
+}
+.conta-linha--vence-em-30 {
+  border-left-color: var(--info);
+}
+.conta-linha--em-dia {
+  border-left-color: var(--vitoria);
+}
+.conta-linha--encerrada {
+  opacity: 0.6;
+}
+
+.conta-linha__topo {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.6fr) auto 78px 140px auto;
+  align-items: center;
+  gap: var(--e3);
+  padding: var(--e3) var(--e4);
+}
+
+@media (max-width: 900px) {
+  .conta-linha__topo {
+    grid-template-columns: 1fr;
+  }
+}
+
+.conta-linha__abrir {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  min-width: 0;
+}
+
+.conta-linha__seta {
+  display: grid;
+  place-items: center;
+  color: var(--texto-3);
+  transition: transform var(--transicao);
+}
+
+.conta-linha__seta--aberta {
+  transform: rotate(180deg);
+}
+
+.conta-linha__nome {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--texto);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conta-linha__selos {
+  display: flex;
+  gap: var(--e1);
+  flex-wrap: wrap;
+}
+
+.conta-linha__assentos {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--texto-3);
+}
+
+.conta-linha__assentos strong {
+  font-family: var(--fonte-num);
+  font-size: 15px;
+  color: var(--texto);
+}
+
+.conta-linha__cheio {
+  margin-left: var(--e1);
+  color: var(--alerta);
+  font-weight: 600;
+  font-size: 10.5px;
+  text-transform: uppercase;
+}
+
+.conta-linha__vencimento {
+  font-size: 12.5px;
+  color: var(--texto-2);
+}
+
+.conta-linha__atrasado {
+  color: var(--perigo);
+  font-weight: 600;
+}
+
+.conta-linha__data {
+  font-size: 11px;
+  color: var(--texto-3);
+}
+
+.conta-linha__acoes {
+  display: flex;
+  gap: var(--e1);
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+/* --- Detalhe da conta ----------------------------------------------------- */
+
+.conta-linha__detalhe,
+.conta-edicao {
+  padding: var(--e4);
+  border-top: 1px solid var(--borda);
+  background: var(--superficie-2);
+}
+
+.conta-edicao {
+  display: grid;
+  gap: var(--e3);
+}
+
+.conta-linha__meta {
+  font-size: 12px;
+  color: var(--texto-2);
+  margin-bottom: var(--e3);
+}
+
+.mini-usuarios {
+  display: grid;
+  gap: var(--e1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mini-usuarios li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e3);
+  padding: var(--e2) var(--e3);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-sm);
+  background: var(--superficie);
+}
+
+.mini-usuarios--inativo {
+  opacity: 0.6;
+}
+
+.mini-usuarios__nome {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  flex-wrap: wrap;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--texto);
+}
+
+.mini-usuarios__meta {
+  font-size: 11.5px;
+  color: var(--texto-3);
+}
+
+/* --- Tabela de todos os usuários ------------------------------------------ */
+
+.tabela-usuarios {
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  overflow: hidden;
+}
+
+.tabela-usuarios__cabecalho,
+.tabela-usuarios li {
+  display: grid;
+  grid-template-columns: minmax(200px, 2fr) minmax(160px, 1.4fr) 120px 120px;
+  align-items: center;
+  gap: var(--e3);
+  padding: var(--e3) var(--e4);
+}
+
+.tabela-usuarios__cabecalho {
+  background: var(--superficie-3);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--texto-3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.tabela-usuarios ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tabela-usuarios li {
+  border-top: 1px solid var(--borda);
+  font-size: 12.5px;
+  color: var(--texto-2);
+}
+
+.tabela-usuarios--inativo {
+  opacity: 0.6;
+}
+
+.tabela-usuarios__nome {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  flex-wrap: wrap;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--texto);
+}
+
+.tabela-usuarios__email {
+  font-size: 11.5px;
+  color: var(--texto-3);
+}
+
+.tabela-usuarios__conta {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.tabela-usuarios__nunca {
+  color: var(--texto-3);
+  font-style: italic;
+}
+
+@media (max-width: 900px) {
+  .tabela-usuarios__cabecalho {
+    display: none;
+  }
+
+  .tabela-usuarios li {
+    grid-template-columns: 1fr;
+    gap: var(--e1);
+  }
+}
+
+.usuario__item--operador svg {
+  color: var(--marca-600);
+}
+
+.conta-linha__encerrada {
+  color: var(--texto-3);
+  font-style: italic;
+}

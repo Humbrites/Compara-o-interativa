@@ -177,6 +177,24 @@ if (opcoes['usuario-na-conta']) {
   process.exit(0)
 }
 
+/* Conceder ou tirar a marca de operador da plataforma. */
+if (opcoes.operador && opcoes.operador !== true) {
+  const usuario = buscarUsuarioPorIdentificador(String(opcoes.operador))
+  if (!usuario) encerrar('Usuário não encontrado')
+
+  // `--tirar` remove; sem ele, concede.
+  const marca = opcoes.tirar ? 0 : 1
+  db.prepare("UPDATE usuarios SET operador = ?, atualizado_em = datetime('now') WHERE id = ?").run(marca, usuario.id)
+
+  console.log(
+    marca
+      ? `\n✓ ${usuario.nome} <${usuario.email}> agora enxerga TODAS as contas na área da plataforma.\n` +
+          '  (entre de novo no sistema para o menu aparecer)\n'
+      : `\n✓ ${usuario.nome} <${usuario.email}> deixou de ser operador.\n`,
+  )
+  process.exit(0)
+}
+
 /* Link novo de senha para alguém que já existe. */
 if (opcoes['link-senha'] && opcoes['link-senha'] !== true) {
   const usuario = buscarUsuarioPorIdentificador(String(opcoes['link-senha']))
@@ -265,6 +283,10 @@ Provisionamento do Compara Interativa
     --dias <n>                      novo vencimento (0 limpa)
 
   --link-senha <e-mail|apelido>     gera um link novo de definição de senha
+
+  --operador <e-mail|apelido>       dá acesso à área da plataforma (ver TODAS
+                                    as contas, planos e renovações)
+    --tirar                         remove esse acesso
 
 Endereço usado nos links: ${URL_BASE} (mude com URL_BASE=...)
 `)

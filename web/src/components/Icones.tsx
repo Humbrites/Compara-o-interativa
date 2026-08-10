@@ -166,6 +166,11 @@ const TRACOS: Record<string, JSX.Element> = {
       <path d="m16 7 2 2" />
     </>
   ),
+  seta: (
+    <>
+      <path d="m6 9 6 6 6-6" />
+    </>
+  ),
   pessoa: (
     <>
       <circle cx="12" cy="8" r="4" />

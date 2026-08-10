@@ -252,6 +252,15 @@ db.exec('CREATE INDEX IF NOT EXISTS idx_empreendimentos_conta ON empreendimentos
 // empreendimento, e duas fontes de verdade para o mesmo dono divergiriam no
 // primeiro INSERT feito fora do caminho normal.
 
+// Operador da PLATAFORMA (quem vende) — nao confundir com o dono da conta
+// (quem compra). E a unica marca que a interface nao concede: sai so pela
+// linha de comando, porque quem pudesse se promover por tela veria a base
+// inteira de todos os clientes.
+const colunasUsuario = db.prepare('PRAGMA table_info(usuarios)').all()
+if (!colunasUsuario.some((coluna) => coluna.name === 'operador')) {
+  db.exec('ALTER TABLE usuarios ADD COLUMN operador INTEGER NOT NULL DEFAULT 0;')
+}
+
 /**
  * Base que ja existia (o dashboard rodou meses sem login) fica sem dono no
  * momento em que a coluna nasce. Em vez de exigir um comando manual antes de o

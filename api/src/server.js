@@ -19,6 +19,7 @@ import {
 } from './db.js'
 import { criarServicoIndicadores } from './indicadores.js'
 import { registrarAutenticacao } from './rotas-auth.js'
+import { registrarPlataforma } from './rotas-plataforma.js'
 
 const app = Fastify({ logger: true })
 
@@ -68,6 +69,8 @@ const PORT = Number(process.env.PORT || 3210)
 
 // Autenticação antes de tudo: é ela que instala a guarda que fecha as rotas.
 registrarAutenticacao(app)
+// A área de quem vende — atravessa as contas e exige a marca de operador.
+registrarPlataforma(app)
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                             */

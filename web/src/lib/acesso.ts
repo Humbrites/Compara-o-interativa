@@ -10,6 +10,8 @@ export interface UsuarioSessao {
   usuario: string | null
   papel: Papel
   totpAtivo: boolean
+  /** Operador da plataforma (quem vende): enxerga TODAS as contas. */
+  operador: boolean
 }
 
 export interface PlanoResumo {

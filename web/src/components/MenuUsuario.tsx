@@ -12,6 +12,7 @@ interface Props {
   sessao: Sessao
   onAbrirConta: () => void
   onAbrirSeguranca: () => void
+  onAbrirPlataforma: () => void
   onSair: () => Promise<void>
 }
 
@@ -23,7 +24,7 @@ function iniciais(nome: string) {
   return (primeira + ultima).toUpperCase()
 }
 
-export function MenuUsuario({ sessao, onAbrirConta, onAbrirSeguranca, onSair }: Props) {
+export function MenuUsuario({ sessao, onAbrirConta, onAbrirSeguranca, onAbrirPlataforma, onSair }: Props) {
   const [aberto, setAberto] = useState(false)
   const raiz = useRef<HTMLDivElement>(null)
 
@@ -64,7 +65,7 @@ export function MenuUsuario({ sessao, onAbrirConta, onAbrirSeguranca, onSair }: 
           <span className="usuario__nome">{usuario.nome.split(/\s+/)[0]}</span>
           <span className="usuario__conta">{conta.nome}</span>
         </span>
-        <Icone nome="filtro" tamanho={12} />
+        <Icone nome="seta" tamanho={12} />
       </button>
 
       {aberto && (
@@ -119,6 +120,29 @@ export function MenuUsuario({ sessao, onAbrirConta, onAbrirSeguranca, onSair }: 
               </span>
             </span>
           </button>
+
+          {/* Só para quem vende o sistema — a marca não é concedida por tela
+              nenhuma, então este item nem existe para o cliente. */}
+          {usuario.operador && (
+            <>
+              <div className="usuario__separador" />
+              <button
+                type="button"
+                role="menuitem"
+                className="usuario__item usuario__item--operador"
+                onClick={() => {
+                  setAberto(false)
+                  onAbrirPlataforma()
+                }}
+              >
+                <Icone nome="banco" tamanho={15} />
+                <span>
+                  Clientes e assinaturas
+                  <span className="usuario__item-dica">Todas as contas, planos e renovações</span>
+                </span>
+              </button>
+            </>
+          )}
 
           <div className="usuario__separador" />
 

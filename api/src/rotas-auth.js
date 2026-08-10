@@ -145,6 +145,9 @@ function usuarioPublico(usuario) {
     usuario: usuario.usuario,
     papel: usuario.papel,
     totpAtivo: Boolean(usuario.totp_ativo),
+    // É o que faz a área do operador aparecer no menu — e ela só existe para
+    // quem recebeu a marca pela linha de comando.
+    operador: Boolean(usuario.operador),
   }
 }
 
@@ -208,6 +211,11 @@ export function registrarAutenticacao(app) {
     if (pendencia2fa(contexto.usuario, contexto.conta) && !caminho.startsWith('/api/seguranca/')) {
       return reply.code(403).send({ erro: 'Configure a verificação em duas etapas para continuar', precisa2fa: true })
     }
+
+    // A area do operador nao e dado do cliente: se a conta DELE estiver
+    // vencida, ele ainda precisa poder renovar as dos outros — inclusive a
+    // propria. Bloquear aqui criaria um travamento sem saida.
+    if (caminho.startsWith('/api/plataforma')) return
 
     // Conta vencida/suspensa continua abrindo e consultando tudo; o que ela
     // perde e a escrita. Ninguem perde dado por boleto atrasado.

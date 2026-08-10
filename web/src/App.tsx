@@ -16,6 +16,7 @@ import { Icone } from './components/Icones'
 import { Carregando, Estado, Toasts, type Aviso } from './components/ui'
 import { MenuUsuario } from './components/MenuUsuario'
 import { PainelConta } from './components/PainelConta'
+import { PainelPlataforma } from './components/PainelPlataforma'
 import type { Sessao } from './lib/acesso'
 
 interface EstadoForm {
@@ -53,6 +54,7 @@ export default function App({ sessao, aoMudarSessao, aoSair }: AppProps) {
   const [painelConta, setPainelConta] = useState<false | 'equipe' | 'seguranca'>(
     sessao.precisaConfigurar2fa ? 'seguranca' : false,
   )
+  const [painelPlataforma, setPainelPlataforma] = useState(false)
 
   /* --- Avisos ------------------------------------------------------------ */
   const avisar = useCallback((texto: string, tipo: 'sucesso' | 'erro' = 'sucesso') => {
@@ -181,6 +183,7 @@ export default function App({ sessao, aoMudarSessao, aoSair }: AppProps) {
               sessao={sessao}
               onAbrirConta={() => setPainelConta('equipe')}
               onAbrirSeguranca={() => setPainelConta('seguranca')}
+              onAbrirPlataforma={() => setPainelPlataforma(true)}
               onSair={aoSair}
             />
           </div>
@@ -368,6 +371,8 @@ export default function App({ sessao, aoMudarSessao, aoSair }: AppProps) {
           onFechar={() => setPainelConta(false)}
         />
       )}
+
+      {painelPlataforma && <PainelPlataforma avisar={avisar} onFechar={() => setPainelPlataforma(false)} />}
 
       <Toasts avisos={avisos} />
     </div>
