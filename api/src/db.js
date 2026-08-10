@@ -113,7 +113,170 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_unidades_empreendimento
     ON unidades(empreendimento_id);
+
+  -- ------------------------------------------------------------------
+  -- Contas, usuarios e acesso
+  -- ------------------------------------------------------------------
+
+  -- A conta e o cliente que comprou o sistema, e e ela que possui os dados.
+  -- Sem esse dono, "plano de 3 usuarios" nao significa nada e uma imobiliaria
+  -- enxergaria a base da outra — login sozinho seria porta em comodo unico.
+  CREATE TABLE IF NOT EXISTS contas (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    nome            TEXT NOT NULL,
+    plano           TEXT NOT NULL DEFAULT 'individual',
+    -- NULL = usa o limite do plano. Preenchido VENCE o plano: e o que atende o
+    -- cliente que negociou 15 assentos sem inventar um plano novo para ele.
+    -- 0 = sem teto (escolha explicita, nunca o padrao).
+    limite_usuarios INTEGER,
+    status          TEXT NOT NULL DEFAULT 'trial',
+    -- Fim do teste ou do periodo pago. Vencido, a conta entra em so leitura
+    -- sozinha (ninguem perde dado por causa de um boleto atrasado).
+    expira_em       TEXT,
+    exigir_2fa      INTEGER NOT NULL DEFAULT 0,
+    observacoes     TEXT,
+    criado_em       TEXT NOT NULL DEFAULT (datetime('now')),
+    atualizado_em   TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  -- O e-mail (e o apelido) sao unicos no sistema INTEIRO, nao por conta: e o
+  -- que deixa o login pedir so identificador + senha, sem obrigar a pessoa a
+  -- dizer de qual empresa ela e antes de entrar.
+  CREATE TABLE IF NOT EXISTS usuarios (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    conta_id       INTEGER NOT NULL REFERENCES contas(id) ON DELETE CASCADE,
+    nome           TEXT NOT NULL,
+    email          TEXT NOT NULL,
+    usuario        TEXT,
+    -- NULL enquanto a pessoa nao definiu a senha pelo link de primeiro acesso.
+    senha_hash     TEXT,
+    papel          TEXT NOT NULL DEFAULT 'membro',
+    totp_segredo   TEXT,
+    totp_ativo     INTEGER NOT NULL DEFAULT 0,
+    -- Ultimo passo de 30s ja aceito: impede reusar o mesmo codigo dentro da
+    -- janela de validade dele (quem viu o codigo por cima do ombro nao entra).
+    totp_passo     INTEGER,
+    ativo          INTEGER NOT NULL DEFAULT 1,
+    ultimo_acesso  TEXT,
+    criado_em      TEXT NOT NULL DEFAULT (datetime('now')),
+    atualizado_em  TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_usuarios_email ON usuarios(email);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_usuarios_usuario
+    ON usuarios(usuario) WHERE usuario IS NOT NULL;
+  CREATE INDEX IF NOT EXISTS idx_usuarios_conta ON usuarios(conta_id);
+
+  -- Guardamos o HASH do token, nunca o token: se este arquivo vazar, o que
+  -- esta aqui nao serve para entrar em lugar nenhum. O token cru so existe no
+  -- cookie do navegador.
+  CREATE TABLE IF NOT EXISTS sessoes (
+    token_hash  TEXT PRIMARY KEY,
+    usuario_id  INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+    agente      TEXT,
+    ip          TEXT,
+    criada_em   TEXT NOT NULL DEFAULT (datetime('now')),
+    ultimo_uso  TEXT NOT NULL DEFAULT (datetime('now')),
+    expira_em   TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_sessoes_usuario ON sessoes(usuario_id);
+
+  -- Convite pendente OCUPA vaga do plano — senao o cliente do plano de 3 fura
+  -- o limite mandando 10 convites e so depois todo mundo aceita.
+  CREATE TABLE IF NOT EXISTS convites (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    conta_id     INTEGER NOT NULL REFERENCES contas(id) ON DELETE CASCADE,
+    email        TEXT NOT NULL,
+    nome         TEXT,
+    papel        TEXT NOT NULL DEFAULT 'membro',
+    token_hash   TEXT NOT NULL,
+    criado_por   INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+    criado_em    TEXT NOT NULL DEFAULT (datetime('now')),
+    expira_em    TEXT NOT NULL,
+    aceito_em    TEXT,
+    cancelado_em TEXT
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_convites_conta ON convites(conta_id);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_convites_token ON convites(token_hash);
+
+  -- Primeiro acesso e redefinicao de senha usam o mesmo mecanismo: um token de
+  -- uso unico com validade curta.
+  CREATE TABLE IF NOT EXISTS tokens_senha (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL,
+    motivo     TEXT NOT NULL,
+    criado_em  TEXT NOT NULL DEFAULT (datetime('now')),
+    expira_em  TEXT NOT NULL,
+    usado_em   TEXT
+  );
+
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_tokens_senha_token ON tokens_senha(token_hash);
+
+  -- Sem codigo de recuperacao, quem troca de celular fica trancado para fora
+  -- do proprio sistema — e isso vira chamado de suporte, nao seguranca.
+  CREATE TABLE IF NOT EXISTS codigos_recuperacao (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    usuario_id  INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+    codigo_hash TEXT NOT NULL,
+    criado_em   TEXT NOT NULL DEFAULT (datetime('now')),
+    usado_em    TEXT
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_codigos_usuario ON codigos_recuperacao(usuario_id);
+
+  -- Tentativa errada de login. O atraso cresce com a quantidade recente, mas a
+  -- conta NUNCA e travada: travar por senha errada entrega a qualquer um o
+  -- poder de deixar o cliente de fora do sistema.
+  CREATE TABLE IF NOT EXISTS tentativas_login (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    chave        TEXT NOT NULL,
+    criada_em    TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_tentativas_chave ON tentativas_login(chave, criada_em);
 `)
+
+// O empreendimento passou a ter dono. Coluna anulavel porque SQLite nao
+// acrescenta NOT NULL em tabela com linhas; quem garante o preenchimento e a
+// API (toda escrita carimba a conta da sessao) e a migracao logo abaixo.
+const colunasEmpreendimento = db.prepare('PRAGMA table_info(empreendimentos)').all()
+if (!colunasEmpreendimento.some((coluna) => coluna.name === 'conta_id')) {
+  db.exec('ALTER TABLE empreendimentos ADD COLUMN conta_id INTEGER REFERENCES contas(id) ON DELETE CASCADE;')
+}
+db.exec('CREATE INDEX IF NOT EXISTS idx_empreendimentos_conta ON empreendimentos(conta_id);')
+
+// Unidades, fluxos e imagens NAO repetem a coluna: elas chegam pelo
+// empreendimento, e duas fontes de verdade para o mesmo dono divergiriam no
+// primeiro INSERT feito fora do caminho normal.
+
+/**
+ * Base que ja existia (o dashboard rodou meses sem login) fica sem dono no
+ * momento em que a coluna nasce. Em vez de exigir um comando manual antes de o
+ * sistema voltar a subir, adotamos os orfaos numa conta e registramos no log —
+ * ninguem entra nela enquanto o primeiro usuario nao for provisionado.
+ */
+function adotarDadosSemDono() {
+  const orfaos = db.prepare('SELECT COUNT(*) AS total FROM empreendimentos WHERE conta_id IS NULL').get().total
+  if (orfaos === 0) return null
+
+  const primeira = db.prepare('SELECT id FROM contas ORDER BY id LIMIT 1').get()
+  const contaId =
+    primeira?.id ??
+    db
+      .prepare(
+        `INSERT INTO contas (nome, plano, limite_usuarios, status)
+         VALUES ('Conta principal', 'personalizado', 0, 'ativa')`,
+      )
+      .run().lastInsertRowid
+
+  db.prepare('UPDATE empreendimentos SET conta_id = ? WHERE conta_id IS NULL').run(contaId)
+  return { contaId, orfaos }
+}
+
+export const migracaoContas = adotarDadosSemDono()
 
 // Fluxo de pagamento passou a poder ser de uma unidade especifica; os que ja
 // existiam ficam com unidade_id NULL e seguem valendo como tabela geral do

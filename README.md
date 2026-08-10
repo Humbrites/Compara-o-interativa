@@ -19,6 +19,18 @@ npm run dev     # sobe a API e a interface juntas
 
 Abra **http://localhost:5273**.
 
+O sistema pede login. Como **não existe cadastro aberto** (quem vende provisiona), a primeira
+conta nasce pela linha de comando:
+
+```bash
+npm run provisionar -- --conta "Imobiliária Alfa" --plano equipe \
+                       --nome "Ana Souza" --email ana@alfa.com.br --usuario ana
+```
+
+O comando imprime um **link de definição de senha** (vale 48 horas). Abra o link, escolha a
+senha e entre. Daí em diante, quem administra a conta convida o resto da equipe pela própria
+interface, em **Conta e equipe**.
+
 A base nasce **vazia**. Para conhecer a ferramenta com dados fictícios:
 
 ```bash
@@ -34,6 +46,8 @@ npm run seed:limpar   # remove só os exemplos, preservando o que você cadastro
 | `npm run build` | Gera a versão de produção da interface em `web/dist` |
 | `npm run start` | Sobe só a API |
 | `npm run typecheck` | Confere os tipos do TypeScript |
+| `npm run teste` | Roda os testes da API (TOTP, sessão, assentos, isolamento) |
+| `npm run provisionar -- --listar` | Lista as contas, o plano e os assentos em uso |
 
 ---
 
@@ -465,7 +479,111 @@ preenchido = tabela daquela unidade. As colunas `cub_*` guardam os parâmetros d
 simulação que gerou o fluxo (ficam nulas nos fluxos digitados à mão). Foi assim que as tabelas já cadastradas continuaram
 valendo quando as unidades entraram.
 
+## Acesso, contas e planos
+
+O sistema é multiempresa: a **conta** é o cliente que comprou, e é ela que possui os dados.
+Todo empreendimento (com suas unidades, fluxos e fotos) pertence a uma conta, e nenhuma
+consulta da API roda sem o filtro — inclusive as fotos em `/uploads`, que só são entregues a
+quem é da conta dona.
+
+### Quem entra e como
+
+| | |
+|---|---|
+| **Login** | e-mail **ou** nome de usuário + senha |
+| **Senha** | guardada como hash `scrypt` com sal próprio (`node:crypto`), nunca em claro |
+| **Sessão** | token opaco em cookie `httpOnly`/`SameSite=Lax`, 30 dias com renovação a cada uso |
+| **Senha errada** | atraso progressivo por identificador+IP — a conta **nunca** é travada |
+| **2FA** | TOTP (RFC 6238) por aplicativo autenticador, com 8 códigos de recuperação |
+
+Detalhes que valem lembrar:
+
+- **A conta não é travada por senha errada.** Travar depois de N tentativas entregaria a
+  qualquer pessoa da internet o poder de deixar o cliente de fora do próprio sistema. O que
+  cresce é o atraso da resposta.
+- **A sessão renova sozinha enquanto está em uso.** Prazo fixo e curto vira onda de gente
+  deslogada no meio do trabalho; quem sumiu 30 dias volta pelo login.
+- **O mesmo código de 2FA não entra duas vezes.** O passo aceito fica gravado, então quem
+  espiou a tela por cima do ombro não entra junto nos 30 segundos de vida do código.
+- **Códigos de recuperação aparecem uma vez só** — o banco guarda o hash. Sem eles, trocar de
+  celular tranca a pessoa para fora e vira chamado de suporte.
+- **Trocar a senha encerra as outras sessões**; desativar um usuário encerra as dele na hora.
+- Não há "esqueci minha senha" automático: sem servidor de e-mail, quem gera o link de
+  redefinição é quem administra a conta (ou o operador, pela linha de comando).
+
+### Planos e assentos
+
+| Plano | Usuários |
+|---|---|
+| Individual | 1 |
+| Equipe | 3 |
+| Profissional | 10 |
+| Personalizado | o que estiver gravado na conta |
+
+A regra do limite, em ordem: **o valor gravado na conta vence o plano** (é o que atende quem
+negociou 15 assentos sem inventar um plano novo), `0` é "sem teto" dito explicitamente, e só
+na ausência dos dois o plano responde. Plano personalizado **exige** o número — sem essa
+trava, ele viraria conta ilimitada por descuido.
+
+- **Convite pendente ocupa vaga.** Sem isso, o plano de 3 vira 10 mandando convites e deixando
+  todo mundo aceitar depois. O convite vence em 7 dias e a vaga volta sozinha.
+- **Estourar o limite responde 409** dizendo qual é o teto e o que fazer para abrir vaga.
+- **O cliente não muda o próprio plano.** Contrato é de quem vende; a interface mostra o que
+  foi contratado e quanto está em uso.
+- **Conta suspensa consulta, mas não grava** (HTTP 402). Vencimento não pode custar dado a
+  ninguém. Conta `cancelada` é a única que não entra mais.
+
+Papéis: **dono** (administra a equipe e responde pelo contrato), **admin** (convida, remove e
+edita usuários) e **membro** (usa o sistema). O **operador do produto** fica fora das contas —
+não ocupa assento nem aparece na equipe do cliente.
+
+### Provisionamento (o lado de quem vende)
+
+```bash
+npm run provisionar -- --listar
+npm run provisionar -- --conta "Imobiliária Alfa" --plano equipe \
+                       --nome "Ana" --email ana@alfa.com.br [--dias-teste 14]
+npm run provisionar -- --usuario-na-conta 1 --nome "Bruno" --email bruno@alfa.com.br
+npm run provisionar -- --plano-da-conta 1 --plano personalizado --usuarios 25
+npm run provisionar -- --status-da-conta 1 --status suspensa
+npm run provisionar -- --link-senha ana@alfa.com.br
+```
+
+Reduzir o plano **não desliga ninguém**: quem decide quem sai é o cliente. O sistema apenas
+para de aceitar gente nova até caber.
+
+### Antes de colocar na internet
+
+Hoje tudo roda em `127.0.0.1`. Para expor:
+
+- **HTTPS obrigatório** e `COOKIE_SEGURO=1` na API (sem isso o cookie de sessão trafega em
+  claro; com isso em `http://localhost`, o navegador descarta o cookie e ninguém entra).
+- `ORIGENS_PERMITIDAS` só se o front for servido de outro host — o padrão é CORS fechado,
+  porque refletir qualquer origem com cookie deixaria qualquer site ler a base do cliente.
+- `URL_BASE` com o endereço público, para os links de convite e de senha saírem certos.
+- Backup do `api/data/` (banco **e** uploads).
+
 ### Rotas da API
+
+Todas exigem sessão, exceto `/api/health` e as de `/api/auth/` (que existem para quem ainda
+não entrou).
+
+| Método | Rota | Faz |
+|---|---|---|
+| `POST` | `/api/auth/login` | entra; devolve a sessão ou pede o 2FA |
+| `POST` | `/api/auth/2fa` | confirma o código (ou um de recuperação) |
+| `POST` | `/api/auth/sair` | encerra a sessão |
+| `POST` | `/api/auth/definir-senha` | primeiro acesso e redefinição, por token |
+| `GET` `POST` | `/api/auth/convite/:token` | vê e aceita um convite |
+| `GET` | `/api/sessao` | quem está logado, a conta, o plano e os assentos |
+| `GET` `PUT` | `/api/conta` | dados da conta e da equipe (nome e exigência de 2FA) |
+| `POST` `DELETE` | `/api/conta/convites[/:id]` | cria e cancela convite |
+| `PUT` | `/api/conta/usuarios/:id` | papel e acesso de alguém da equipe |
+| `POST` | `/api/conta/usuarios/:id/link-senha` | gera link de redefinição |
+| `POST` | `/api/seguranca/senha` | troca a própria senha |
+| `POST` | `/api/seguranca/2fa/{iniciar,ativar,desativar,codigos}` | segundo fator |
+| `GET` | `/api/seguranca/sessoes` | onde você está conectado |
+| `POST` | `/api/seguranca/sessoes/encerrar-outras` | derruba as outras sessões |
 
 | Método | Rota | Faz |
 |---|---|---|
@@ -485,8 +603,8 @@ valendo quando as unidades entraram.
 | `PUT` | `/api/empreendimentos/:id/imagens/ordem` | reordena — o primeiro id vira a capa |
 | `DELETE` | `/api/imagens/:id` | exclui a foto e o arquivo do disco |
 | `GET` | `/api/indicadores` | índices de mercado (cache de 6h; `?forcar=1` refaz a consulta) |
-| `GET` | `/uploads/<arquivo>` | serve a foto enviada |
-| `GET` | `/api/health` | status da API |
+| `GET` | `/uploads/<arquivo>` | serve a foto enviada (só para a conta dona dela) |
+| `GET` | `/api/health` | status da API (público, sem contagem de dados) |
 
 ---
 

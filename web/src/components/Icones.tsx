@@ -166,6 +166,39 @@ const TRACOS: Record<string, JSX.Element> = {
       <path d="m16 7 2 2" />
     </>
   ),
+  pessoa: (
+    <>
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4 21a8 8 0 0 1 16 0" />
+    </>
+  ),
+  equipe: (
+    <>
+      <circle cx="9" cy="8" r="3.5" />
+      <path d="M2.5 20a6.5 6.5 0 0 1 13 0" />
+      <path d="M16 5.2a3.5 3.5 0 0 1 0 6.6" />
+      <path d="M18 14.2a6.5 6.5 0 0 1 3.5 5.8" />
+    </>
+  ),
+  escudo: (
+    <>
+      <path d="M12 3 5 6v6c0 4.4 3 8.2 7 9 4-.8 7-4.6 7-9V6l-7-3Z" />
+      <path d="m9 12 2 2 4-4" />
+    </>
+  ),
+  sair: (
+    <>
+      <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3" />
+      <path d="M10 17 5 12l5-5" />
+      <path d="M5 12h10" />
+    </>
+  ),
+  copiar: (
+    <>
+      <rect x="9" y="9" width="12" height="12" rx="2" />
+      <path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" />
+    </>
+  ),
   banco: (
     <>
       <path d="M3 10 12 4l9 6" />

@@ -1,3 +1,6 @@
+// O `request` mora em `lib/http.ts` desde que passou a existir sessao: ele e o
+// mesmo para os dados e para o acesso, e e quem avisa o portao no 401.
+import { request } from './http'
 import type {
   Empreendimento,
   EmpreendimentoInput,
@@ -18,36 +21,6 @@ export interface RespostaImagens {
 
 /** Quantos arquivos a API aceita por requisicao (limite `files` do multipart). */
 const IMAGENS_POR_ENVIO = 20
-
-async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  // Upload vai como FormData — deixar o navegador montar o Content-Type com o
-  // boundary; se sobrescrevermos com JSON o multipart nao e reconhecido.
-  const ehFormData = init?.body instanceof FormData
-
-  let resposta: Response
-  try {
-    resposta = await fetch(url, {
-      ...init,
-      headers: init?.body && !ehFormData ? { 'Content-Type': 'application/json' } : undefined,
-    })
-  } catch {
-    // O fetch so rejeita quando a requisicao nem chegou a completar: conexao
-    // caida (o tunel SSH morre por ociosidade e a aba aberta nao percebe),
-    // API fora do ar, rede fora. A mensagem nativa do navegador ("Failed to
-    // fetch") nao diz nada a quem esta no meio de um cadastro — e o que foi
-    // digitado continua aqui, entao basta refazer a conexao e salvar de novo.
-    throw new Error('Conexão perdida com o servidor — o que você digitou está aqui. Refaça a conexão e salve de novo')
-  }
-
-  if (!resposta.ok) {
-    const corpo = await resposta.json().catch(() => null)
-    // `erro` e o nosso formato; `message` e o do proprio Fastify (413, 500…).
-    throw new Error(corpo?.erro || corpo?.message || `Falha na requisição (${resposta.status})`)
-  }
-
-  if (resposta.status === 204) return undefined as T
-  return resposta.json() as Promise<T>
-}
 
 export const api = {
   listar: () => request<Empreendimento[]>('/api/empreendimentos'),

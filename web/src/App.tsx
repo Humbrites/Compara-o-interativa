@@ -14,13 +14,22 @@ import { CalculadoraCub } from './components/CalculadoraCub'
 import { SimuladorInvestimento } from './components/SimuladorInvestimento'
 import { Icone } from './components/Icones'
 import { Carregando, Estado, Toasts, type Aviso } from './components/ui'
+import { MenuUsuario } from './components/MenuUsuario'
+import { PainelConta } from './components/PainelConta'
+import type { Sessao } from './lib/acesso'
 
 interface EstadoForm {
   empreendimento: Empreendimento | null
   iniciarEmUnidades?: boolean
 }
 
-export default function App() {
+interface AppProps {
+  sessao: Sessao
+  aoMudarSessao: (sessao: Sessao) => void
+  aoSair: () => Promise<void>
+}
+
+export default function App({ sessao, aoMudarSessao, aoSair }: AppProps) {
   const [lista, setLista] = useState<Empreendimento[]>([])
   const [carregando, setCarregando] = useState(true)
   const [erroCarga, setErroCarga] = useState<string | null>(null)
@@ -38,6 +47,12 @@ export default function App() {
 
   const [avisos, setAvisos] = useState<Aviso[]>([])
   const proximoAviso = useRef(1)
+
+  // Conta que exige 2FA e usuario sem 2FA: o painel de seguranca abre sozinho,
+  // porque ate configurar ele nao consegue gravar nada mesmo.
+  const [painelConta, setPainelConta] = useState<false | 'equipe' | 'seguranca'>(
+    sessao.precisaConfigurar2fa ? 'seguranca' : false,
+  )
 
   /* --- Avisos ------------------------------------------------------------ */
   const avisar = useCallback((texto: string, tipo: 'sucesso' | 'erro' = 'sucesso') => {
@@ -161,8 +176,40 @@ export default function App() {
               <Icone nome="mais" tamanho={16} />
               <span>Adicionar empreendimento</span>
             </button>
+
+            <MenuUsuario
+              sessao={sessao}
+              onAbrirConta={() => setPainelConta('equipe')}
+              onAbrirSeguranca={() => setPainelConta('seguranca')}
+              onSair={aoSair}
+            />
           </div>
         </div>
+
+        {/* Duas faixas que mudam o que dá para fazer na tela — por isso ficam
+            no topo, e não escondidas dentro do painel de conta. */}
+        {sessao.precisaConfigurar2fa && (
+          <div className="faixa-topo faixa-topo--forte" role="status">
+            <Icone nome="escudo" tamanho={15} />
+            <span>
+              <strong>{sessao.conta.nome}</strong> exige verificação em duas etapas. Até configurar, você consulta mas
+              não grava.
+            </span>
+            <button type="button" className="btn btn--pequeno btn--secundario" onClick={() => setPainelConta('seguranca')}>
+              Configurar agora
+            </button>
+          </div>
+        )}
+
+        {sessao.conta.somenteLeitura && !sessao.precisaConfigurar2fa && (
+          <div className="faixa-topo" role="status">
+            <Icone nome="alerta" tamanho={15} />
+            <span>
+              A conta está suspensa — seus dados seguem aqui para consulta, mas não é possível gravar. Fale com o
+              suporte para reativar.
+            </span>
+          </div>
+        )}
 
         <IndicadoresMercado />
       </header>
@@ -310,6 +357,16 @@ export default function App() {
           coisa da unidade — o CUB de dentro dela e que grava. */}
       {calculandoCub && (
         <CalculadoraCub titulo={calculandoCub.nome} onFechar={() => setCalculandoCub(null)} avisar={avisar} />
+      )}
+
+      {painelConta !== false && (
+        <PainelConta
+          sessao={sessao}
+          abaInicial={painelConta}
+          aoMudarSessao={aoMudarSessao}
+          avisar={avisar}
+          onFechar={() => setPainelConta(false)}
+        />
       )}
 
       <Toasts avisos={avisos} />

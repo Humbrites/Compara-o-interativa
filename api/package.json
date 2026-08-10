@@ -9,13 +9,16 @@
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
     "seed": "node src/seed.js",
-    "seed:limpar": "node src/seed.js --limpar"
+    "seed:limpar": "node src/seed.js --limpar",
+    "provisionar": "node src/provisionar.js",
+    "teste": "node --test testes/*.test.js"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.2",
     "@fastify/multipart": "^10.1.0",
     "@fastify/static": "^10.1.2",
     "better-sqlite3": "^11.8.1",
-    "fastify": "^5.2.1"
+    "fastify": "^5.2.1",
+    "qrcode": "^1.5.4"
   }
 }

@@ -16,7 +16,9 @@
     "start": "npm run start --workspace api",
     "typecheck": "npm run typecheck --workspace web",
     "seed": "npm run seed --workspace api",
-    "seed:limpar": "npm run seed:limpar --workspace api"
+    "seed:limpar": "npm run seed:limpar --workspace api",
+    "provisionar": "npm run provisionar --workspace api --",
+    "teste": "npm run teste --workspace api"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
