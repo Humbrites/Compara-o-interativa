@@ -177,6 +177,38 @@ if (opcoes['usuario-na-conta']) {
   process.exit(0)
 }
 
+/* Corrigir nome ou apelido de quem já existe. */
+if (opcoes['editar-usuario'] && opcoes['editar-usuario'] !== true) {
+  const usuario = buscarUsuarioPorIdentificador(String(opcoes['editar-usuario']))
+  if (!usuario) encerrar('Usuário não encontrado')
+
+  const nome = opcoes.nome && opcoes.nome !== true ? String(opcoes.nome).trim() : usuario.nome
+  if (!nome) encerrar('O nome não pode ficar vazio')
+
+  // `--apelido ""` remove o apelido (sobra o e-mail para entrar).
+  let apelido = usuario.usuario
+  if (opcoes.apelido !== undefined) {
+    apelido = opcoes.apelido === true ? null : String(opcoes.apelido).trim().toLowerCase() || null
+    if (apelido && !/^[a-z0-9._-]{3,40}$/.test(apelido)) {
+      encerrar('O apelido aceita de 3 a 40 letras, números, ponto, hífen ou sublinhado')
+    }
+  }
+
+  try {
+    db.prepare("UPDATE usuarios SET nome = ?, usuario = ?, atualizado_em = datetime('now') WHERE id = ?").run(
+      nome,
+      apelido,
+      usuario.id,
+    )
+  } catch (erro) {
+    // O índice único é quem garante isso; testar antes seria uma corrida.
+    encerrar(String(erro.message).includes('UNIQUE') ? 'Esse apelido já está em uso' : erro.message)
+  }
+
+  console.log(`\n✓ ${nome} <${usuario.email}>${apelido ? ` — entra como @${apelido}` : ' — sem apelido'}\n`)
+  process.exit(0)
+}
+
 /* Conceder ou tirar a marca de operador da plataforma. */
 if (opcoes.operador && opcoes.operador !== true) {
   const usuario = buscarUsuarioPorIdentificador(String(opcoes.operador))
@@ -281,6 +313,9 @@ Provisionamento do Compara Interativa
   --status-da-conta <id>            muda o status
     --status <${STATUS_CONTA.join('|')}>
     --dias <n>                      novo vencimento (0 limpa)
+
+  --editar-usuario <e-mail|apelido> corrige nome e/ou apelido
+    [--nome "Nome"] [--apelido apelido]
 
   --link-senha <e-mail|apelido>     gera um link novo de definição de senha
 
