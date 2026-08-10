@@ -430,6 +430,101 @@ test('o operador acrescenta usuário a um cliente, respeitando o teto', async ()
   assert.equal(repetido.status, 400)
 })
 
+test('o suporte enxerga a base do cliente — e só enxerga', async () => {
+  // Um cliente com base de verdade: empreendimento, unidade e tabela de venda.
+  const cliente = await abrirConta({
+    conta: 'Com Base',
+    nome: 'Iara Melo',
+    email: 'iara@combase.com.br',
+    senha: 'iara-2026-forte',
+    plano: 'equipe',
+  })
+
+  const empreendimento = await cliente.pedir('/api/empreendimentos', {
+    metodo: 'POST',
+    corpo: { nome: 'Residencial Aurora', cidade: 'Curitiba', construtora: 'Aurora Inc' },
+  })
+  assert.equal(empreendimento.status, 201)
+
+  const unidade = await cliente.pedir('/api/unidades', {
+    metodo: 'POST',
+    corpo: {
+      empreendimento_id: empreendimento.corpo.id,
+      identificacao: 'Apto 101',
+      metragem_total: 80,
+      valor: '800.000',
+      dormitorios: 3,
+    },
+  })
+  assert.equal(unidade.status, 201)
+
+  await cliente.pedir('/api/fluxos', {
+    metodo: 'POST',
+    corpo: {
+      unidade_id: unidade.corpo.id,
+      nome: 'Tabela padrão',
+      cub_valor_imovel: '800.000',
+      entrada_valor: '160.000',
+      parcelas: 36,
+      parcela_valor: '5.000',
+    },
+  })
+
+  const operador = criarCliente()
+  await operador.pedir('/api/auth/login', {
+    metodo: 'POST',
+    corpo: { identificador: 'ana@operadora.com.br', senha: 'opera-2026-forte' },
+  })
+
+  const painel = await operador.pedir('/api/plataforma')
+  const alvo = painel.corpo.contas.find((conta) => conta.nome === 'Com Base')
+
+  const base = await operador.pedir(`/api/plataforma/contas/${alvo.id}/base`)
+  assert.equal(base.status, 200)
+  assert.equal(base.corpo.conta.nome, 'Com Base')
+
+  assert.equal(base.corpo.resumo.empreendimentos, 1)
+  assert.equal(base.corpo.resumo.unidades, 1)
+  assert.equal(base.corpo.resumo.fluxos, 1)
+  // Sem latitude/longitude o imóvel não vai ao mapa — o suporte precisa ver isso.
+  assert.equal(base.corpo.resumo.semCoordenada, 1)
+
+  const [primeiro] = base.corpo.empreendimentos
+  assert.equal(primeiro.nome, 'Residencial Aurora')
+  assert.equal(primeiro.unidades.length, 1)
+  assert.equal(primeiro.unidades[0].fluxos.length, 1)
+  // O ponto é separador de milhar nos dois caminhos.
+  assert.equal(primeiro.unidades[0].valor, 800000)
+  assert.equal(primeiro.unidades[0].fluxos[0].entrada_valor, 160000)
+
+  // A visão é SOMENTE LEITURA: não existe rota de escrita nela, e as do
+  // cliente seguem fechadas para quem não é da conta.
+  const escrita = await operador.pedir(`/api/plataforma/contas/${alvo.id}/base`, { metodo: 'POST', corpo: {} })
+  assert.ok(escrita.status === 404 || escrita.status === 405, `esperava sem rota de escrita, veio ${escrita.status}`)
+
+  // O operador continua sendo de OUTRA conta: pela porta do cliente, nada.
+  const porFora = await operador.pedir(`/api/empreendimentos/${empreendimento.corpo.id}`, { metodo: 'PUT', corpo: { nome: 'Mexido' } })
+  assert.equal(porFora.status, 404)
+
+  const conferindo = await cliente.pedir(`/api/empreendimentos/${empreendimento.corpo.id}`)
+  assert.equal(conferindo.corpo.nome, 'Residencial Aurora', 'a base do cliente não pode ter mudado')
+
+  // Conta que não existe não vaza nada.
+  assert.equal((await operador.pedir('/api/plataforma/contas/99999/base')).status, 404)
+})
+
+test('cliente comum não abre a base de ninguém', async () => {
+  const cliente = criarCliente()
+  await cliente.pedir('/api/auth/login', {
+    metodo: 'POST',
+    corpo: { identificador: 'iara@combase.com.br', senha: 'iara-2026-forte' },
+  })
+
+  // Nem da própria conta: esta porta é da administração, não do cliente.
+  const painel = await cliente.pedir('/api/plataforma/contas/1/base')
+  assert.equal(painel.status, 404)
+})
+
 test('o operador cria o cliente e recebe o link de primeiro acesso', async () => {
   const operador = criarCliente()
   await operador.pedir('/api/auth/login', {

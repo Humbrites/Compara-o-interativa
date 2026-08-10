@@ -571,6 +571,15 @@ Ao entrar, o master cai direto na tela **Administrador**, com:
 - **Todos os usuários**: quem usa o sistema inteiro, com cliente, papel, último acesso e
   quem **nunca acessou**.
 
+**Ver a base do cliente (suporte)** — o botão *"Ver a base"* na linha do cliente abre o que
+ele cadastrou: empreendimentos, unidades e as tabelas de venda com a composição calculada
+(entrada, parcelas, reforços, chaves, financiamento) e a **conferência da soma** — é ela que
+responde ao chamado "minha tabela está errada". A tela é **somente leitura**: enxergar o que o
+cliente cadastrou é o que permite dar suporte; corrigir por cima dele, sem que ele saiba, é
+outra coisa, e nada ali grava. As contas exibidas saem das **mesmas funções** que a tela do
+cliente usa — recalcular de outro jeito faria o suporte ver um número diferente do que o
+cliente está vendo, que é o pior lugar possível para uma divergência.
+
 Duas contas de tempo que valem lembrar: **renovar parte do vencimento atual**, não de
 hoje (senão o cliente perde os dias que já pagou; só quando já venceu é que a base vira
 hoje), e **mês que não tem o dia cai no último dia dele** — 31/01 + 1 mês = 28/02.
@@ -624,6 +633,11 @@ não entrou).
 | `POST` | `/api/seguranca/senha` | troca a própria senha |
 | `POST` | `/api/seguranca/2fa/{iniciar,ativar,desativar,codigos}` | segundo fator |
 | `GET` | `/api/seguranca/sessoes` | onde você está conectado |
+| `GET` | `/api/plataforma` | **(master)** todos os clientes, com resumo e alertas |
+| `PUT` | `/api/plataforma/contas/:id` | **(master)** plano, limite, situação e vencimento |
+| `POST` | `/api/plataforma/contas/:id/renovar` | **(master)** renova N meses e reativa |
+| `GET` | `/api/plataforma/contas/:id/base` | **(master)** a base do cliente, só leitura |
+| `POST` | `/api/plataforma/contas[/:id/usuarios]` | **(master)** cria cliente ou usuário |
 | `POST` | `/api/seguranca/sessoes/encerrar-outras` | derruba as outras sessões |
 
 | Método | Rota | Faz |

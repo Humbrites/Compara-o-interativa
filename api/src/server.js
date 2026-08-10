@@ -17,6 +17,8 @@ import {
   PASTA_DADOS,
   UPLOAD_DIR,
 } from './db.js'
+import { listarBaseDaConta, comUrl } from './base.js'
+import { ehMaster } from './contas.js'
 import { criarServicoIndicadores } from './indicadores.js'
 import { registrarAutenticacao } from './rotas-auth.js'
 import { registrarPlataforma } from './rotas-plataforma.js'
@@ -83,16 +85,8 @@ registrarPlataforma(app)
  */
 const contaDe = (req) => req.contexto.conta.id
 
-const listarEmpreendimentos = db.prepare(
-  'SELECT * FROM empreendimentos WHERE conta_id = ? ORDER BY nome COLLATE NOCASE',
-)
 const buscarEmpreendimento = db.prepare('SELECT * FROM empreendimentos WHERE id = ? AND conta_id = ?')
 
-const listarFluxos = db.prepare(
-  `SELECT f.* FROM fluxos_pagamento f
-     JOIN empreendimentos e ON e.id = f.empreendimento_id
-    WHERE e.conta_id = ? ORDER BY f.id`,
-)
 // Fluxos "gerais": os que valem para o empreendimento inteiro, sem unidade.
 const fluxosDoEmpreendimento = db.prepare(
   'SELECT * FROM fluxos_pagamento WHERE empreendimento_id = ? AND unidade_id IS NULL ORDER BY id',
@@ -103,11 +97,6 @@ const buscarFluxo = db.prepare(
     WHERE f.id = ? AND e.conta_id = ?`,
 )
 
-const listarImagens = db.prepare(
-  `SELECT i.* FROM imagens i
-     JOIN empreendimentos e ON e.id = i.empreendimento_id
-    WHERE e.conta_id = ? ORDER BY i.empreendimento_id, i.ordem, i.id`,
-)
 const imagensDoEmpreendimento = db.prepare('SELECT * FROM imagens WHERE empreendimento_id = ? ORDER BY ordem, id')
 const buscarImagem = db.prepare(
   `SELECT i.* FROM imagens i
@@ -115,6 +104,7 @@ const buscarImagem = db.prepare(
     WHERE i.id = ? AND e.conta_id = ?`,
 )
 // Quem entrega o arquivo confere a dona pelo NOME gravado, não pelo caminho.
+const buscarImagemDoMaster = db.prepare('SELECT * FROM imagens WHERE arquivo = ?')
 const buscarImagemPorArquivo = db.prepare(
   `SELECT i.* FROM imagens i
      JOIN empreendimentos e ON e.id = i.empreendimento_id
@@ -123,12 +113,6 @@ const buscarImagemPorArquivo = db.prepare(
 
 // Ordem de leitura do corretor: torre, andar e depois o numero da unidade.
 const ORDEM_UNIDADE = `ORDER BY COALESCE(torre, ''), COALESCE(andar, 999999), COALESCE(numero, ''), id`
-const listarUnidades = db.prepare(
-  `SELECT u.* FROM unidades u
-     JOIN empreendimentos e ON e.id = u.empreendimento_id
-    WHERE e.conta_id = ?
-    ORDER BY COALESCE(u.torre, ''), COALESCE(u.andar, 999999), COALESCE(u.numero, ''), u.id`,
-)
 const unidadesDoEmpreendimento = db.prepare(`SELECT * FROM unidades WHERE empreendimento_id = ? ${ORDEM_UNIDADE}`)
 const buscarUnidade = db.prepare(
   `SELECT u.* FROM unidades u
@@ -137,25 +121,9 @@ const buscarUnidade = db.prepare(
 )
 const fluxosDaUnidade = db.prepare('SELECT * FROM fluxos_pagamento WHERE unidade_id = ? ORDER BY id')
 
-/** Agrupa uma lista pelo campo indicado, preservando a ordem de entrada. */
-function agrupar(linhas, campo) {
-  const mapa = new Map()
-  for (const linha of linhas) {
-    const chave = linha[campo]
-    if (!mapa.has(chave)) mapa.set(chave, [])
-    mapa.get(chave).push(linha)
-  }
-  return mapa
-}
-
 /** Unidade com os fluxos de pagamento dela aninhados. */
 function comFluxos(unidade) {
   return { ...unidade, fluxos: fluxosDaUnidade.all(unidade.id) }
-}
-
-/** Acrescenta a URL pública ao registro da imagem. */
-function comUrl(imagem) {
-  return { ...imagem, url: `/uploads/${imagem.arquivo}` }
 }
 
 /** Remove o arquivo do disco sem derrubar a requisição se ele já não existir. */
@@ -191,35 +159,7 @@ function atualizar(tabela, id, dados) {
 
 // Devolve tudo de uma vez com os fluxos aninhados: a base e pequena e o
 // front trabalha inteiramente em memoria (filtros, busca, comparativo).
-app.get('/api/empreendimentos', (req) => {
-  const conta = contaDe(req)
-  const empreendimentos = listarEmpreendimentos.all(conta)
-  const todosFluxos = listarFluxos.all(conta)
-
-  // Fluxo sem unidade e a tabela geral do empreendimento; com unidade, e dela.
-  const fluxosGerais = agrupar(
-    todosFluxos.filter((fluxo) => fluxo.unidade_id === null),
-    'empreendimento_id',
-  )
-  const fluxosPorUnidade = agrupar(
-    todosFluxos.filter((fluxo) => fluxo.unidade_id !== null),
-    'unidade_id',
-  )
-
-  const unidadesPorEmpreendimento = agrupar(
-    listarUnidades.all(conta).map((unidade) => ({ ...unidade, fluxos: fluxosPorUnidade.get(unidade.id) || [] })),
-    'empreendimento_id',
-  )
-
-  const imagensPorId = agrupar(listarImagens.all(conta).map(comUrl), 'empreendimento_id')
-
-  return empreendimentos.map((e) => ({
-    ...e,
-    fluxos: fluxosGerais.get(e.id) || [],
-    unidades: unidadesPorEmpreendimento.get(e.id) || [],
-    imagens: imagensPorId.get(e.id) || [],
-  }))
-})
+app.get('/api/empreendimentos', (req) => listarBaseDaConta(contaDe(req)))
 
 app.get('/api/empreendimentos/:id', (req, reply) => {
   const empreendimento = buscarEmpreendimento.get(req.params.id, contaDe(req))
@@ -387,7 +327,11 @@ async function descartarUpload(req) {
  * "aberto para sempre", que é o oposto de material de venda de um cliente.
  */
 app.get('/uploads/:arquivo', (req, reply) => {
-  const imagem = buscarImagemPorArquivo.get(req.params.arquivo, contaDe(req))
+  // O master não tem conta: na visão de suporte ele vê a foto de qualquer
+  // cliente, e é a marca dele — não o link — que abre a porta.
+  const imagem = ehMaster(req.contexto.usuario)
+    ? buscarImagemDoMaster.get(req.params.arquivo)
+    : buscarImagemPorArquivo.get(req.params.arquivo, contaDe(req))
   if (!imagem) return reply.code(404).send({ erro: 'Imagem nao encontrada' })
 
   return reply.sendFile(imagem.arquivo)

@@ -4,6 +4,7 @@
  * marca `operador` — que nenhuma tela concede.
  */
 import { db } from './db.js'
+import { listarBaseDaConta } from './base.js'
 import {
   agora,
   buscarConta,
@@ -207,6 +208,38 @@ export function registrarPlataforma(app) {
     if (!alvo) return reply.code(404).send({ erro: 'Usuário não encontrado' })
 
     return { link: `/definir-senha/${criarTokenSenha(alvo.id, 'redefinicao')}`, expiraEmHoras: 48 }
+  })
+
+  /**
+   * A base do cliente, para dar suporte: empreendimentos com unidades, fluxos
+   * de pagamento e galeria.
+   *
+   * SOMENTE LEITURA, e de propósito. Enxergar o que o cliente cadastrou é o que
+   * permite responder "por que meu valor do m² está assim"; editar por cima
+   * dele, sem que ele saiba, é outra coisa — e nada aqui grava.
+   */
+  app.get(`${PREFIXO_PLATAFORMA}/contas/:id/base`, guarda, (req, reply) => {
+    const conta = buscarConta.get(Number(req.params.id))
+    if (!conta) return reply.code(404).send({ erro: 'Conta não encontrada' })
+
+    const empreendimentos = listarBaseDaConta(conta.id)
+
+    return {
+      conta: { id: conta.id, nome: conta.nome },
+      empreendimentos,
+      resumo: {
+        empreendimentos: empreendimentos.length,
+        unidades: empreendimentos.reduce((total, e) => total + e.unidades.length, 0),
+        // Conta as tabelas de venda das unidades E as gerais (formato antigo),
+        // senão um cliente que só usa as gerais apareceria com zero.
+        fluxos: empreendimentos.reduce(
+          (total, e) => total + e.fluxos.length + e.unidades.reduce((soma, u) => soma + u.fluxos.length, 0),
+          0,
+        ),
+        fotos: empreendimentos.reduce((total, e) => total + e.imagens.length, 0),
+        semCoordenada: empreendimentos.filter((e) => e.latitude === null || e.longitude === null).length,
+      },
+    }
   })
 
   /** O catálogo, para a tela montar os seletores sem repetir os números. */

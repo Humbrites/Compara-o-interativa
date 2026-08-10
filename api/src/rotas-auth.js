@@ -223,6 +223,8 @@ export function registrarAutenticacao(app) {
       const permitido =
         caminho.startsWith('/api/plataforma') ||
         caminho.startsWith('/api/seguranca') ||
+        // As fotos entram na visao de suporte; quem confere o dono e a rota.
+        caminho.startsWith('/uploads/') ||
         caminho === '/api/sessao' ||
         caminho === '/api/indicadores'
 

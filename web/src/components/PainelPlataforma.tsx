@@ -14,6 +14,7 @@ import {
   type FaixaRenovacao,
   type Panorama,
 } from '../lib/plataforma'
+import { BaseDoCliente } from './BaseDoCliente'
 import { Icone } from './Icones'
 import { Campo, Carregando, Estado, Modal, Selo } from './ui'
 
@@ -60,6 +61,7 @@ export function PainelPlataforma({ avisar, onFechar }: Props) {
   const [editando, setEditando] = useState<number | null>(null)
   const [criando, setCriando] = useState(false)
   const [link, setLink] = useState<{ caminho: string; rotulo: string } | null>(null)
+  const [vendoBase, setVendoBase] = useState<{ id: number; nome: string } | null>(null)
 
   const carregar = useCallback(async () => {
     try {
@@ -217,6 +219,7 @@ export function PainelPlataforma({ avisar, onFechar }: Props) {
                         avisar(mensagemDoErro(falha), 'erro')
                       }
                     }}
+                    onVerBase={() => setVendoBase({ id: conta.id, nome: conta.nome })}
                     onCriarUsuario={async (novo) => {
                       const resposta = await plataforma.criarUsuario(conta.id, novo)
                       setDados(resposta)
@@ -235,11 +238,16 @@ export function PainelPlataforma({ avisar, onFechar }: Props) {
     </>
   )
 
+  const suporte = vendoBase && (
+    <BaseDoCliente contaId={vendoBase.id} nomeDaConta={vendoBase.nome} onFechar={() => setVendoBase(null)} />
+  )
+
   if (!onFechar) {
     return (
       <div className="plataforma-pagina">
         {abas}
         <div className="plataforma-pagina__corpo">{corpo}</div>
+        {suporte}
       </div>
     )
   }
@@ -257,6 +265,7 @@ export function PainelPlataforma({ avisar, onFechar }: Props) {
       cabecalhoExtra={abas}
     >
       {corpo}
+      {suporte}
     </Modal>
   )
 }
@@ -371,6 +380,7 @@ interface LinhaProps {
   onSalvar: (alteracao: Parameters<typeof plataforma.salvarConta>[1]) => Promise<void>
   onLinkDeSenha: (usuarioId: number, nome: string) => Promise<void>
   onCriarUsuario: (dados: { nome: string; email: string; papel: Papel }) => Promise<void>
+  onVerBase: () => void
 }
 
 function LinhaDeConta({
@@ -383,6 +393,7 @@ function LinhaDeConta({
   onSalvar,
   onLinkDeSenha,
   onCriarUsuario,
+  onVerBase,
 }: LinhaProps) {
   const [adicionando, setAdicionando] = useState(false)
   const faixa = FAIXAS[conta.faixa]
@@ -428,6 +439,15 @@ function LinhaDeConta({
           </button>
           <button type="button" className="btn btn--secundario btn--pequeno" onClick={() => onRenovar(12)}>
             +12
+          </button>
+          <button
+            type="button"
+            className="btn btn--fantasma btn--pequeno"
+            onClick={onVerBase}
+            title="Ver os empreendimentos e as tabelas de venda deste cliente"
+          >
+            <Icone nome="predio" tamanho={13} />
+            Ver a base
           </button>
           <button type="button" className="btn btn--fantasma btn--pequeno" onClick={onEditar}>
             <Icone nome="lapis" tamanho={13} />

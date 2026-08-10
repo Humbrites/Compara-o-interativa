@@ -1,5 +1,6 @@
 import { request } from './http'
 import type { AssentosResumo, Papel, PlanoResumo, StatusConta } from './acesso'
+import type { Empreendimento } from '../types'
 
 /** A visao de quem vende. Existe so para quem tem a marca de operador. */
 
@@ -74,6 +75,19 @@ export interface AlteracaoDeConta {
   observacoes?: string
 }
 
+/** A base de um cliente, para o suporte olhar (nunca editar). */
+export interface BaseDoClienteResposta {
+  conta: { id: number; nome: string }
+  empreendimentos: Empreendimento[]
+  resumo: {
+    empreendimentos: number
+    unidades: number
+    fluxos: number
+    fotos: number
+    semCoordenada: number
+  }
+}
+
 export const plataforma = {
   panorama: () => request<Panorama>('/api/plataforma'),
 
@@ -103,6 +117,8 @@ export const plataforma = {
       method: 'POST',
       body: JSON.stringify(dados),
     }),
+
+  baseDoCliente: (contaId: number) => request<BaseDoClienteResposta>(`/api/plataforma/contas/${contaId}/base`),
 
   linkDeSenha: (usuarioId: number) =>
     request<{ link: string; expiraEmHoras: number }>(`/api/plataforma/usuarios/${usuarioId}/link-senha`, {
