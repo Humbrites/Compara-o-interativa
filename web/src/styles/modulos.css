@@ -3015,3 +3015,134 @@
     font-size: 14px;
   }
 }
+
+
+/* ==========================================================================
+   Onde o empreendimento fica (busca de endereço + mapa)
+
+   Latitude e longitude eram dois campos de texto — e ninguém que cadastra um
+   imóvel sabe as coordenadas dele. Aqui o endereço vira ponto no mapa, e os
+   números ficam recolhidos para quem realmente os tem.
+   ========================================================================== */
+
+.local__busca {
+  display: flex;
+  gap: var(--e2);
+  align-items: stretch;
+}
+
+.local__busca .entrada {
+  flex: 1 1 auto;
+}
+
+.local__busca .btn {
+  flex: none;
+  height: 42px;
+}
+
+.local__resultados {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e1);
+  margin: var(--e3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.local__resultado {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--e2);
+  width: 100%;
+  padding: var(--e2) var(--e3);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-sm);
+  background: var(--superficie);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  transition: border-color var(--transicao), background var(--transicao);
+}
+
+.local__resultado:hover {
+  border-color: var(--tom, var(--marca-400));
+  background: var(--tom-fundo, var(--marca-50));
+}
+
+.local__resultado--ativo {
+  border-color: var(--tom, var(--marca-600));
+  background: var(--tom-fundo, var(--marca-50));
+}
+
+.local__resultado svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--tom, var(--marca-600));
+}
+
+.local__resultado strong {
+  display: block;
+  font-size: 13.5px;
+}
+
+.local__resultado__linha {
+  display: block;
+  font-size: 11.5px;
+  color: var(--texto-3);
+}
+
+.local__mapa-area {
+  margin-top: var(--e4);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  overflow: hidden;
+}
+
+.local__mapa {
+  height: 240px;
+  width: 100%;
+  background: var(--superficie-3);
+}
+
+/* A faixa embaixo do mapa é o feedback do estado: "ainda sem ponto" é
+   informação, não erro — o cadastro salva sem ele. */
+.local__estado {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--e2);
+  padding: var(--e2) var(--e3);
+  border-top: 1px solid var(--borda);
+  background: var(--superficie-2);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--texto-2);
+}
+
+.local__estado svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--texto-3);
+}
+
+.local__estado--marcado {
+  background: var(--vitoria-fundo);
+  border-top-color: var(--vitoria-borda);
+  color: var(--texto);
+}
+
+.local__estado--marcado svg {
+  color: var(--vitoria);
+}
+
+.local__coordenadas {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--e2) var(--e4);
+  margin-top: var(--e3);
+}
+
+.link-acao--perigo {
+  color: var(--perigo);
+  margin-left: auto;
+}

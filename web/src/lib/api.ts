@@ -4,9 +4,11 @@ import { request } from './http'
 import type {
   Empreendimento,
   EmpreendimentoInput,
+  EnderecoEncontrado,
   FluxoPagamento,
   FluxoInput,
   ImagemEmpreendimento,
+  RespostaEnderecos,
   RespostaIndicadores,
   Unidade,
   UnidadeInput,
@@ -87,6 +89,20 @@ export const api = {
    */
   indicadores: (forcar = false) =>
     request<RespostaIndicadores>(`/api/indicadores${forcar ? '?forcar=1' : ''}`, { cache: 'no-store' }),
+
+  /**
+   * Busca o endereço no mapa. Quem fala com o OpenStreetMap é a nossa API —
+   * ela guarda o resultado e respeita o limite de uma consulta por segundo.
+   */
+  buscarEndereco: (termo: string) =>
+    request<RespostaEnderecos>(`/api/enderecos?q=${encodeURIComponent(termo)}`, { cache: 'no-store' }),
+
+  /** O caminho inverso: que endereço é este ponto (o pino foi arrastado). */
+  enderecoDoPonto: (latitude: number, longitude: number) =>
+    request<{ endereco: EnderecoEncontrado | null }>(
+      `/api/enderecos/ponto?lat=${latitude}&lon=${longitude}`,
+      { cache: 'no-store' },
+    ),
 
   /** Os ids na ordem desejada; o primeiro vira a capa. */
   reordenarImagens: (empreendimentoId: number, ids: number[]) =>

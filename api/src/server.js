@@ -20,6 +20,7 @@ import {
 import { listarBaseDaConta, comUrl } from './base.js'
 import { ehMaster } from './contas.js'
 import { criarServicoIndicadores } from './indicadores.js'
+import { criarServicoDeEndereco } from './geocodificar.js'
 import { registrarAutenticacao } from './rotas-auth.js'
 import { registrarPlataforma } from './rotas-plataforma.js'
 
@@ -455,6 +456,42 @@ app.get('/api/indicadores', async (req, reply) => {
   // porque o Chrome nem chegava a perguntar.
   reply.header('cache-control', 'no-store')
   return dados
+})
+
+/* ------------------------------------------------------------------ */
+/* Endereco no mapa                                                    */
+/* ------------------------------------------------------------------ */
+
+const endereco = criarServicoDeEndereco({ log: app.log })
+
+// Buscar o endereco e o que substitui digitar latitude e longitude a mao.
+app.get('/api/enderecos', async (req, reply) => {
+  try {
+    const dados = await endereco.buscar(req.query?.q)
+    reply.header('cache-control', 'no-store')
+    return dados
+  } catch (erro) {
+    // 502: quem falhou foi o serviço de fora, não o pedido de quem cadastra —
+    // e a tela responde a isso oferecendo o ajuste manual.
+    return reply.code(502).send({
+      erro: 'A busca de endereços não respondeu agora. Informe as coordenadas à mão ou tente de novo.',
+      detalhe: String(erro?.message || erro),
+    })
+  }
+})
+
+// O caminho inverso: o pino foi arrastado, de que endereco e aquele ponto.
+app.get('/api/enderecos/ponto', async (req, reply) => {
+  try {
+    const dados = await endereco.reverso(req.query?.lat, req.query?.lon)
+    reply.header('cache-control', 'no-store')
+    return dados
+  } catch (erro) {
+    return reply.code(502).send({
+      erro: 'Não foi possível descobrir o endereço deste ponto agora.',
+      detalhe: String(erro?.message || erro),
+    })
+  }
 })
 
 try {

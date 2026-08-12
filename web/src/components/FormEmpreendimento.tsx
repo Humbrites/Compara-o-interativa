@@ -6,6 +6,7 @@ import { Campo, Modal } from './ui'
 import { Icone } from './Icones'
 import { UnidadesDoEmpreendimento } from './FormUnidades'
 import { GaleriaUpload } from './GaleriaUpload'
+import { SeletorDeLocal } from './SeletorDeLocal'
 import { CalculadoraCub } from './CalculadoraCub'
 
 /** O formulario trabalha com texto puro; a conversao acontece no envio. */
@@ -194,6 +195,16 @@ export function FormEmpreendimento({
     if (erros[campo]) setErros((atual) => ({ ...atual, [campo]: '' }))
   }
 
+  /** Vários campos de uma vez: a busca de endereço preenche cinco juntos. */
+  function aplicar(campos: Record<string, string>) {
+    setForm((atual) => ({ ...atual, ...campos }))
+    setErros((atual) => {
+      const limpos = { ...atual }
+      for (const campo of Object.keys(campos)) limpos[campo] = ''
+      return limpos
+    })
+  }
+
   function entrada(campo: string, extra?: React.InputHTMLAttributes<HTMLInputElement>) {
     return (
       <input
@@ -349,24 +360,18 @@ export function FormEmpreendimento({
               <Icone nome="local" tamanho={13} />
               Localização
             </h3>
-            {/* Grade de 2 colunas fixas: latitude e longitude precisam ficar
-                lado a lado, e com auto-fit a longitude caia sozinha na linha. */}
-            <div className="grade grade--2">
-              <Campo rotulo="Cidade">{entrada('cidade', { placeholder: 'Ex.: Curitiba' })}</Campo>
-              <Campo rotulo="Bairro">{entrada('bairro', { placeholder: 'Ex.: Batel' })}</Campo>
-              <Campo rotulo="Endereço" className="col-inteira">
-                {entrada('endereco', { placeholder: 'Rua, número e complemento' })}
-              </Campo>
-              <Campo rotulo="Latitude" dica="para o mapa" erro={erros.latitude}>
-                {entrada('latitude', { placeholder: '-25.4284', inputMode: 'decimal' })}
-              </Campo>
-              <Campo rotulo="Longitude" dica="para o mapa" erro={erros.longitude}>
-                {entrada('longitude', { placeholder: '-49.2733', inputMode: 'decimal' })}
-              </Campo>
-            </div>
-            <p className="campo__dica" style={{ marginTop: 'var(--e2)' }}>
-              Sem latitude e longitude o empreendimento é cadastrado normalmente, mas não aparece no mapa.
-            </p>
+            <SeletorDeLocal
+              valores={{
+                endereco: form.endereco,
+                cidade: form.cidade,
+                bairro: form.bairro,
+                latitude: form.latitude,
+                longitude: form.longitude,
+              }}
+              onAplicar={aplicar}
+              erros={{ latitude: erros.latitude, longitude: erros.longitude }}
+              entrada={entrada}
+            />
           </section>
 
           <section className="form-secao form-secao--obra">

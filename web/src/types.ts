@@ -153,6 +153,25 @@ export interface RespostaIndicadores {
   erro?: string
 }
 
+/** Um endereço encontrado pela busca no mapa (Nominatim/OpenStreetMap). */
+export interface EnderecoEncontrado {
+  /** A linha completa, para a lista de resultados. */
+  rotulo: string
+  endereco: string | null
+  bairro: string | null
+  cidade: string | null
+  estado: string | null
+  cep: string | null
+  latitude: number
+  longitude: number
+}
+
+export interface RespostaEnderecos {
+  resultados: EnderecoEncontrado[]
+  termo: string
+  doCache?: boolean
+}
+
 export interface Filtros {
   busca: string
   cidade: string

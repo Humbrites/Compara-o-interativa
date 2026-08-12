@@ -101,8 +101,23 @@ bairro, endereço, latitude, longitude, valor médio do m², metragem mínima e 
 dormitórios, suítes, banheiros, vagas, status da obra, entrega prevista, tipo,
 fotos e observações.
 
+**A localização se resolve no mapa, não digitando coordenadas.** Escreva o endereço e
+clique em **"Buscar no mapa"**: a busca devolve os endereços encontrados, e escolher um
+preenche rua, bairro, cidade **e as coordenadas** de uma vez. O mapa logo abaixo mostra o
+pino, que é **arrastável** para acertar a posição exata — e clicar em qualquer ponto do
+mapa marca ali, que é o caminho de quem conhece a região e não precisa de busca. Latitude e
+longitude continuam existindo, recolhidas em *"ajustar as coordenadas à mão"*, para quem
+tem o par exato (uma planta, um GPS).
+
+> **Quem consulta é a nossa API**, não o navegador: o buscador é o **Nominatim**, do próprio
+> OpenStreetMap (sem token e sem cadastro, como os tiles do mapa), e a política de uso dele
+> exige *User-Agent* identificando a aplicação e **no máximo uma consulta por segundo** —
+> duas coisas que só se garantem no servidor. O resultado fica guardado por 24 horas
+> (endereço não muda de lugar), e a busca que falha não trava o cadastro: a tela oferece o
+> ajuste manual.
+
 > Sem **latitude e longitude** o empreendimento é cadastrado normalmente, mas não
-> aparece no mapa. O painel avisa quantos estão nessa situação.
+> aparece no mapa — a faixa embaixo do mapa avisa disso enquanto não houver ponto.
 
 **Fotos** — arraste os arquivos (ou escolha do computador) direto no formulário: JPG, PNG,
 WEBP, GIF ou AVIF, até 12 MB cada. A **primeira foto é a capa** — arraste as miniaturas para
@@ -743,6 +758,8 @@ não entrou).
 | `PUT` | `/api/empreendimentos/:id/imagens/ordem` | reordena — o primeiro id vira a capa |
 | `DELETE` | `/api/imagens/:id` | exclui a foto e o arquivo do disco |
 | `GET` | `/api/indicadores` | índices de mercado (cache de 6h; `?forcar=1` refaz a consulta) |
+| `GET` | `/api/enderecos?q=` | busca o endereço no OpenStreetMap (cache de 24h, 1 consulta/s) |
+| `GET` | `/api/enderecos/ponto?lat=&lon=` | o endereço de um ponto (o pino arrastado) |
 | `GET` | `/uploads/<arquivo>` | serve a foto enviada (só para a conta dona dela) |
 | `GET` | `/api/health` | status da API (público, sem contagem de dados) |
 
