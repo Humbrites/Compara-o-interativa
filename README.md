@@ -765,6 +765,73 @@ não entrou).
 
 ---
 
+## Análise da oportunidade (os três níveis)
+
+A pergunta que o sistema responde deixou de ser "quanto custa" e passou a ser **quanto sai
+do bolso, quando, e como isso se compara**. A conta mora em `lib/analise.ts` e `lib/score.ts`,
+puras e testáveis fora do app — as três telas consomem a MESMA função, porque a primeira que
+refizesse a conta por conta própria seria a que divergiria.
+
+### Nível 1 — a unidade
+
+O botão **Analisar**, no cartão da unidade, responde *"esta unidade é interessante?"*:
+
+| | |
+|---|---|
+| **Valor** e **valor por m²** | o preço e o custo do metro |
+| **Entrada** | o capital necessário para assinar hoje |
+| **Durante a obra** | parcelas e reforços, **sem** a entrada |
+| **Capital até a entrega** | entrada + obra: tudo que sai do bolso antes das chaves |
+| **Saldo na entrega** | o que vai para o banco, com o **% financiável** |
+
+> Entrada e "durante a obra" são números **separados** de propósito: somá-los esconde
+> justamente a pergunta que o cliente faz primeiro — *"de quanto eu preciso hoje?"*.
+
+Uma barra proporcional repete as cores dos três números, e a seção final diz onde o m² da
+unidade cai dentro da faixa do empreendimento (*"6,7% mais barato por m² que a média das
+outras unidades"*).
+
+### O score da oportunidade
+
+Nota de 0 a 100 com seis critérios que saem do cadastro: **preço por m²** (peso 30),
+**entrada**, **capital até a entrega**, **saldo financiável**, **parcelamento** (15 cada) e
+**metragem** (10). Os pesos são ajustáveis na própria tela e ficam no navegador de quem usa.
+
+> ⚠️ **A nota nunca aparece sozinha.** Cada critério mostra a própria nota, o peso e a frase
+> que a justifica — um "74" que o corretor não sabe explicar vira desconfiança na primeira
+> pergunta do cliente. Critério **sem dado sai da conta** em vez de derrubar a nota, e a tela
+> avisa que saiu.
+
+Duas escolhas de cálculo que valem saber: o **saldo financiável** pontua por *faixa*
+(50%–70%), não por "quanto menor melhor" — os dois extremos são ruins, porque pouco saldo
+exige capital que o comprador não tem e saldo demais vira financiamento que o banco não
+aprova. E **localização, características e potencial de valorização ficaram de fora**: não há
+dado no sistema que os sustente, e nota inventada é pior que nota ausente.
+
+### Nível 2 — o empreendimento
+
+Bloco **Análise do empreendimento**, no painel do imóvel: faixa de preço, **ticket médio**,
+faixa de metragem, m² médio ponderado e a **distribuição dos preços** em barras.
+
+> Junto do ticket vai a **mediana**, e quando os dois se afastam mais de 15% a tela avisa:
+> cinco unidades parecidas mais uma cobertura do dobro do preço têm o mesmo "ticket médio"
+> de um prédio homogêneo mais caro — e são coisas completamente diferentes de vender.
+
+### Nível 3 — o comparativo
+
+**Comparar**, no bloco de unidades, põe até **4 unidades lado a lado** — do mesmo prédio ou
+de prédios diferentes. Cada coluna traz o score no cabeçalho, e cada linha destaca o melhor:
+menor para preço, entrada e capital; maior para metragem, dormitórios e vagas.
+
+> O **saldo na entrega não entra na disputa**: mais saldo é pior para quem tem capital e
+> melhor para quem depende de financiamento — eleger um vencedor ali seria escolher pelo
+> cliente. E empate destaca os dois, em vez de inventar diferença.
+
+O comparativo **A × B de empreendimentos** continua onde estava, no painel do imóvel: um
+compara prédios, o outro compara unidades.
+
+---
+
 ## O visual dos formulários
 
 Todo formulário longo do sistema (cadastro, simulador, calculadora) segue o mesmo padrão,
