@@ -149,6 +149,39 @@ export function analisarUnidade(unidade: Unidade, unidadesDoEmpreendimento: Unid
 /** "6,6" — pt-BR usa vírgula, e `toFixed` devolve ponto. */
 const umaCasa = (valor: number) => valor.toFixed(1).replace('.', ',')
 
+/**
+ * Como o "durante a obra" e pago: "36 × R$ 2.500 · 3 reforcos de R$ 20.000".
+ *
+ * O TOTAL sozinho esconde o numero que o cliente pergunta primeiro — "quanto
+ * fica por mes?" —, e duas tabelas com o mesmo total podem ter parcelas
+ * completamente diferentes.
+ */
+export function textoDoParcelamento(
+  analise: AnaliseDaUnidade,
+  moeda: (valor: number) => string,
+): string | null {
+  const fluxo = analise.fluxo
+  if (!fluxo) return null
+
+  const partes: string[] = []
+
+  const parcelas = numero(fluxo.parcelas)
+  const parcela = numero(fluxo.parcela_valor)
+  if (parcelas !== null && parcelas > 0 && parcela !== null && parcela > 0) {
+    partes.push(`${parcelas} × ${moeda(parcela)}`)
+  } else if (parcelas !== null && parcelas > 0) {
+    partes.push(`${parcelas} parcelas`)
+  }
+
+  const reforcos = numero(fluxo.reforcos_qtd)
+  const reforco = numero(fluxo.reforco_valor)
+  if (reforcos !== null && reforcos > 0 && reforco !== null && reforco > 0) {
+    partes.push(`${reforcos} ${reforcos === 1 ? 'reforço' : 'reforços'} de ${moeda(reforco)}`)
+  }
+
+  return partes.length > 0 ? partes.join(' · ') : null
+}
+
 /** A frase da posição, do jeito que se fala com o cliente. */
 export function textoDaPosicao(analise: AnaliseDaUnidade): string {
   switch (analise.posicao) {

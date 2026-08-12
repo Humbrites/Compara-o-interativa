@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 
-import { analisarUnidade, textoDaPosicao, type AnaliseDaUnidade } from '../lib/analise'
+import { analisarUnidade, textoDaPosicao, textoDoParcelamento, type AnaliseDaUnidade } from '../lib/analise'
 import { fmtArea, fmtMoeda, TRACO } from '../lib/format'
 import { fmtPercentual } from '../lib/cub'
 import { rotuloUnidade } from '../lib/unidades'
@@ -150,7 +150,7 @@ export function AnaliseUnidade({ unidade, unidades, indice, nomeDoEmpreendimento
             icone="obra"
             rotulo="Durante a obra"
             valor={dinheiro(analise.durante)}
-            dica={`${pct(analise.pctDurante)} · parcelas e reforços`}
+            dica={textoDoParcelamento(analise, (v) => fmtMoeda(v)) ?? `${pct(analise.pctDurante)} · parcelas e reforços`}
             tom="obra"
           />
           <Numero

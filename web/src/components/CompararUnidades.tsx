@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 
-import { analisarUnidade } from '../lib/analise'
+import { analisarUnidade, textoDoParcelamento } from '../lib/analise'
 import { fmtArea, fmtInteiro, fmtMoeda, TRACO } from '../lib/format'
 import { fmtPercentual } from '../lib/cub'
 import { rotuloUnidade } from '../lib/unidades'
@@ -136,8 +136,11 @@ export function CompararUnidades({ lista, empreendimentoInicial, onFechar }: Pro
       valor: (i) => analiseDe(i)?.durante ?? null,
       texto: (i) => moeda(analiseDe(i)?.durante),
       detalhe: (i) => {
-        const parcelas = analiseDe(i)?.fluxo?.parcelas ?? null
-        return parcelas ? `${parcelas} parcelas` : null
+        const a = analiseDe(i)
+        // O valor de CADA parcela, não só o total: é o número que o cliente
+        // pergunta primeiro, e duas tabelas com o mesmo total podem ter
+        // parcelas bem diferentes.
+        return a ? textoDoParcelamento(a, (v) => fmtMoeda(v, true)) : null
       },
     },
     {
