@@ -91,6 +91,9 @@ export function panorama() {
       diasParaVencer: diasAte(conta.expira_em),
       faixa,
       exigir2fa: Boolean(conta.exigir_2fa),
+      /** Base que o master abre para apresentar o sistema — e a única em que a
+       *  visualização "como usuário" grava. */
+      demonstracao: Boolean(conta.demonstracao),
       observacoes: conta.observacoes,
       criadoEm: conta.criado_em,
       ultimoAcesso,

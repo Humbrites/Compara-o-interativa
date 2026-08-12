@@ -23,6 +23,7 @@ import {
   definirSenha,
   DIAS_SESSAO,
   encerrarSessao,
+  ehContaDeDemonstracao,
   ehMaster,
   encerrarTodasAsSessoes,
   gerarCodigosRecuperacao,
@@ -176,7 +177,26 @@ function pendencia2fa(usuario, conta) {
   return Boolean(conta.exigir_2fa) && !usuario.totp_ativo
 }
 
-function sessaoPublica({ usuario, conta }) {
+export function sessaoPublica({ usuario, conta, visitando = null }) {
+  if (visitando) {
+    // Master vendo o sistema como usuário. `conta` preenchida é o que abre o
+    // dashboard no front; `verComo` é o que faz a faixa aparecer e diz se o
+    // que ele clicar grava. O 2FA da conta é problema de quem é DELA — o
+    // master já entrou pela segurança do próprio login.
+    return {
+      usuario: usuarioPublico(usuario),
+      conta: { ...contaPublica(visitando.conta), somenteLeitura: !visitando.podeGravar },
+      master: true,
+      precisaConfigurar2fa: false,
+      verComo: {
+        contaId: visitando.conta.id,
+        conta: visitando.conta.nome,
+        demonstracao: ehContaDeDemonstracao(visitando.conta),
+        podeGravar: visitando.podeGravar,
+      },
+    }
+  }
+
   return {
     usuario: usuarioPublico(usuario),
     // `null` diz ao front que este login é o master: ele abre direto na
@@ -184,6 +204,7 @@ function sessaoPublica({ usuario, conta }) {
     conta: conta ? contaPublica(conta) : null,
     master: ehMaster(usuario),
     precisaConfigurar2fa: conta ? pendencia2fa(usuario, conta) : false,
+    verComo: null,
   }
 }
 
@@ -229,12 +250,25 @@ export function registrarAutenticacao(app) {
         caminho === '/api/sessao' ||
         caminho === '/api/indicadores'
 
-      if (!permitido) {
+      if (permitido) return
+
+      // Fora da administracao, o master so passa quando escolheu ver o sistema
+      // como usuario de uma conta — e ai e a conta visitada que responde.
+      const visita = contexto.visitando
+      if (!visita) {
         return reply.code(403).send({
           erro: 'Este login administra os clientes e não tem base própria de empreendimentos.',
           master: true,
         })
       }
+
+      if (req.method !== 'GET' && req.method !== 'HEAD' && !visita.podeGravar) {
+        return reply.code(403).send({
+          erro: `Você está vendo ${visita.conta.nome} como usuário. Esta visualização é somente leitura — para apresentar o sistema e cadastrar, use a conta de demonstração.`,
+          somenteLeitura: true,
+        })
+      }
+
       return
     }
 

@@ -10,12 +10,19 @@ import {
   buscarConta,
   buscarUsuario,
   conferirVaga,
+  contaDeDemonstracao,
   criarConta,
   criarTokenSenha,
   criarUsuario,
+  definirContaDeDemonstracao,
+  definirVisita,
+  ehMaster,
   encerrarTodasAsSessoes,
+  montarVisita,
+  podeEntrar,
 } from './contas.js'
 import { ehOperador, novaDataDeRenovacao, panorama } from './plataforma.js'
+import { sessaoPublica } from './rotas-auth.js'
 import { mesesDoCiclo, PAPEIS, PERIODICIDADES, PLANOS, STATUS_CONTA, validarPeriodicidade, validarPlano } from './planos.js'
 
 /** Prefixo que a guarda de sessão trata em separado (ver `rotas-auth.js`). */
@@ -99,6 +106,12 @@ export function registrarPlataforma(app) {
       observacoes: corpo.observacoes === undefined ? conta.observacoes : String(corpo.observacoes).trim() || null,
       id: conta.id,
     })
+
+    // Marcar a base de demonstração é o que libera a escrita na visualização
+    // "como usuário" — por isso ela é uma só, e trocar desmarca a anterior.
+    if (corpo.demonstracao !== undefined) {
+      definirContaDeDemonstracao(corpo.demonstracao ? conta.id : null)
+    }
 
     // Encerrar a conta tira todo mundo na hora; suspender NÃO — a conta
     // suspensa segue consultando, e derrubar a sessão contradiz isso.
@@ -259,6 +272,49 @@ export function registrarPlataforma(app) {
         semCoordenada: empreendimentos.filter((e) => e.latitude === null || e.longitude === null).length,
       },
     }
+  })
+
+  /**
+   * Ver o sistema COMO USUÁRIO da conta escolhida.
+   *
+   * É o que permite apresentar o produto — mapa, painel, comparativo,
+   * simulador — sem pedir emprestado o login de um cliente real. Sem
+   * `contaId`, abre a conta de demonstração: é o caminho de um clique do botão
+   * no topo, e o único em que o que for clicado grava de verdade.
+   */
+  app.post(`${PREFIXO_PLATAFORMA}/ver-como`, guarda, (req, reply) => {
+    // Operador DENTRO de uma conta já tem base própria; personificar outra
+    // conta por cima da sessão dele misturaria as duas.
+    if (!ehMaster(req.contexto.usuario)) {
+      return reply.code(403).send({ erro: 'Só o login master, que não pertence a nenhuma conta, pode ver como usuário.' })
+    }
+
+    const pedida = req.body?.contaId
+    const conta = pedida === undefined || pedida === null ? contaDeDemonstracao() : buscarConta.get(Number(pedida))
+
+    if (!conta) {
+      return pedida
+        ? reply.code(404).send({ erro: 'Conta não encontrada' })
+        : reply.code(409).send({
+            erro: 'Nenhuma conta está marcada como demonstração. Abra a conta pela lista de clientes ou marque uma como demonstração.',
+            semDemonstracao: true,
+          })
+    }
+
+    // Conta encerrada não abre nem para o dono dela; abrir para o master seria
+    // mostrar numa apresentação exatamente o que o cliente não vê mais.
+    if (!podeEntrar(conta)) {
+      return reply.code(409).send({ erro: 'Esta conta está encerrada e não abre nem para quem é dela.' })
+    }
+
+    definirVisita(req.contexto.sessao.token_hash, conta.id)
+    return sessaoPublica({ usuario: req.contexto.usuario, conta: null, visitando: montarVisita(conta) })
+  })
+
+  /** Sai da visualização e devolve o master para a administração. */
+  app.delete(`${PREFIXO_PLATAFORMA}/ver-como`, guarda, (req) => {
+    definirVisita(req.contexto.sessao.token_hash, null)
+    return sessaoPublica({ usuario: req.contexto.usuario, conta: null })
   })
 
   /** O catálogo, para a tela montar os seletores sem repetir os números. */

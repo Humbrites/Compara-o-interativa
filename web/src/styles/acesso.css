@@ -341,6 +341,32 @@
   color: var(--marca-700);
 }
 
+/* O master vendo o sistema como usuário. Cor própria (nem o alerta do 2FA,
+   nem o âmbar da conta suspensa) porque não é um problema a resolver: é o
+   estado da tela, e ele precisa saltar aos olhos durante a apresentação.
+   O TEXTO fica no cinza-escuro padrão: roxo sobre lilás passa raspando no AA,
+   e esta faixa é para ser lida de longe, num projetor. */
+.faixa-topo--visita {
+  border-top-color: var(--roxo);
+  background: var(--roxo-fundo);
+  color: var(--texto);
+}
+
+.faixa-topo--visita svg {
+  color: var(--roxo);
+}
+
+/* Na base de demonstração o clique GRAVA — e essa é a diferença que não pode
+   passar despercebida entre uma conta e outra. */
+.faixa-topo--visita-grava {
+  border-top-color: var(--ciano);
+  background: var(--ciano-fundo);
+}
+
+.faixa-topo--visita-grava svg {
+  color: var(--ciano);
+}
+
 .faixa-topo svg {
   flex: none;
 }

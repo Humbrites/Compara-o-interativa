@@ -1,5 +1,5 @@
 import { request } from './http'
-import type { AssentosResumo, Papel, PlanoResumo, StatusConta } from './acesso'
+import type { AssentosResumo, Papel, PlanoResumo, Sessao, StatusConta } from './acesso'
 import type { Empreendimento } from '../types'
 
 /** A visao de quem vende. Existe so para quem tem a marca de operador. */
@@ -48,6 +48,8 @@ export interface ContaDaPlataforma {
   diasParaVencer: number | null
   faixa: FaixaRenovacao
   exigir2fa: boolean
+  /** Base de apresentação: a única em que a visualização como usuário grava. */
+  demonstracao: boolean
   observacoes: string | null
   criadoEm: string
   ultimoAcesso: string | null
@@ -84,6 +86,8 @@ export interface AlteracaoDeConta {
   /** `YYYY-MM-DD`; string vazia limpa o vencimento. */
   expiraEm?: string | null
   observacoes?: string
+  /** Marcar uma desmarca a anterior: a base de apresentação é uma só. */
+  demonstracao?: boolean
 }
 
 /** A base de um cliente, para o suporte olhar (nunca editar). */
@@ -132,6 +136,19 @@ export const plataforma = {
     }),
 
   baseDoCliente: (contaId: number) => request<BaseDoClienteResposta>(`/api/plataforma/contas/${contaId}/base`),
+
+  /**
+   * Abre o dashboard como usuário da conta. Sem `contaId`, abre a de
+   * demonstração — é o caminho de um clique do botão no topo.
+   */
+  verComo: (contaId?: number) =>
+    request<Sessao>('/api/plataforma/ver-como', {
+      method: 'POST',
+      body: JSON.stringify(contaId === undefined ? {} : { contaId }),
+    }),
+
+  /** Volta para a administração. */
+  sairDaVisao: () => request<Sessao>('/api/plataforma/ver-como', { method: 'DELETE' }),
 
   linkDeSenha: (usuarioId: number) =>
     request<{ link: string; expiraEmHoras: number }>(`/api/plataforma/usuarios/${usuarioId}/link-senha`, {

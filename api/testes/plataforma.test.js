@@ -659,3 +659,202 @@ test('o operador cria o cliente e recebe o link de primeiro acesso', async () =>
   const depois = await operador.pedir('/api/plataforma')
   assert.equal(depois.corpo.contas.filter((conta) => conta.nome === 'Outra').length, 0)
 })
+
+/* ------------------------------------------------------------------ */
+/* Ver como usuario (apresentacao sem entrar no login de um cliente)   */
+/* ------------------------------------------------------------------ */
+
+/** Abre uma sessão do master criado para estes testes. */
+async function entrarComoApresentador() {
+  const master = criarCliente()
+  const login = await master.pedir('/api/auth/login', {
+    metodo: 'POST',
+    corpo: { identificador: 'apresentador@plataforma.com.br', senha: 'apresenta-2026-forte' },
+  })
+  assert.equal(login.status, 200, JSON.stringify(login.corpo))
+  return master
+}
+
+test('sem conta de demonstração marcada, o botão do topo diz o que fazer', async () => {
+  const saida = await provisionar(
+    '--master',
+    'apresentador@plataforma.com.br',
+    '--nome',
+    'Quem Apresenta',
+    '--usuario',
+    'apresentador',
+  )
+  const token = saida.match(/definir-senha\/([\w-]+)/)?.[1]
+  assert.ok(token, `esperava o link de senha do master:\n${saida}`)
+
+  const master = criarCliente()
+  await master.pedir('/api/auth/definir-senha', { metodo: 'POST', corpo: { token, senha: 'apresenta-2026-forte' } })
+
+  const logado = await entrarComoApresentador()
+
+  // Nenhuma conta nasce marcada quando o banco já tinha várias: escolher no
+  // chute liberaria escrita na base de um cliente de verdade.
+  const semDemo = await logado.pedir('/api/plataforma/ver-como', { metodo: 'POST', corpo: {} })
+  assert.equal(semDemo.status, 409, JSON.stringify(semDemo.corpo))
+  assert.equal(semDemo.corpo.semDemonstracao, true)
+
+  // E ele segue sem base própria enquanto não escolher nada.
+  assert.equal((await logado.pedir('/api/empreendimentos')).status, 403)
+})
+
+test('o master abre a base do cliente como usuário — e não grava nada nela', async () => {
+  const cliente = await abrirConta({
+    conta: 'Cliente Apresentado',
+    nome: 'Nina Prado',
+    email: 'nina@apresentado.com.br',
+    senha: 'nina-2026-forte',
+  })
+
+  const criado = await cliente.pedir('/api/empreendimentos', {
+    metodo: 'POST',
+    corpo: { nome: 'Edifício da Nina', latitude: -25.43, longitude: -49.28 },
+  })
+  assert.equal(criado.status, 201)
+
+  const master = await entrarComoApresentador()
+  const panorama = await master.pedir('/api/plataforma')
+  const alvo = panorama.corpo.contas.find((conta) => conta.nome === 'Cliente Apresentado')
+
+  const visita = await master.pedir('/api/plataforma/ver-como', { metodo: 'POST', corpo: { contaId: alvo.id } })
+  assert.equal(visita.status, 200, JSON.stringify(visita.corpo))
+  assert.equal(visita.corpo.verComo.conta, 'Cliente Apresentado')
+  assert.equal(visita.corpo.verComo.demonstracao, false)
+  assert.equal(visita.corpo.verComo.podeGravar, false)
+  // A conta preenchida é o que abre o dashboard no front — em só leitura.
+  assert.equal(visita.corpo.conta.id, alvo.id)
+  assert.equal(visita.corpo.conta.somenteLeitura, true)
+
+  // O dashboard carrega de verdade: é a base do cliente, com os dados dele.
+  const base = await master.pedir('/api/empreendimentos')
+  assert.equal(base.status, 200)
+  assert.deepEqual(
+    base.corpo.map((e) => e.nome),
+    ['Edifício da Nina'],
+  )
+
+  // Mas nada grava: ver a base para apresentar é uma coisa, alterar o cadastro
+  // do cliente sem que ele saiba é outra.
+  for (const [caminho, metodo] of [
+    ['/api/empreendimentos', 'POST'],
+    [`/api/empreendimentos/${base.corpo[0].id}`, 'PUT'],
+    [`/api/empreendimentos/${base.corpo[0].id}`, 'DELETE'],
+    ['/api/unidades', 'POST'],
+    ['/api/fluxos', 'POST'],
+  ]) {
+    const recusado = await master.pedir(caminho, { metodo, corpo: { nome: 'Não pode' } })
+    assert.equal(recusado.status, 403, `${metodo} ${caminho}`)
+    assert.equal(recusado.corpo.somenteLeitura, true)
+  }
+
+  // O F5 no meio da apresentação não derruba o modo: ele mora na sessão.
+  const recarregou = await master.pedir('/api/sessao')
+  assert.equal(recarregou.corpo.verComo.contaId, alvo.id)
+
+  // E sair devolve a administração — sem base própria de novo.
+  const saiu = await master.pedir('/api/plataforma/ver-como', { metodo: 'DELETE' })
+  assert.equal(saiu.status, 200)
+  assert.equal(saiu.corpo.conta, null)
+  assert.equal(saiu.corpo.verComo, null)
+  assert.equal((await master.pedir('/api/empreendimentos')).status, 403)
+})
+
+test('na conta de demonstração o master cadastra de verdade', async () => {
+  const master = await entrarComoApresentador()
+
+  const panorama = await master.pedir('/api/plataforma')
+  const demo = panorama.corpo.contas.find((conta) => conta.nome === 'Nascida na Tela')
+  const outra = panorama.corpo.contas.find((conta) => conta.nome === 'Cliente Apresentado')
+
+  const marcada = await master.pedir(`/api/plataforma/contas/${demo.id}`, {
+    metodo: 'PUT',
+    corpo: { demonstracao: true },
+  })
+  assert.equal(marcada.status, 200)
+  assert.equal(marcada.corpo.contas.find((c) => c.id === demo.id).demonstracao, true)
+
+  // Sem dizer qual conta: o botão do topo abre a de demonstração.
+  const visita = await master.pedir('/api/plataforma/ver-como', { metodo: 'POST', corpo: {} })
+  assert.equal(visita.status, 200, JSON.stringify(visita.corpo))
+  assert.equal(visita.corpo.verComo.contaId, demo.id)
+  assert.equal(visita.corpo.verComo.podeGravar, true)
+  assert.equal(visita.corpo.conta.somenteLeitura, false)
+
+  // Aqui o cadastro ao vivo funciona — é a base de apresentação.
+  const criado = await master.pedir('/api/empreendimentos', {
+    metodo: 'POST',
+    corpo: { nome: 'Modelo da Apresentação', latitude: -25.4, longitude: -49.2 },
+  })
+  assert.equal(criado.status, 201, JSON.stringify(criado.corpo))
+
+  // E o que ele cadastrou é da conta de demonstração, não da base de ninguém.
+  const daDemo = await master.pedir('/api/plataforma/ver-como', { metodo: 'POST', corpo: { contaId: outra.id } })
+  assert.equal(daDemo.corpo.verComo.podeGravar, false)
+  const baseDoOutro = await master.pedir('/api/empreendimentos')
+  assert.ok(
+    !baseDoOutro.corpo.some((e) => e.nome === 'Modelo da Apresentação'),
+    'o que foi cadastrado na demonstração não pode aparecer na base do cliente',
+  )
+
+  // Marcar outra conta como demonstração desmarca a anterior: a regra "ele
+  // grava na de demonstração e em nenhuma outra" só é legível com uma só.
+  const trocada = await master.pedir(`/api/plataforma/contas/${outra.id}`, {
+    metodo: 'PUT',
+    corpo: { demonstracao: true },
+  })
+  assert.equal(trocada.corpo.contas.find((c) => c.id === demo.id).demonstracao, false)
+  assert.equal(trocada.corpo.contas.find((c) => c.id === outra.id).demonstracao, true)
+
+  // A visita em curso acompanha a troca na requisição seguinte.
+  assert.equal((await master.pedir('/api/sessao')).corpo.verComo.podeGravar, true)
+
+  await master.pedir(`/api/plataforma/contas/${outra.id}`, { metodo: 'PUT', corpo: { demonstracao: false } })
+  await master.pedir('/api/plataforma/ver-como', { metodo: 'DELETE' })
+})
+
+test('conta encerrada não abre nem para apresentar', async () => {
+  const master = await entrarComoApresentador()
+
+  const panorama = await master.pedir('/api/plataforma')
+  const encerrada = panorama.corpo.contas.find((conta) => conta.nome === 'Vai Encerrar')
+  assert.equal(encerrada.status, 'cancelada')
+
+  const recusada = await master.pedir('/api/plataforma/ver-como', {
+    metodo: 'POST',
+    corpo: { contaId: encerrada.id },
+  })
+  assert.equal(recusada.status, 409)
+
+  assert.equal(
+    (await master.pedir('/api/plataforma/ver-como', { metodo: 'POST', corpo: { contaId: 99999 } })).status,
+    404,
+  )
+})
+
+test('quem tem base própria não personifica outra conta', async () => {
+  // A Ana é operadora, mas mora DENTRO de uma conta: personificar outra por
+  // cima da sessão dela misturaria as duas bases.
+  const operador = criarCliente()
+  await operador.pedir('/api/auth/login', {
+    metodo: 'POST',
+    corpo: { identificador: 'ana@operadora.com.br', senha: 'opera-2026-forte' },
+  })
+
+  const panorama = await operador.pedir('/api/plataforma')
+  const alvo = panorama.corpo.contas.find((conta) => conta.nome === 'Cliente Apresentado')
+
+  const recusado = await operador.pedir('/api/plataforma/ver-como', { metodo: 'POST', corpo: { contaId: alvo.id } })
+  assert.equal(recusado.status, 403)
+
+  // E o cliente comum nem sabe que a rota existe.
+  const cliente = criarCliente()
+  await cliente.pedir('/api/auth/login', {
+    metodo: 'POST',
+    corpo: { identificador: 'nina@apresentado.com.br', senha: 'nina-2026-forte' },
+  })
+  assert.equal((await cliente.pedir('/api/plataforma/ver-como', { metodo: 'POST', corpo: {} })).status, 404)
+})

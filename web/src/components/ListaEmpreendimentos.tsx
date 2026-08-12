@@ -3,6 +3,7 @@ import type { Empreendimento } from '../types'
 import { fmtEntrega, fmtFaixaMetragem, fmtInteiro, fmtMoeda, fmtTexto, TRACO } from '../lib/format'
 import { corDoStatus, ordemDaEntrega, pesoDoStatus } from '../lib/opcoes'
 import { capaDe } from '../lib/imagens'
+import { usePodeEditar } from '../lib/permissao'
 import { Icone } from './Icones'
 import { Modal, Estado, Selo } from './ui'
 
@@ -49,6 +50,7 @@ export function ListaEmpreendimentos({
   onAdicionar,
   onFechar,
 }: Props) {
+  const podeEditar = usePodeEditar()
   const [busca, setBusca] = useState('')
   const [coluna, setColuna] = useState<Coluna>('nome')
   const [crescente, setCrescente] = useState(true)
@@ -113,10 +115,12 @@ export function ListaEmpreendimentos({
       onFechar={onFechar}
       rodape={
         <>
-          <button type="button" className="btn btn--secundario" onClick={onAdicionar}>
-            <Icone nome="mais" tamanho={15} />
-            Adicionar empreendimento
-          </button>
+          {podeEditar && (
+            <button type="button" className="btn btn--secundario" onClick={onAdicionar}>
+              <Icone nome="mais" tamanho={15} />
+              Adicionar empreendimento
+            </button>
+          )}
           <div className="direita">
             <button type="button" className="btn btn--primario" onClick={onFechar}>
               Fechar
@@ -149,11 +153,13 @@ export function ListaEmpreendimentos({
           titulo={lista.length === 0 ? 'Nenhum empreendimento cadastrado' : 'Nada encontrado'}
           texto={
             lista.length === 0
-              ? 'Cadastre o primeiro empreendimento para vê-lo aqui e no mapa.'
+              ? podeEditar
+                ? 'Cadastre o primeiro empreendimento para vê-lo aqui e no mapa.'
+                : 'Esta conta ainda não cadastrou nenhum empreendimento.'
               : 'Ajuste o texto da busca e tente de novo.'
           }
           acao={
-            lista.length === 0 ? (
+            lista.length === 0 && podeEditar ? (
               <button type="button" className="btn btn--primario" onClick={onAdicionar}>
                 <Icone nome="mais" tamanho={15} />
                 Adicionar empreendimento
@@ -250,22 +256,26 @@ export function ListaEmpreendimentos({
                   <td>
                     {/* stopPropagation: o clique na linha leva ao mapa. */}
                     <div className="tabela-lista__acoes" onClick={(ev) => ev.stopPropagation()}>
-                      <button
-                        type="button"
-                        className="btn btn--fantasma btn--icone"
-                        onClick={() => onEditar(e)}
-                        title="Editar"
-                      >
-                        <Icone nome="lapis" tamanho={14} />
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn--perigo btn--icone"
-                        onClick={() => onExcluir(e)}
-                        title="Excluir"
-                      >
-                        <Icone nome="lixeira" tamanho={14} />
-                      </button>
+                      {podeEditar && (
+                        <>
+                          <button
+                            type="button"
+                            className="btn btn--fantasma btn--icone"
+                            onClick={() => onEditar(e)}
+                            title="Editar"
+                          >
+                            <Icone nome="lapis" tamanho={14} />
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn--perigo btn--icone"
+                            onClick={() => onExcluir(e)}
+                            title="Excluir"
+                          >
+                            <Icone nome="lixeira" tamanho={14} />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>

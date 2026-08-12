@@ -85,6 +85,28 @@ export function podeGravar(conta) {
   return status === 'ativa' || status === 'trial'
 }
 
+/** A base que o master usa para apresentar o sistema. No maximo uma. */
+export function ehContaDeDemonstracao(conta) {
+  return Boolean(conta?.demonstracao)
+}
+
+export const contaDeDemonstracao = () => db.prepare('SELECT * FROM contas WHERE demonstracao = 1').get()
+
+/**
+ * Marca a conta de demonstracao — e desmarca a anterior na mesma transacao.
+ *
+ * Ser UMA so e o que torna a regra de escrita legivel: "o master grava na
+ * conta de demonstracao e em nenhuma outra". Com duas, quem olha a tela teria
+ * de lembrar em qual delas o clique dele altera dado de verdade.
+ */
+export function definirContaDeDemonstracao(contaId) {
+  const trocar = db.transaction(() => {
+    db.prepare('UPDATE contas SET demonstracao = 0 WHERE demonstracao = 1').run()
+    if (contaId) db.prepare('UPDATE contas SET demonstracao = 1 WHERE id = ?').run(contaId)
+  })
+  trocar()
+}
+
 /* ------------------------------------------------------------------ */
 /* Assentos                                                            */
 /* ------------------------------------------------------------------ */
@@ -292,6 +314,22 @@ export function lerSessao(token) {
   const conta = ehMaster(usuario) ? null : buscarConta.get(usuario.conta_id)
   if (!ehMaster(usuario) && (!conta || !podeEntrar(conta))) return null
 
+  // O master pediu para ver o sistema como usuario de uma conta. A conta entra
+  // no contexto (e por isso as rotas de dados funcionam sem saber de nada
+  // disso), mas quem esta logado continua sendo ele — entao a permissao de
+  // gravar NAO vem do papel dele, e sim da marca de demonstracao da conta.
+  let visitando = null
+  if (ehMaster(usuario) && sessao.vendo_conta_id) {
+    const alvo = buscarConta.get(sessao.vendo_conta_id)
+    if (alvo && podeEntrar(alvo)) {
+      visitando = montarVisita(alvo)
+    } else {
+      // Conta encerrada ou apagada durante a visita: volta para a administracao
+      // em vez de deixar a sessao presa apontando para o que nao existe mais.
+      db.prepare('UPDATE sessoes SET vendo_conta_id = NULL WHERE token_hash = ?').run(sessao.token_hash)
+    }
+  }
+
   // So reescreve de hora em hora: renovar a cada requisicao seria uma escrita
   // no banco por clique, sem nenhum ganho.
   if (sessao.ultimo_uso <= agora(-MINUTOS_ENTRE_RENOVACOES * 60 * 1000)) {
@@ -301,7 +339,23 @@ export function lerSessao(token) {
     )
   }
 
-  return { sessao, usuario, conta }
+  // `conta` passa a ser a visitada: e ela que responde por `contaDe(req)` nas
+  // rotas de dados, sem que nenhuma delas precise conhecer a personificacao.
+  return { sessao, usuario, conta: visitando ? visitando.conta : conta, visitando }
+}
+
+/**
+ * O que a visita permite. Fora da conta de demonstracao ela e SOMENTE LEITURA
+ * de proposito: entrar na base de um cliente para apresentar o sistema e uma
+ * coisa, alterar o cadastro dele sem que ele saiba e outra.
+ */
+export function montarVisita(conta) {
+  return { conta, podeGravar: ehContaDeDemonstracao(conta) && podeGravar(conta) }
+}
+
+/** Liga (ou desliga, com `null`) a visualizacao como usuario desta sessao. */
+export function definirVisita(tokenHash, contaId) {
+  db.prepare('UPDATE sessoes SET vendo_conta_id = ? WHERE token_hash = ?').run(contaId, tokenHash)
 }
 
 export function encerrarSessao(token) {

@@ -134,6 +134,9 @@ db.exec(`
     -- sozinha (ninguem perde dado por causa de um boleto atrasado).
     expira_em       TEXT,
     exigir_2fa      INTEGER NOT NULL DEFAULT 0,
+    -- Base que o master abre para apresentar o sistema — e a unica em que a
+    -- visualizacao "como usuario" grava. No maximo uma.
+    demonstracao    INTEGER NOT NULL DEFAULT 0,
     observacoes     TEXT,
     criado_em       TEXT NOT NULL DEFAULT (datetime('now')),
     atualizado_em   TEXT NOT NULL DEFAULT (datetime('now'))
@@ -263,9 +266,32 @@ if (!colunasConta.some((coluna) => coluna.name === 'periodicidade')) {
   db.exec("ALTER TABLE contas ADD COLUMN periodicidade TEXT NOT NULL DEFAULT 'mensal';")
 }
 
+// A conta de DEMONSTRACAO e a base que o master abre para apresentar o sistema
+// sem entrar no login de nenhum cliente. E a UNICA em que a visualizacao "como
+// usuario" grava: nas demais ele olha e nao toca.
+if (!colunasConta.some((coluna) => coluna.name === 'demonstracao')) {
+  db.exec('ALTER TABLE contas ADD COLUMN demonstracao INTEGER NOT NULL DEFAULT 0;')
+
+  // So marca sozinha quando existe UMA conta: ai ela e a base do proprio
+  // operador (o dashboard rodou meses antes de haver cliente). Com varias,
+  // escolher no chute liberaria escrita na base de um cliente de verdade —
+  // entao ninguem nasce marcado e a escolha e feita pela tela.
+  const contas = db.prepare('SELECT id FROM contas').all()
+  if (contas.length === 1) db.prepare('UPDATE contas SET demonstracao = 1 WHERE id = ?').run(contas[0].id)
+}
+
 const colunasUsuario = db.prepare('PRAGMA table_info(usuarios)').all()
 if (!colunasUsuario.some((coluna) => coluna.name === 'operador')) {
   db.exec('ALTER TABLE usuarios ADD COLUMN operador INTEGER NOT NULL DEFAULT 0;')
+}
+
+// Qual conta o master esta enxergando "como usuario" nesta sessao. Fica no
+// banco, e nao na memoria, para o modo sobreviver a um F5 no meio da
+// apresentacao. `ON DELETE SET NULL`: cliente removido devolve o master para a
+// administracao em vez de deixar a sessao apontando para o vazio.
+const colunasSessao = db.prepare('PRAGMA table_info(sessoes)').all()
+if (!colunasSessao.some((coluna) => coluna.name === 'vendo_conta_id')) {
+  db.exec('ALTER TABLE sessoes ADD COLUMN vendo_conta_id INTEGER REFERENCES contas(id) ON DELETE SET NULL;')
 }
 
 /**

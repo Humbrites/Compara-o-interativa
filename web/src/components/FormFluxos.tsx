@@ -4,6 +4,7 @@ import { api } from '../lib/api'
 import { lerNumero } from '../lib/cub'
 import { totalizarFluxo, type NumerosDoFluxo } from '../lib/fluxos'
 import { fmtMoeda } from '../lib/format'
+import { usePodeEditar } from '../lib/permissao'
 import { Campo, Estado } from './ui'
 import { Icone } from './Icones'
 import { CartaoFluxo } from './CartaoFluxo'
@@ -374,6 +375,9 @@ export function FluxosDoEmpreendimento({
   onValorImovel,
   avisar,
 }: Props) {
+  // Só leitura: as tabelas continuam abrindo (é o que se apresenta ao
+  // cliente), mas nada que grave aparece — nem a calculadora, que gera fluxo.
+  const podeEditar = usePodeEditar()
   const daUnidade = unidadeId !== null
   const [form, setForm] = useState<FormularioFluxo | null>(null)
   const [editandoId, setEditandoId] = useState<number | null>(null)
@@ -462,21 +466,25 @@ export function FluxosDoEmpreendimento({
           icone="cartao"
           titulo="Nenhum fluxo de pagamento ainda"
           texto={
-            daUnidade
-              ? 'Cadastre a tabela de venda desta unidade: entrada, parcelamento, reforços, chaves e financiamento. Ela entra no comparativo quando a unidade for escolhida.'
-              : 'Cadastre a tabela de venda: entrada, parcelamento, reforços, chaves e financiamento. Um empreendimento pode ter vários fluxos.'
+            !podeEditar
+              ? 'Esta unidade ainda não tem tabela de venda cadastrada.'
+              : daUnidade
+                ? 'Cadastre a tabela de venda desta unidade: entrada, parcelamento, reforços, chaves e financiamento. Ela entra no comparativo quando a unidade for escolhida.'
+                : 'Cadastre a tabela de venda: entrada, parcelamento, reforços, chaves e financiamento. Um empreendimento pode ter vários fluxos.'
           }
           acao={
-            <div className="acoes-fluxo">
-              <button type="button" className="btn btn--primario" onClick={abrirNovo}>
-                <Icone nome="mais" tamanho={15} />
-                Adicionar fluxo
-              </button>
-              <button type="button" className="btn btn--secundario" onClick={() => setCalculando(true)}>
-                <Icone nome="grafico" tamanho={15} />
-                Calcular valor com CUB
-              </button>
-            </div>
+            podeEditar ? (
+              <div className="acoes-fluxo">
+                <button type="button" className="btn btn--primario" onClick={abrirNovo}>
+                  <Icone nome="mais" tamanho={15} />
+                  Adicionar fluxo
+                </button>
+                <button type="button" className="btn btn--secundario" onClick={() => setCalculando(true)}>
+                  <Icone nome="grafico" tamanho={15} />
+                  Calcular valor com CUB
+                </button>
+              </div>
+            ) : undefined
           }
         />
       )}
@@ -490,15 +498,15 @@ export function FluxosDoEmpreendimento({
               indice={indice}
               valorDaUnidade={valorSugerido}
               titulo={titulo}
-              onEditar={() => abrirEdicao(fluxo)}
-              onExcluir={() => excluir(fluxo)}
+              onEditar={podeEditar ? () => abrirEdicao(fluxo) : undefined}
+              onExcluir={podeEditar ? () => excluir(fluxo) : undefined}
             />
           ))}
         </div>
       )}
 
       {/* Com a lista vazia os dois caminhos ja aparecem dentro do <Estado>. */}
-      {!form && fluxos.length > 0 && (
+      {podeEditar && !form && fluxos.length > 0 && (
         <div className="acoes-fluxo">
           <button type="button" className="btn btn--secundario btn--bloco" onClick={abrirNovo}>
             <Icone nome="mais" tamanho={15} />

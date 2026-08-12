@@ -17,7 +17,10 @@ import { Carregando, Estado, Toasts, type Aviso } from './components/ui'
 import { MenuUsuario } from './components/MenuUsuario'
 import { PainelConta } from './components/PainelConta'
 import { PainelPlataforma } from './components/PainelPlataforma'
-import type { Sessao, SessaoCliente } from './lib/acesso'
+import { mensagemDoErro } from './lib/http'
+import { ProvedorDeEdicao } from './lib/permissao'
+import { plataforma } from './lib/plataforma'
+import { ehSessaoDeCliente, type Sessao, type SessaoDoDashboard } from './lib/acesso'
 
 interface EstadoForm {
   empreendimento: Empreendimento | null
@@ -25,8 +28,11 @@ interface EstadoForm {
 }
 
 interface AppProps {
-  /** Só cliente chega aqui: o master não tem base de empreendimentos. */
-  sessao: SessaoCliente
+  /**
+   * Quem tem conta: o cliente na base dele, ou o master vendo o sistema como
+   * usuário de uma conta (para apresentar sem entrar no login de ninguém).
+   */
+  sessao: SessaoDoDashboard
   aoMudarSessao: (sessao: Sessao) => void
   aoSair: () => Promise<void>
 }
@@ -56,6 +62,29 @@ export default function App({ sessao, aoMudarSessao, aoSair }: AppProps) {
     sessao.precisaConfigurar2fa ? 'seguranca' : false,
   )
   const [painelPlataforma, setPainelPlataforma] = useState(false)
+  const [saindoDaVisao, setSaindoDaVisao] = useState(false)
+
+  /**
+   * O master vendo o sistema como usuário. A tela é a MESMA do cliente de
+   * propósito — mudar o que ele vê tiraria da apresentação justamente o que
+   * está sendo apresentado. O que muda é a faixa do topo e, fora da conta de
+   * demonstração, o fato de nada gravar.
+   */
+  const visita = sessao.verComo ?? null
+
+  /**
+   * Uma fonte só para "esta tela grava?": conta suspensa, 2FA pendente e visita
+   * a cliente caem todas aqui. Sem isso, o botão existiria para o clique
+   * terminar em 402/403 — que é pior do que não ter botão.
+   */
+  const podeEditar = !sessao.conta.somenteLeitura && !sessao.precisaConfigurar2fa
+
+  /**
+   * Conta, equipe e segurança são de quem PERTENCE ao cliente. Na visita quem
+   * está logado é o master: as duas telas não se aplicam a ele, e é o próprio
+   * TypeScript que cobra isso aqui.
+   */
+  const sessaoDeCliente = ehSessaoDeCliente(sessao) ? sessao : null
 
   /* --- Avisos ------------------------------------------------------------ */
   const avisar = useCallback((texto: string, tipo: 'sucesso' | 'erro' = 'sucesso') => {
@@ -63,6 +92,19 @@ export default function App({ sessao, aoMudarSessao, aoSair }: AppProps) {
     setAvisos((atual) => [...atual, { id, texto, tipo }])
     window.setTimeout(() => setAvisos((atual) => atual.filter((a) => a.id !== id)), 3600)
   }, [])
+
+  /** Devolve o master para a administração dos clientes. */
+  const voltarParaAdministracao = useCallback(async () => {
+    setSaindoDaVisao(true)
+    try {
+      // Sem zerar o estado no sucesso: a sessão nova troca a tela inteira e
+      // este componente sai do ar junto.
+      aoMudarSessao(await plataforma.sairDaVisao())
+    } catch (erro) {
+      avisar(mensagemDoErro(erro, 'Não foi possível voltar para a administração'), 'erro')
+      setSaindoDaVisao(false)
+    }
+  }, [aoMudarSessao, avisar])
 
   /* --- Carga ------------------------------------------------------------- */
   const carregar = useCallback(async () => {
@@ -142,6 +184,7 @@ export default function App({ sessao, aoMudarSessao, aoSair }: AppProps) {
 
   /* --- Render ------------------------------------------------------------ */
   return (
+    <ProvedorDeEdicao pode={podeEditar}>
     <div className="app">
       {/* Topo enxuto: a marca, o caminho para os empreendimentos, o cadastro
           e os indicadores de mercado. Comparar e simular investimento moram
@@ -170,25 +213,71 @@ export default function App({ sessao, aoMudarSessao, aoSair }: AppProps) {
               {lista.length > 0 && <span className="btn__contador">{lista.length}</span>}
             </button>
 
-            <button
-              type="button"
-              className="btn btn--primario"
-              onClick={() => setForm({ empreendimento: null })}
-              title="Adicionar empreendimento"
-            >
-              <Icone nome="mais" tamanho={16} />
-              <span>Adicionar empreendimento</span>
-            </button>
+            {podeEditar && (
+              <button
+                type="button"
+                className="btn btn--primario"
+                onClick={() => setForm({ empreendimento: null })}
+                title="Adicionar empreendimento"
+              >
+                <Icone nome="mais" tamanho={16} />
+                <span>Adicionar empreendimento</span>
+              </button>
+            )}
 
-            <MenuUsuario
-              sessao={sessao}
-              onAbrirConta={() => setPainelConta('equipe')}
-              onAbrirSeguranca={() => setPainelConta('seguranca')}
-              onAbrirPlataforma={() => setPainelPlataforma(true)}
-              onSair={aoSair}
-            />
+            {/* Na visita, o menu do usuário sairia do lugar: conta, equipe e
+                segurança são do CLIENTE, e quem está logado é o master. A
+                única saída que interessa aqui é voltar para a administração. */}
+            {visita ? (
+              <button
+                type="button"
+                className="btn btn--secundario"
+                onClick={() => void voltarParaAdministracao()}
+                disabled={saindoDaVisao}
+              >
+                <Icone
+                  nome={saindoDaVisao ? 'spinner' : 'seta_esquerda'}
+                  tamanho={15}
+                  className={saindoDaVisao ? 'girando' : undefined}
+                />
+                <span>{saindoDaVisao ? 'Voltando…' : 'Voltar à administração'}</span>
+              </button>
+            ) : (
+              sessaoDeCliente && (
+                <MenuUsuario
+                  sessao={sessaoDeCliente}
+                  onAbrirConta={() => setPainelConta('equipe')}
+                  onAbrirSeguranca={() => setPainelConta('seguranca')}
+                  onAbrirPlataforma={() => setPainelPlataforma(true)}
+                  onSair={aoSair}
+                />
+              )
+            )}
           </div>
         </div>
+
+        {/* Nunca deixar dúvida sobre de quem é a base que está na tela: numa
+            apresentação, o operador precisa saber de relance se o que ele
+            clicar grava — e em qual conta. */}
+        {visita && (
+          <div className={`faixa-topo faixa-topo--visita${visita.podeGravar ? ' faixa-topo--visita-grava' : ''}`} role="status">
+            <Icone nome={visita.podeGravar ? 'camadas' : 'info'} tamanho={15} />
+            <span>
+              Você está vendo o sistema como usuário de <strong>{visita.conta}</strong>
+              {visita.podeGravar
+                ? ' — base de demonstração: o que você cadastrar aqui fica gravado.'
+                : ' — somente leitura: nada do que você fizer altera a base deste cliente.'}
+            </span>
+            <button
+              type="button"
+              className="btn btn--pequeno btn--secundario"
+              onClick={() => void voltarParaAdministracao()}
+              disabled={saindoDaVisao}
+            >
+              {saindoDaVisao ? 'Voltando…' : 'Sair da visualização'}
+            </button>
+          </div>
+        )}
 
         {/* Duas faixas que mudam o que dá para fazer na tela — por isso ficam
             no topo, e não escondidas dentro do painel de conta. */}
@@ -205,7 +294,9 @@ export default function App({ sessao, aoMudarSessao, aoSair }: AppProps) {
           </div>
         )}
 
-        {sessao.conta.somenteLeitura && !sessao.precisaConfigurar2fa && (
+        {/* Na visita a faixa acima já explicou por que nada grava — e dizer
+            "a conta está suspensa" ali seria mentira sobre o cliente. */}
+        {sessao.conta.somenteLeitura && !sessao.precisaConfigurar2fa && !visita && (
           <div className="faixa-topo" role="status">
             <Icone nome="alerta" tamanho={15} />
             <span>
@@ -254,12 +345,22 @@ export default function App({ sessao, aoMudarSessao, aoSair }: AppProps) {
               <Estado
                 icone="predio"
                 titulo="Nenhum empreendimento cadastrado"
-                texto="Comece adicionando o primeiro empreendimento: preencha os dados, informe latitude e longitude para ele aparecer no mapa e depois cadastre os fluxos de pagamento."
+                texto={
+                  podeEditar
+                    ? 'Comece adicionando o primeiro empreendimento: preencha os dados, informe latitude e longitude para ele aparecer no mapa e depois cadastre os fluxos de pagamento.'
+                    : 'Esta conta ainda não cadastrou nenhum empreendimento — não há nada para mostrar no mapa.'
+                }
                 acao={
-                  <button type="button" className="btn btn--primario" onClick={() => setForm({ empreendimento: null })}>
-                    <Icone nome="mais" tamanho={16} />
-                    Adicionar empreendimento
-                  </button>
+                  podeEditar ? (
+                    <button
+                      type="button"
+                      className="btn btn--primario"
+                      onClick={() => setForm({ empreendimento: null })}
+                    >
+                      <Icone nome="mais" tamanho={16} />
+                      Adicionar empreendimento
+                    </button>
+                  ) : undefined
                 }
               />
             </div>
@@ -363,9 +464,9 @@ export default function App({ sessao, aoMudarSessao, aoSair }: AppProps) {
         <CalculadoraCub titulo={calculandoCub.nome} onFechar={() => setCalculandoCub(null)} avisar={avisar} />
       )}
 
-      {painelConta !== false && (
+      {painelConta !== false && sessaoDeCliente && (
         <PainelConta
-          sessao={sessao}
+          sessao={sessaoDeCliente}
           abaInicial={painelConta}
           aoMudarSessao={aoMudarSessao}
           avisar={avisar}
@@ -377,5 +478,6 @@ export default function App({ sessao, aoMudarSessao, aoSair }: AppProps) {
 
       <Toasts avisos={avisos} />
     </div>
+    </ProvedorDeEdicao>
   )
 }

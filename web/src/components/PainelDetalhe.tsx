@@ -14,6 +14,7 @@ import {
 } from '../lib/format'
 import { corDoStatus } from '../lib/opcoes'
 import { fotosDe } from '../lib/imagens'
+import { usePodeEditar } from '../lib/permissao'
 import { precoDaUnidade, resumoUnidades, rotuloUnidade } from '../lib/unidades'
 import { Icone, type NomeIcone } from './Icones'
 import { CartaoFluxo } from './CartaoFluxo'
@@ -117,6 +118,9 @@ export function PainelDetalhe({
   avisar,
   onFechar,
 }: Props) {
+  // Só leitura (conta suspensa, ou o master vendo a base de um cliente): o
+  // painel continua inteiro, o que some é o que gravaria.
+  const podeEditar = usePodeEditar()
   const local = [e.bairro, e.cidade].filter(Boolean).join(', ')
 
   const fotos = useMemo(() => fotosDe(e), [e])
@@ -208,12 +212,16 @@ export function PainelDetalhe({
       <div className="painel__topo">
         <span className="painel__titulo">Empreendimento</span>
         <div className="painel__acoes">
-          <button type="button" className="btn btn--fantasma btn--icone" onClick={onEditar} title="Editar">
-            <Icone nome="lapis" tamanho={15} />
-          </button>
-          <button type="button" className="btn btn--perigo btn--icone" onClick={onExcluir} title="Excluir">
-            <Icone nome="lixeira" tamanho={15} />
-          </button>
+          {podeEditar && (
+            <>
+              <button type="button" className="btn btn--fantasma btn--icone" onClick={onEditar} title="Editar">
+                <Icone nome="lapis" tamanho={15} />
+              </button>
+              <button type="button" className="btn btn--perigo btn--icone" onClick={onExcluir} title="Excluir">
+                <Icone nome="lixeira" tamanho={15} />
+              </button>
+            </>
+          )}
           <button type="button" className="btn btn--fantasma btn--icone" onClick={onFechar} title="Fechar painel">
             <Icone nome="fechar" tamanho={16} />
           </button>
@@ -369,10 +377,12 @@ export function PainelDetalhe({
             aberto={blocos.unidades}
             onAlternar={() => alternar('unidades')}
             acao={
-              <button type="button" className="btn btn--fantasma btn--pequeno" onClick={onAdicionarUnidade}>
-                <Icone nome="mais" tamanho={13} />
-                Adicionar
-              </button>
+              podeEditar ? (
+                <button type="button" className="btn btn--fantasma btn--pequeno" onClick={onAdicionarUnidade}>
+                  <Icone nome="mais" tamanho={13} />
+                  Adicionar
+                </button>
+              ) : undefined
             }
           >
             {!temUnidades ? (
@@ -454,7 +464,7 @@ export function PainelDetalhe({
             >
               <div className="observacao">
                 O fluxo de pagamento agora é cadastrado dentro de cada unidade. Estas tabelas vieram do formato
-                anterior: copie para a unidade que atende e depois exclua.
+                anterior{podeEditar ? ': copie para a unidade que atende e depois exclua.' : ' e valem para o empreendimento inteiro.'}
               </div>
 
               {e.fluxos.map((fluxo, indice) => (
@@ -463,10 +473,10 @@ export function PainelDetalhe({
                     fluxo={fluxo}
                     indice={indice}
                     titulo={e.nome}
-                    onExcluir={() => void excluirFluxoGeral(fluxo)}
+                    onExcluir={podeEditar ? () => void excluirFluxoGeral(fluxo) : undefined}
                   />
 
-                  {temUnidades && (
+                  {podeEditar && temUnidades && (
                     <div className="acoes-fluxo" style={{ marginBottom: 'var(--e4)' }}>
                       <select
                         className="entrada"

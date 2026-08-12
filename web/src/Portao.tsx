@@ -4,7 +4,7 @@ import App from './App'
 import { TelaMaster } from './TelaMaster'
 import { TelaConvite, TelaDefinirSenha, TelaLogin } from './components/TelaAcesso'
 import { Icone } from './components/Icones'
-import { acesso, ehSessaoDeCliente, type Sessao } from './lib/acesso'
+import { abreDashboard, acesso, type Sessao } from './lib/acesso'
 import { EVENTO_SEM_SESSAO } from './lib/http'
 
 /**
@@ -120,10 +120,12 @@ export function Portao() {
 
   if (!sessao) return <TelaLogin onEntrou={entrar} />
 
-  // O master nao tem conta: para ele o sistema E a administracao dos clientes.
-  if (!ehSessaoDeCliente(sessao)) {
-    return <TelaMaster sessao={sessao} aoMudarSessao={setSessao} aoSair={sair} />
+  // Ter conta e a unica condicao para o dashboard: vale para o cliente na base
+  // dele e para o master que escolheu ver o sistema como usuario de uma conta.
+  if (abreDashboard(sessao)) {
+    return <App sessao={sessao} aoMudarSessao={setSessao} aoSair={sair} />
   }
 
-  return <App sessao={sessao} aoMudarSessao={setSessao} aoSair={sair} />
+  // Sem conta e o MASTER: para ele o sistema E a administracao dos clientes.
+  return <TelaMaster sessao={sessao} aoMudarSessao={setSessao} aoSair={sair} />
 }

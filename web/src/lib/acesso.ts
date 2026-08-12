@@ -43,21 +43,37 @@ export interface ContaSessao {
   assentos: AssentosResumo
 }
 
+/**
+ * O master vendo o sistema como usuario de uma conta.
+ *
+ * Serve para apresentar o produto — mapa, painel, comparativo, simulador —
+ * sem pedir emprestado o login de um cliente real.
+ */
+export interface VisaoComoUsuario {
+  contaId: number
+  conta: string
+  /** Base de apresentacao: a unica em que o que ele clicar grava. */
+  demonstracao: boolean
+  podeGravar: boolean
+}
+
 export interface Sessao {
   usuario: UsuarioSessao
   /**
    * `null` quando o login e o MASTER da plataforma: ele administra os
    * clientes e nao pertence a nenhum, entao nao tem plano, assento nem base
-   * de empreendimentos.
+   * de empreendimentos. Preenchida na visualizacao como usuario — e ai e a
+   * conta VISITADA.
    */
   conta: ContaSessao | null
   master: boolean
   /** Conta que exige 2FA e usuario que ainda nao configurou. */
   precisaConfigurar2fa: boolean
+  verComo?: VisaoComoUsuario | null
   aviso?: string | null
 }
 
-/** Sessao de quem pertence a um cliente — a unica que abre o dashboard. */
+/** Sessao de quem pertence a um cliente. */
 export interface SessaoCliente extends Sessao {
   conta: ContaSessao
   master: false
@@ -65,6 +81,19 @@ export interface SessaoCliente extends Sessao {
 
 export function ehSessaoDeCliente(sessao: Sessao): sessao is SessaoCliente {
   return !sessao.master && sessao.conta !== null
+}
+
+/**
+ * Qualquer sessao que abre o dashboard: o cliente na base dele, ou o master
+ * visitando uma conta. Ter conta e a unica condicao — quem decide o que a tela
+ * deixa fazer e `conta.somenteLeitura`, nao quem esta logado.
+ */
+export interface SessaoDoDashboard extends Sessao {
+  conta: ContaSessao
+}
+
+export function abreDashboard(sessao: Sessao): sessao is SessaoDoDashboard {
+  return sessao.conta !== null
 }
 
 /** O login pode terminar em sessao ou em "agora digite o código". */

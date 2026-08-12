@@ -36,6 +36,11 @@ interface Props {
    * dashboard, entao nao ha nada por baixo para o modal cobrir.
    */
   onFechar?: () => void
+  /**
+   * Abre o dashboard como usuario da conta. So o master recebe: quem e
+   * operador DENTRO de um cliente ja tem base propria, e a API recusa.
+   */
+  onVerComoUsuario?: (contaId: number) => void | Promise<void>
 }
 
 const PLANOS_DISPONIVEIS = [
@@ -52,7 +57,7 @@ const STATUS_DISPONIVEIS: { valor: StatusConta; nome: string }[] = [
   { valor: 'cancelada', nome: 'Encerrada' },
 ]
 
-export function PainelPlataforma({ avisar, onFechar }: Props) {
+export function PainelPlataforma({ avisar, onFechar, onVerComoUsuario }: Props) {
   const [dados, setDados] = useState<Panorama | null>(null)
   const [erro, setErro] = useState<string | null>(null)
   const [aba, setAba] = useState<'contas' | 'usuarios'>('contas')
@@ -224,6 +229,7 @@ export function PainelPlataforma({ avisar, onFechar }: Props) {
                       }
                     }}
                     onVerBase={() => setVendoBase({ id: conta.id, nome: conta.nome })}
+                    onVerComoUsuario={onVerComoUsuario && (() => void onVerComoUsuario(conta.id))}
                     onCriarUsuario={async (novo) => {
                       const resposta = await plataforma.criarUsuario(conta.id, novo)
                       setDados(resposta)
@@ -386,6 +392,8 @@ interface LinhaProps {
   onLinkDeSenha: (usuarioId: number, nome: string) => Promise<void>
   onCriarUsuario: (dados: { nome: string; email: string; papel: Papel }) => Promise<void>
   onVerBase: () => void
+  /** Ausente quando quem olha não é o master — só ele personifica. */
+  onVerComoUsuario?: () => void
 }
 
 function LinhaDeConta({
@@ -399,6 +407,7 @@ function LinhaDeConta({
   onLinkDeSenha,
   onCriarUsuario,
   onVerBase,
+  onVerComoUsuario,
 }: LinhaProps) {
   const [adicionando, setAdicionando] = useState(false)
   const faixa = FAIXAS[conta.faixa]
@@ -418,6 +427,9 @@ function LinhaDeConta({
           <Selo cor={COR_DO_PLANO[conta.plano.slug] || 'cinza'}>{conta.plano.nome}</Selo>
           <Selo cor="contorno">{conta.cobranca.nome}</Selo>
           <Selo cor={faixa.cor}>{faixa.rotulo}</Selo>
+          {/* A base da apresentação: é a única em que o master, vendo como
+              usuário, grava de verdade — então ela se anuncia na lista. */}
+          {conta.demonstracao && <Selo cor="roxo">Demonstração</Selo>}
         </div>
 
         <div className="conta-linha__assentos">
@@ -462,6 +474,23 @@ function LinhaDeConta({
             <Icone nome="predio" tamanho={13} />
             Ver a base
           </button>
+          {/* "Ver a base" é a ficha do suporte; isto abre o SISTEMA do jeito
+              que o cliente o vê — mapa, painel, comparativo e simulador. */}
+          {onVerComoUsuario && conta.faixa !== 'encerrada' && (
+            <button
+              type="button"
+              className="btn btn--fantasma btn--pequeno"
+              onClick={onVerComoUsuario}
+              title={
+                conta.demonstracao
+                  ? 'Abrir o dashboard desta conta como usuário (é a base de demonstração: o que você cadastrar fica gravado)'
+                  : 'Abrir o dashboard deste cliente como usuário — somente leitura'
+              }
+            >
+              <Icone nome="camadas" tamanho={13} />
+              Abrir como usuário
+            </button>
+          )}
           <button type="button" className="btn btn--fantasma btn--pequeno" onClick={onEditar}>
             <Icone nome="lapis" tamanho={13} />
             {editando ? 'Fechar' : 'Editar'}
@@ -569,6 +598,7 @@ function FormEditarConta({
   const [periodicidade, setPeriodicidade] = useState(conta.cobranca.slug)
   const [vencimento, setVencimento] = useState(paraCampoDeData(conta.expiraEm))
   const [observacoes, setObservacoes] = useState(conta.observacoes ?? '')
+  const [demonstracao, setDemonstracao] = useState(conta.demonstracao)
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
 
@@ -594,6 +624,7 @@ function FormEditarConta({
         status,
         expiraEm: vencimento || '',
         observacoes,
+        demonstracao,
       })
     } catch (falha) {
       setErro(mensagemDoErro(falha))
@@ -675,6 +706,21 @@ function FormEditarConta({
             placeholder="combinado comercial, contato, o que for útil"
           />
         </Campo>
+
+        <div className="opcao col-inteira">
+          <label className="opcao__marcar">
+            <input
+              type="checkbox"
+              checked={demonstracao}
+              onChange={(e) => setDemonstracao(e.target.checked)}
+            />
+            <span>Usar esta conta na demonstração</span>
+          </label>
+          <span className="campo__dica opcao__dica">
+            é a base que o botão "Ver como usuário" abre — e a única em que você cadastra de verdade vendo como
+            usuário. Marcar esta desmarca a anterior.
+          </span>
+        </div>
       </div>
 
       {erro && (

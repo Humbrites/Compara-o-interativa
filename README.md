@@ -550,12 +550,13 @@ não ocupa assento nem aparece na equipe do cliente.
 | | Onde vive | O que vê |
 |---|---|---|
 | **Cliente** (dono, admin, membro) | dentro de uma conta | o dashboard: mapa, empreendimentos, comparativo, simulador |
-| **Master da plataforma** | **fora de todas as contas** (`conta_id` nulo) | só a administração: clientes, planos, licenças e renovações |
+| **Master da plataforma** | **fora de todas as contas** (`conta_id` nulo) | a administração: clientes, planos, licenças e renovações — e, quando pede, o dashboard **como usuário** de uma conta |
 
 O master é quem vende o sistema. Ele **não é cliente**: não tem plano, não ocupa
 assento de ninguém, não aparece na equipe de nenhuma conta e não tem base própria de
-empreendimentos — a API recusa essas rotas para ele com 403. Em compensação, é o único
-que enxerga todos os clientes.
+empreendimentos — a API recusa essas rotas para ele com 403, a menos que ele tenha aberto
+uma conta em *"Ver como usuário"* (abaixo), e aí é a conta VISITADA que responde. Em
+compensação, é o único que enxerga todos os clientes.
 
 ```bash
 npm run provisionar -- --master voce@empresa.com.br --nome "Seu Nome" --usuario apelido
@@ -585,6 +586,33 @@ cliente cadastrou é o que permite dar suporte; corrigir por cima dele, sem que 
 outra coisa, e nada ali grava. As contas exibidas saem das **mesmas funções** que a tela do
 cliente usa — recalcular de outro jeito faria o suporte ver um número diferente do que o
 cliente está vendo, que é o pior lugar possível para uma divergência.
+
+**Ver como usuário (apresentar sem entrar no login de ninguém)** — o botão *"Ver como
+usuário"*, no topo da administração, troca a tela pelo **dashboard inteiro**: mapa,
+empreendimentos, painel do imóvel, comparativo, calculadora do CUB e simulador de
+investimento. É o que permite demonstrar o produto numa reunião sem pedir emprestado o
+acesso de um cliente real.
+
+- **Sem dizer a conta, ele abre a de demonstração** — a que estiver marcada em *"Usar esta
+  conta na demonstração"* (`Editar` na linha do cliente). Ela aparece na lista com o selo
+  **Demonstração**, e é **uma só**: marcar outra desmarca a anterior. Com uma só, a regra
+  fica legível — *o master grava na conta de demonstração e em nenhuma outra*.
+- **Na conta de demonstração o cadastro funciona de verdade**: dá para criar um
+  empreendimento ao vivo durante a apresentação, e ele fica gravado ali.
+- **Na base de um cliente real é SOMENTE LEITURA** (o botão *"Abrir como usuário"* na linha
+  dele). Tudo o que grava some da tela — adicionar, editar, excluir, as fotos e a
+  calculadora que gera fluxo — e a API recusa a escrita com 403 mesmo que alguém chame a
+  rota na mão. Ver a base para apresentar é uma coisa; alterar o cadastro do cliente sem
+  que ele saiba é outra.
+- **Uma faixa no topo diz sempre de quem é a base que está na tela** e se o clique grava.
+  Numa apresentação, essa é a dúvida que não pode existir.
+- O modo **mora na sessão**, não na memória do navegador: um F5 no meio da reunião não
+  derruba a visualização. *"Voltar à administração"* (no topo ou na faixa) encerra.
+- Nasce marcada sozinha **só** quando existe uma única conta no banco — que é o caso de
+  quem já usava o dashboard antes de haver clientes. Com várias, escolher no chute
+  liberaria escrita na base de um cliente de verdade, então ninguém nasce marcado.
+- Quem tem `--operador` mas **continua dentro de uma conta** não personifica ninguém: ele
+  já tem base própria, e misturar as duas seria pior do que não ter o recurso.
 
 Duas contas de tempo que valem lembrar: **renovar parte do vencimento atual**, não de
 hoje (senão o cliente perde os dias que já pagou; só quando já venceu é que a base vira
@@ -646,6 +674,7 @@ não entrou).
 | `PUT` | `/api/plataforma/contas/:id` | **(master)** plano, limite, situação e vencimento |
 | `POST` | `/api/plataforma/contas/:id/renovar` | **(master)** renova N meses e reativa |
 | `GET` | `/api/plataforma/contas/:id/base` | **(master)** a base do cliente, só leitura |
+| `POST` `DELETE` | `/api/plataforma/ver-como` | **(master)** abre o dashboard como usuário da conta (sem `contaId`, a de demonstração) e sai |
 | `POST` | `/api/plataforma/contas[/:id/usuarios]` | **(master)** cria cliente ou usuário |
 | `POST` | `/api/seguranca/sessoes/encerrar-outras` | derruba as outras sessões |
 
