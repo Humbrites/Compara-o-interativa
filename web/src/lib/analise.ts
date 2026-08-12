@@ -146,13 +146,16 @@ export function analisarUnidade(unidade: Unidade, unidadesDoEmpreendimento: Unid
   }
 }
 
+/** "6,6" — pt-BR usa vírgula, e `toFixed` devolve ponto. */
+const umaCasa = (valor: number) => valor.toFixed(1).replace('.', ',')
+
 /** A frase da posição, do jeito que se fala com o cliente. */
 export function textoDaPosicao(analise: AnaliseDaUnidade): string {
   switch (analise.posicao) {
     case 'abaixo':
-      return `Abaixo da média do empreendimento — ${Math.abs(analise.diferencaParaMedia as number).toFixed(1)}% mais barato por m² que a média das outras unidades.`
+      return `Abaixo da média do empreendimento — ${umaCasa(Math.abs(analise.diferencaParaMedia as number))}% mais barato por m² que a média das outras unidades.`
     case 'acima':
-      return `Acima da média do empreendimento — ${(analise.diferencaParaMedia as number).toFixed(1)}% mais caro por m² que a média das outras unidades.`
+      return `Acima da média do empreendimento — ${umaCasa(analise.diferencaParaMedia as number)}% mais caro por m² que a média das outras unidades.`
     case 'na-media':
       return 'Na média do empreendimento: o preço por m² acompanha o das outras unidades.'
     case 'unica':

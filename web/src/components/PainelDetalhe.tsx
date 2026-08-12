@@ -19,6 +19,7 @@ import { precoDaUnidade, resumoUnidades, rotuloUnidade } from '../lib/unidades'
 import { Icone, type NomeIcone } from './Icones'
 import { CartaoFluxo } from './CartaoFluxo'
 import { CartaoUnidade } from './CartaoUnidade'
+import { AnaliseUnidade } from './AnaliseUnidade'
 import { FluxosDoEmpreendimento, fluxoParaEnvio, fluxoParaFormulario } from './FormFluxos'
 import { Galeria } from './Galeria'
 import { Selo } from './ui'
@@ -133,6 +134,9 @@ export function PainelDetalhe({
 
   // Qual unidade esta com o fluxo de pagamento aberto para edicao.
   const [fluxosAbertos, setFluxosAbertos] = useState<number | null>(null)
+  // Qual unidade esta com a analise de oportunidade aberta.
+  const [analisando, setAnalisando] = useState<number | null>(null)
+  useEffect(() => setAnalisando(null), [e.id])
   useEffect(() => setFluxosAbertos(null), [e.id])
   // Para qual unidade cada tabela antiga vai ser copiada.
   const [destino, setDestino] = useState<Record<number, string>>({})
@@ -431,6 +435,17 @@ export function PainelDetalhe({
                     indice={indice}
                     rodape={
                       <>
+                        {/* A análise responde "esta unidade é interessante?" —
+                            a pergunta que vem antes de abrir a tabela. */}
+                        <button
+                          type="button"
+                          className="btn btn--secundario btn--pequeno"
+                          onClick={() => setAnalisando(unidade.id)}
+                        >
+                          <Icone nome="alvo" tamanho={13} />
+                          Analisar
+                        </button>
+
                         {/* O fluxo abre aqui mesmo: e no atendimento que a
                             condicao vira proposta de um cliente. */}
                         <button
@@ -562,6 +577,21 @@ export function PainelDetalhe({
           )}
         </div>
       </div>
+
+      {analisando !== null &&
+        (() => {
+          const alvo = e.unidades.find((u) => u.id === analisando)
+          if (!alvo) return null
+          return (
+            <AnaliseUnidade
+              unidade={alvo}
+              unidades={e.unidades}
+              indice={e.unidades.indexOf(alvo)}
+              nomeDoEmpreendimento={e.nome}
+              onFechar={() => setAnalisando(null)}
+            />
+          )
+        })()}
     </>
   )
 }

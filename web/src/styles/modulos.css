@@ -3293,3 +3293,149 @@
 .custo__parte--entrega .custo__valor {
   color: var(--tom-chaves);
 }
+
+
+/* ==========================================================================
+   Análise da oportunidade (níveis 1, 2 e 3)
+   ========================================================================== */
+
+.analise-numeros {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: var(--e3);
+}
+
+.analise-numero {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--e3) var(--e4);
+  border: 1px solid var(--borda);
+  border-left-width: 3px;
+  border-radius: var(--raio-sm);
+  background: var(--superficie-2);
+}
+
+/* Cada momento do pagamento tem a sua cor, e ela se repete na barra: entrada
+   na assinatura, obra ao longo do tempo, saldo na entrega. */
+.analise-numero--entrada {
+  border-left-color: var(--marca-600);
+}
+.analise-numero--obra {
+  border-left-color: var(--tom-obra);
+}
+.analise-numero--saldo {
+  border-left-color: var(--tom-chaves);
+}
+
+.analise-numero__rotulo {
+  display: flex;
+  align-items: center;
+  gap: var(--e1);
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--texto-3);
+}
+
+.analise-numero__valor {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.analise-numero__dica {
+  font-size: 11px;
+  color: var(--texto-3);
+}
+
+/* A barra mostra a PROPORÇÃO do que os números dizem em reais: é ela que faz
+   "57% financiável" virar uma imagem antes de virar conta. */
+.analise-barra {
+  margin-top: var(--e4);
+}
+
+.analise-barra__trilho {
+  display: flex;
+  height: 14px;
+  border-radius: var(--raio-pill);
+  overflow: hidden;
+  background: var(--neutro-fundo);
+}
+
+.analise-barra__parte--entrada {
+  background: var(--marca-600);
+}
+.analise-barra__parte--obra {
+  background: var(--tom-obra);
+}
+.analise-barra__parte--saldo {
+  background: var(--tom-chaves);
+}
+
+.analise-barra__legenda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e2) var(--e4);
+  margin-top: var(--e2);
+  font-size: 11.5px;
+  color: var(--texto-2);
+}
+
+.analise-barra__item {
+  display: flex;
+  align-items: center;
+  gap: var(--e1);
+}
+
+.analise-barra__ponto {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.analise-barra__ponto--entrada {
+  background: var(--marca-600);
+}
+.analise-barra__ponto--obra {
+  background: var(--tom-obra);
+}
+.analise-barra__ponto--saldo {
+  background: var(--tom-chaves);
+}
+
+.analise-comparacao {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--e4);
+  align-items: start;
+}
+
+.analise-comparacao__faixa {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.analise-comparacao__valor {
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.analise-comparacao__posicao {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--e2);
+}
+
+.analise-comparacao__posicao p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--texto-2);
+}
