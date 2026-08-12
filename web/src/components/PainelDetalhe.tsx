@@ -209,8 +209,15 @@ export function PainelDetalhe({
 
   return (
     <>
+      {/* O nome fica AQUI, no cabeçalho fixo: rolando o painel até as unidades,
+          "Empreendimento" não dizia de qual imóvel se estava falando. */}
       <div className="painel__topo">
-        <span className="painel__titulo">Empreendimento</span>
+        <div className="painel__quem">
+          <span className="painel__titulo">{e.nome}</span>
+          {(e.construtora || e.tipo) && (
+            <span className="painel__sub">{[e.construtora, e.tipo].filter(Boolean).join(' · ')}</span>
+          )}
+        </div>
         <div className="painel__acoes">
           {podeEditar && (
             <>
@@ -243,11 +250,9 @@ export function PainelDetalhe({
         <div className="detalhe">
           {/* 1. Quem é o imóvel. O nome aparece sempre, com ou sem capa: era a
               única informação que mudava de lugar conforme a galeria. */}
+          {/* Nome e construtora vivem no cabeçalho fixo — repeti-los aqui,
+              logo abaixo, era a mesma informação duas vezes na mesma tela. */}
           <header className="detalhe__cabecalho">
-            <h2 className="detalhe__nome">{e.nome}</h2>
-            {(e.construtora || e.tipo) && (
-              <div className="detalhe__construtora">{[e.construtora, e.tipo].filter(Boolean).join(' · ')}</div>
-            )}
             {local && (
               <div className="detalhe__local">
                 <Icone nome="local" tamanho={13} />
@@ -302,18 +307,28 @@ export function PainelDetalhe({
             </div>
           )}
 
-          {/* 3. O que fazer com ele. */}
+          {/* 3. O que fazer com ele. Três botões iguais não diziam por onde
+              começar: comparar é a razão de existir da ferramenta, então é ele
+              quem fica em destaque — e vira "Simular investimento" quando não
+              há um segundo imóvel para comparar. */}
           <div className="painel__ferramentas">
-            {podeComparar && (
-              <button type="button" className="btn btn--secundario" onClick={onCompararCom}>
-                <Icone nome="balanca" tamanho={15} />
-                Comparar
+            {podeComparar ? (
+              <>
+                <button type="button" className="btn btn--primario" onClick={onCompararCom}>
+                  <Icone nome="balanca" tamanho={15} />
+                  Comparar
+                </button>
+                <button type="button" className="btn btn--secundario" onClick={onSimularInvestimento}>
+                  <Icone nome="grafico" tamanho={15} />
+                  Investimento
+                </button>
+              </>
+            ) : (
+              <button type="button" className="btn btn--primario" onClick={onSimularInvestimento}>
+                <Icone nome="grafico" tamanho={15} />
+                Simular investimento
               </button>
             )}
-            <button type="button" className="btn btn--secundario" onClick={onSimularInvestimento}>
-              <Icone nome="grafico" tamanho={15} />
-              Investimento
-            </button>
             <button type="button" className="btn btn--secundario" onClick={onCalcularCub}>
               <Icone nome="cartao" tamanho={15} />
               CUB
@@ -358,8 +373,6 @@ export function PainelDetalhe({
                 rotulo="Metragem máx."
                 valor={temUnidades ? fmtArea(resumo.metragem.max) : fmtArea(e.metragem_max)}
               />
-              <ItemFicha icone="obra" rotulo="Status" valor={fmtTexto(e.status_obra)} />
-              <ItemFicha icone="calendario" rotulo="Entrega" valor={fmtEntrega(e.entrega)} />
             </div>
 
             {temUnidades && (
