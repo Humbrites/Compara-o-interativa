@@ -46,9 +46,18 @@ interface Linha {
 }
 
 export function CompararUnidades({ lista, empreendimentoInicial, onFechar }: Props) {
+  /**
+   * Abre com DUAS unidades marcadas, não com as quatro.
+   *
+   * Preenchendo o limite todo com o prédio de origem, os chips dos outros
+   * empreendimentos nasciam desabilitados — e a tela passava a impressão de
+   * que só dava para comparar dentro do mesmo prédio, que é o oposto do que
+   * ela faz.
+   */
   const [escolhidas, setEscolhidas] = useState<number[]>(() =>
-    empreendimentoInicial.unidades.slice(0, MAXIMO).map((u) => u.id),
+    empreendimentoInicial.unidades.slice(0, 2).map((u) => u.id),
   )
+  const [busca, setBusca] = useState('')
 
   /** Todas as unidades da base, com o empreendimento de cada uma. */
   const disponiveis = useMemo(() => {
@@ -58,6 +67,26 @@ export function CompararUnidades({ lista, empreendimentoInicial, onFechar }: Pro
     }
     return todas
   }, [lista])
+
+  /** Os empreendimentos com unidades, já filtrados pela busca. */
+  const visiveis = useMemo(() => {
+    const termo = busca.trim().toLowerCase()
+    return lista
+      .filter((e) => e.unidades.length > 0)
+      .map((e) => {
+        if (!termo) return e
+        // O termo casa com o nome do empreendimento OU com o da unidade: quem
+        // procura "cobertura" quer as coberturas de todos os prédios.
+        if (e.nome.toLowerCase().includes(termo)) return e
+        const unidades = e.unidades.filter((u) =>
+          [u.identificacao, u.numero, u.tipologia, u.torre].some((campo) =>
+            (campo || '').toLowerCase().includes(termo),
+          ),
+        )
+        return { ...e, unidades }
+      })
+      .filter((e) => e.unidades.length > 0)
+  }, [lista, busca])
 
   const selecionadas = useMemo(
     () =>
@@ -192,7 +221,7 @@ export function CompararUnidades({ lista, empreendimentoInicial, onFechar }: Pro
   return (
     <Modal
       titulo="Comparar unidades"
-      subtitulo={`Qual oportunidade é melhor — até ${MAXIMO} unidades lado a lado`}
+      subtitulo={`Qual oportunidade é melhor — até ${MAXIMO} unidades lado a lado, de qualquer empreendimento`}
       largo
       onFechar={onFechar}
       rodape={
@@ -220,9 +249,36 @@ export function CompararUnidades({ lista, empreendimentoInicial, onFechar }: Pro
           />
         ) : (
           <div className="comparar-escolha">
-            {lista
-              .filter((e) => e.unidades.length > 0)
-              .map((empreendimento) => (
+            <p className="instrucao-do-grupo">
+              Marque as unidades que quer comparar — elas podem ser de <strong>empreendimentos
+              diferentes</strong>.
+            </p>
+
+            {/* Com muitas unidades na base, achar a certa vira o trabalho. */}
+            {disponiveis.length > 10 && (
+              <div className="busca">
+                <span className="busca__icone">
+                  <Icone nome="busca" tamanho={15} />
+                </span>
+                <input
+                  className="entrada"
+                  value={busca}
+                  onChange={(e) => setBusca(e.target.value)}
+                  placeholder="Filtrar por unidade ou empreendimento…"
+                />
+                {busca && (
+                  <button type="button" className="busca__limpar" onClick={() => setBusca('')} aria-label="Limpar">
+                    <Icone nome="fechar" tamanho={13} />
+                  </button>
+                )}
+              </div>
+            )}
+
+            {visiveis.length === 0 && (
+              <p className="campo__dica">Nenhuma unidade encontrada para "{busca}".</p>
+            )}
+
+            {visiveis.map((empreendimento) => (
                 <div key={empreendimento.id} className="comparar-grupo">
                   <span className="comparar-grupo__nome">{empreendimento.nome}</span>
                   <div className="comparar-grupo__chips">
@@ -236,7 +292,11 @@ export function CompararUnidades({ lista, empreendimentoInicial, onFechar }: Pro
                           className={`chip${marcada ? ' chip--ativo' : ''}`}
                           onClick={() => alternar(unidade.id)}
                           disabled={cheio}
-                          title={cheio ? `Desmarque uma para escolher outra (máximo ${MAXIMO})` : undefined}
+                          title={
+                            cheio
+                              ? `Já são ${MAXIMO} unidades — desmarque uma para colocar esta no lugar`
+                              : `Comparar ${rotuloUnidade(unidade, indice)} de ${empreendimento.nome}`
+                          }
                         >
                           <Icone nome={marcada ? 'check' : 'mais'} tamanho={12} />
                           {rotuloUnidade(unidade, indice)}
@@ -245,7 +305,7 @@ export function CompararUnidades({ lista, empreendimentoInicial, onFechar }: Pro
                     })}
                   </div>
                 </div>
-              ))}
+            ))}
           </div>
         )}
       </section>

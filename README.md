@@ -820,8 +820,15 @@ faixa de metragem, m² médio ponderado e a **distribuição dos preços** em ba
 
 ### Nível 3 — o comparativo
 
-**Comparar**, no bloco de unidades, põe até **4 unidades lado a lado** — do mesmo prédio ou
-de prédios diferentes. Cada coluna traz o score no cabeçalho, e cada linha destaca o melhor:
+**Comparar unidades** — no topo do dashboard (sem precisar abrir imóvel nenhum) e também no
+bloco de unidades do painel — põe até **4 unidades lado a lado**, e elas podem ser de
+**empreendimentos diferentes**: a lista de escolha traz as unidades de toda a base, agrupadas
+por prédio, com filtro por nome quando há muitas.
+
+> A tela abre com **duas** unidades marcadas, não com quatro: preenchendo o limite todo com o
+> prédio de origem, os chips dos outros empreendimentos nasciam desabilitados — e a tela
+> passava a impressão de que só dava para comparar dentro do mesmo prédio, que é o oposto do
+> que ela faz. Cada coluna traz o score no cabeçalho, e cada linha destaca o melhor:
 menor para preço, entrada e capital; maior para metragem, dormitórios e vagas.
 
 > O **saldo na entrega não entra na disputa**: mais saldo é pior para quem tem capital e

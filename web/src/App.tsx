@@ -9,6 +9,7 @@ import { BarraFiltros } from './components/BarraFiltros'
 import { PainelDetalhe } from './components/PainelDetalhe'
 import { FormEmpreendimento } from './components/FormEmpreendimento'
 import { Comparativo } from './components/Comparativo'
+import { CompararUnidades } from './components/CompararUnidades'
 import { ListaEmpreendimentos } from './components/ListaEmpreendimentos'
 import { CalculadoraCub } from './components/CalculadoraCub'
 import { SimuladorInvestimento } from './components/SimuladorInvestimento'
@@ -48,6 +49,7 @@ export default function App({ sessao, aoMudarSessao, aoSair }: AppProps) {
 
   const [form, setForm] = useState<EstadoForm | null>(null)
   const [comparando, setComparando] = useState(false)
+  const [comparandoUnidades, setComparandoUnidades] = useState(false)
   const [vendoLista, setVendoLista] = useState(false)
   const [calculandoCub, setCalculandoCub] = useState<Empreendimento | null>(null)
   // false = fechado; null = aberto sem imovel; id = aberto com aquele imovel.
@@ -125,6 +127,9 @@ export default function App({ sessao, aoMudarSessao, aoSair }: AppProps) {
 
   /* --- Derivados --------------------------------------------------------- */
   const filtrados = useMemo(() => aplicarFiltros(lista, filtros), [lista, filtros])
+
+  /** Comparar unidades só faz sentido com mais de uma na base inteira. */
+  const totalDeUnidades = useMemo(() => lista.reduce((soma, e) => soma + e.unidades.length, 0), [lista])
 
   const empreendimentoA = useMemo(
     () => lista.find((e) => e.id === selecionadoA) ?? null,
@@ -212,6 +217,20 @@ export default function App({ sessao, aoMudarSessao, aoSair }: AppProps) {
               <span>Empreendimentos</span>
               {lista.length > 0 && <span className="btn__contador">{lista.length}</span>}
             </button>
+
+            {/* Comparar unidades ATRAVESSA os empreendimentos — por isso mora
+                aqui em cima, e não só dentro do painel de um imóvel. */}
+            {totalDeUnidades > 1 && (
+              <button
+                type="button"
+                className="btn btn--secundario"
+                onClick={() => setComparandoUnidades(true)}
+                title="Comparar unidades lado a lado, de qualquer empreendimento"
+              >
+                <Icone nome="balanca" tamanho={15} />
+                <span>Comparar unidades</span>
+              </button>
+            )}
 
             {podeEditar && (
               <button
@@ -447,6 +466,14 @@ export default function App({ sessao, aoMudarSessao, aoSair }: AppProps) {
             setSelecionadoB(selecionadoA)
           }}
           onFechar={() => setComparando(false)}
+        />
+      )}
+
+      {comparandoUnidades && lista.length > 0 && (
+        <CompararUnidades
+          lista={lista}
+          empreendimentoInicial={empreendimentoA ?? lista.find((e) => e.unidades.length > 0) ?? lista[0]}
+          onFechar={() => setComparandoUnidades(false)}
         />
       )}
 

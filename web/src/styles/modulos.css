@@ -3652,6 +3652,14 @@
   gap: var(--e3);
 }
 
+/* A `.busca` nasce com `flex: 1 1 240px` (feita para barras horizontais). Numa
+   coluna, esse `flex-grow` esticava o campo pela altura toda da seção e abria
+   um vão enorme antes dos chips. */
+.comparar-escolha .busca {
+  flex: none;
+  max-width: 100%;
+}
+
 .comparar-grupo__nome {
   display: block;
   margin-bottom: var(--e1);
