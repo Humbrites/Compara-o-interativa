@@ -836,7 +836,10 @@ menor para preço, entrada e capital; maior para metragem, dormitórios e vagas.
 > cliente. E empate destaca os dois, em vez de inventar diferença.
 
 O comparativo **A × B de empreendimentos** continua onde estava, no painel do imóvel: um
-compara prédios, o outro compara unidades.
+compara prédios, o outro compara unidades. **Os dois lados são trocáveis sem sair da tela** —
+cada um tem o próprio seletor no cabeçalho, e o lado que já está do outro lado some das
+opções (ninguém compara um imóvel com ele mesmo). Antes, o lado A vinha fixo do imóvel
+selecionado no mapa: trocar o par exigia fechar, escolher outro e abrir de novo.
 
 ---
 

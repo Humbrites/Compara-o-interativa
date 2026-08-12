@@ -460,6 +460,7 @@ export default function App({ sessao, aoMudarSessao, aoSair }: AppProps) {
           a={empreendimentoA}
           b={empreendimentoB}
           lista={lista}
+          onEscolherA={(id) => setSelecionadoA(id)}
           onEscolherB={(id) => setSelecionadoB(id)}
           onTrocarLados={() => {
             setSelecionadoA(selecionadoB)

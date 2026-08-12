@@ -3779,3 +3779,15 @@
 .comparar__vence {
   background: var(--vitoria-fundo);
 }
+
+
+/* O seletor que troca o empreendimento de cada lado do comparativo. Discreto:
+   ele não pode competir com o nome e o placar, que são a leitura principal. */
+.versus__trocar {
+  height: 32px;
+  margin-top: var(--e2);
+  padding: 0 var(--e2);
+  max-width: 100%;
+  font-size: 12px;
+  background-color: var(--superficie);
+}

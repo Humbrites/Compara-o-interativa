@@ -90,16 +90,31 @@ function TabelaComparativa({
 /* Cabecalho A vs B                                                    */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Um dos lados do comparativo — e o seletor que TROCA o empreendimento dali.
+ *
+ * O lado A vinha fixo do imóvel selecionado no mapa: para comparar outro par
+ * era preciso fechar, escolher outro no mapa e abrir de novo. Agora os dois
+ * lados trocam sem sair da tela.
+ */
 function LadoVersus({
   empreendimento: e,
   papel,
   vitorias,
+  lista,
+  outroId,
+  onEscolher,
 }: {
   empreendimento: Empreendimento
   papel: 'a' | 'b'
   vitorias: number
+  lista: Empreendimento[]
+  /** O que já está do outro lado — ninguém compara um imóvel com ele mesmo. */
+  outroId: number | null
+  onEscolher: (id: number) => void
 }) {
   const local = [e.bairro, e.cidade].filter(Boolean).join(', ')
+  const opcoes = lista.filter((item) => item.id === e.id || item.id !== outroId)
 
   return (
     <div className={`versus__lado versus__lado--${papel}`}>
@@ -121,6 +136,21 @@ function LadoVersus({
           <Icone nome="check" tamanho={13} />
           {vitorias} {vitorias === 1 ? 'indicador melhor' : 'indicadores melhores'}
         </div>
+
+        {opcoes.length > 1 && (
+          <select
+            className="entrada versus__trocar"
+            value={e.id}
+            onChange={(evento) => onEscolher(Number(evento.target.value))}
+            aria-label={`Trocar o empreendimento ${papel.toUpperCase()}`}
+          >
+            {opcoes.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.nome}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
     </div>
   )
@@ -277,12 +307,14 @@ interface Props {
   a: Empreendimento
   b: Empreendimento | null
   lista: Empreendimento[]
+  /** Troca o empreendimento de cada lado sem fechar a tela. */
+  onEscolherA: (id: number) => void
   onEscolherB: (id: number) => void
   onTrocarLados: () => void
   onFechar: () => void
 }
 
-export function Comparativo({ a, b, lista, onEscolherB, onTrocarLados, onFechar }: Props) {
+export function Comparativo({ a, b, lista, onEscolherA, onEscolherB, onTrocarLados, onFechar }: Props) {
   // Unidade escolhida de cada lado (null = comparar so o empreendimento).
   const [unidadeAId, setUnidadeAId] = useState<number | null>(null)
   const [unidadeBId, setUnidadeBId] = useState<number | null>(null)
@@ -357,9 +389,23 @@ export function Comparativo({ a, b, lista, onEscolherB, onTrocarLados, onFechar 
       }
     >
       <div className="versus">
-        <LadoVersus empreendimento={a} papel="a" vitorias={placar.a} />
+        <LadoVersus
+          empreendimento={a}
+          papel="a"
+          vitorias={placar.a}
+          lista={lista}
+          outroId={b.id}
+          onEscolher={onEscolherA}
+        />
         <div className="versus__x">VS</div>
-        <LadoVersus empreendimento={b} papel="b" vitorias={placar.b} />
+        <LadoVersus
+          empreendimento={b}
+          papel="b"
+          vitorias={placar.b}
+          lista={lista}
+          outroId={a.id}
+          onEscolher={onEscolherB}
+        />
       </div>
 
       <div className="bloco-comp">
