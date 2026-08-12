@@ -3439,3 +3439,59 @@
   line-height: 1.5;
   color: var(--texto-2);
 }
+
+
+/* A distribuição de preços: colunas simples, sem biblioteca de gráfico. O que
+   importa aqui é a FORMA (onde os preços se concentram), não o valor exato de
+   cada barra — esse está no title de cada uma. */
+.analise-emp {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e4);
+}
+
+.analise-dist__colunas {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--e2);
+  height: 110px;
+  margin-top: var(--e2);
+}
+
+.analise-dist__coluna {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
+  flex: 1;
+  height: 100%;
+  min-width: 0;
+}
+
+.analise-dist__barra {
+  width: 100%;
+  border-radius: var(--raio-sm) var(--raio-sm) 0 0;
+  background: var(--marca-500);
+  transition: height var(--transicao);
+}
+
+.analise-dist__barra--vazia {
+  background: var(--borda);
+}
+
+.analise-dist__quantidade {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--texto-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.analise-dist__rotulo {
+  font-size: 10px;
+  color: var(--texto-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}

@@ -19,6 +19,7 @@ import { precoDaUnidade, resumoUnidades, rotuloUnidade } from '../lib/unidades'
 import { Icone, type NomeIcone } from './Icones'
 import { CartaoFluxo } from './CartaoFluxo'
 import { CartaoUnidade } from './CartaoUnidade'
+import { AnaliseEmpreendimento } from './AnaliseEmpreendimento'
 import { AnaliseUnidade } from './AnaliseUnidade'
 import { FluxosDoEmpreendimento, fluxoParaEnvio, fluxoParaFormulario } from './FormFluxos'
 import { Galeria } from './Galeria'
@@ -145,12 +146,16 @@ export function PainelDetalhe({
   // O que abre por padrao: o que o corretor olha em toda visita.
   const [blocos, setBlocos] = useState({
     ficha: true,
+    analise: false,
     unidades: true,
     tabelas: false,
     notas: false,
     local: false,
   })
-  useEffect(() => setBlocos({ ficha: true, unidades: true, tabelas: false, notas: false, local: false }), [e.id])
+  useEffect(
+    () => setBlocos({ ficha: true, analise: false, unidades: true, tabelas: false, notas: false, local: false }),
+    [e.id],
+  )
   const alternar = (chave: keyof typeof blocos) =>
     setBlocos((atual) => ({ ...atual, [chave]: !atual[chave] }))
 
@@ -385,6 +390,19 @@ export function PainelDetalhe({
               </p>
             )}
           </Bloco>
+
+          {/* Nível 2: o empreendimento visto pelas unidades dele. Vem depois
+              da ficha e antes das unidades — é o resumo do que vem abaixo. */}
+          {temUnidades && (
+            <Bloco
+              icone="grafico"
+              titulo="Análise do empreendimento"
+              aberto={blocos.analise}
+              onAlternar={() => alternar('analise')}
+            >
+              <AnaliseEmpreendimento unidades={e.unidades} />
+            </Bloco>
+          )}
 
           {/* 5. As unidades — o que o corretor vende de verdade. */}
           <Bloco

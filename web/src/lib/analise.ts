@@ -164,3 +164,122 @@ export function textoDaPosicao(analise: AnaliseDaUnidade): string {
       return 'Sem preço por m² para comparar. Informe o valor e a metragem da unidade.'
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Nivel 2: o empreendimento                                           */
+/* ------------------------------------------------------------------ */
+
+/** Uma faixa de preco com quantas unidades caem nela. */
+export interface FatiaDePreco {
+  /** Limite inferior da faixa, em R$. */
+  de: number
+  ate: number
+  unidades: number
+}
+
+export interface AnaliseDoEmpreendimento {
+  unidades: number
+  /** Quantas tem preco — as outras nao entram em media nenhuma. */
+  comPreco: number
+  disponiveis: number
+
+  valorMin: number | null
+  valorMax: number | null
+  /** A media dos precos: o ticket do empreendimento. */
+  ticketMedio: number | null
+  /** O preco do meio — imune a uma cobertura que puxa a media sozinha. */
+  medianaDeValor: number | null
+
+  metragemMin: number | null
+  metragemMax: number | null
+
+  /** m² ponderado (soma dos precos ÷ soma das metragens). */
+  m2Ponderado: number | null
+  faixaM2: { min: number | null; max: number | null; media: number | null }
+
+  /** A distribuicao de precos em faixas, para o histograma. */
+  distribuicao: FatiaDePreco[]
+  /**
+   * Quanto o ticket medio se afasta da mediana, em %. Positivo alto = ha
+   * unidade cara puxando a media (o "cuidado" que o corretor precisa saber
+   * antes de dizer "aqui o ticket e X").
+   */
+  assimetria: number | null
+}
+
+function mediana(valores: number[]): number | null {
+  if (valores.length === 0) return null
+  const ordenados = [...valores].sort((a, b) => a - b)
+  const meio = Math.floor(ordenados.length / 2)
+  return ordenados.length % 2 === 0 ? (ordenados[meio - 1] + ordenados[meio]) / 2 : ordenados[meio]
+}
+
+/**
+ * Divide os precos em ate 5 faixas de largura igual.
+ *
+ * Faixas iguais, e nao quantis: o que a barra tem de mostrar e ONDE os precos
+ * se concentram — com quantis toda barra teria a mesma altura e o desenho nao
+ * diria nada.
+ */
+export function distribuirPrecos(precos: number[], faixas = 5): FatiaDePreco[] {
+  if (precos.length === 0) return []
+
+  const min = Math.min(...precos)
+  const max = Math.max(...precos)
+  if (min === max) return [{ de: min, ate: max, unidades: precos.length }]
+
+  const largura = (max - min) / faixas
+  const fatias: FatiaDePreco[] = Array.from({ length: faixas }, (_, i) => ({
+    de: min + largura * i,
+    ate: min + largura * (i + 1),
+    unidades: 0,
+  }))
+
+  for (const preco of precos) {
+    // O ultimo intervalo e fechado dos dois lados; senao o mais caro ficaria de fora.
+    const indice = Math.min(faixas - 1, Math.floor((preco - min) / largura))
+    fatias[indice].unidades += 1
+  }
+
+  return fatias
+}
+
+export function analisarEmpreendimento(unidades: Unidade[]): AnaliseDoEmpreendimento {
+  const precos = unidades.map(precoDaUnidade).filter((v): v is number => v !== null)
+  const metragens = unidades
+    .map((u) => numero(u.metragem) ?? numero(u.metragem_total))
+    .filter((v): v is number => v !== null)
+
+  let somaPreco = 0
+  let somaMetragem = 0
+  for (const unidade of unidades) {
+    const preco = precoDaUnidade(unidade)
+    const metragem = numero(unidade.metragem_total) ?? numero(unidade.metragem)
+    if (preco !== null && metragem !== null && metragem > 0) {
+      somaPreco += preco
+      somaMetragem += metragem
+    }
+  }
+
+  const ticketMedio = precos.length > 0 ? precos.reduce((s, v) => s + v, 0) / precos.length : null
+  const medianaDeValor = mediana(precos)
+
+  return {
+    unidades: unidades.length,
+    comPreco: precos.length,
+    disponiveis: unidades.filter((u) => (u.status || '').trim().toLowerCase() === 'disponível').length,
+    valorMin: precos.length > 0 ? Math.min(...precos) : null,
+    valorMax: precos.length > 0 ? Math.max(...precos) : null,
+    ticketMedio,
+    medianaDeValor,
+    metragemMin: metragens.length > 0 ? Math.min(...metragens) : null,
+    metragemMax: metragens.length > 0 ? Math.max(...metragens) : null,
+    m2Ponderado: somaMetragem > 0 ? somaPreco / somaMetragem : null,
+    faixaM2: faixaDeM2(unidades),
+    distribuicao: distribuirPrecos(precos),
+    assimetria:
+      ticketMedio !== null && medianaDeValor !== null && medianaDeValor > 0
+        ? ((ticketMedio - medianaDeValor) / medianaDeValor) * 100
+        : null,
+  }
+}
