@@ -1,14 +1,12 @@
 import { useMemo, useState } from 'react'
 
 import { analisarUnidade } from '../lib/analise'
-import { calcularScore } from '../lib/score'
-import { lerPesosSalvos } from './ScoreOportunidade'
 import { fmtArea, fmtInteiro, fmtMoeda, TRACO } from '../lib/format'
 import { fmtPercentual } from '../lib/cub'
 import { rotuloUnidade } from '../lib/unidades'
 import type { Empreendimento, Unidade } from '../types'
 import { Icone } from './Icones'
-import { Estado, Modal, Selo } from './ui'
+import { Estado, Modal } from './ui'
 
 /**
  * Nivel 3 da analise: "qual oportunidade e melhor?".
@@ -52,8 +50,6 @@ export function CompararUnidades({ lista, empreendimentoInicial, onFechar }: Pro
     empreendimentoInicial.unidades.slice(0, MAXIMO).map((u) => u.id),
   )
 
-  const pesos = useMemo(() => lerPesosSalvos(), [])
-
   /** Todas as unidades da base, com o empreendimento de cada uma. */
   const disponiveis = useMemo(() => {
     const todas: Escolhida[] = []
@@ -71,14 +67,14 @@ export function CompararUnidades({ lista, empreendimentoInicial, onFechar }: Pro
     [escolhidas, disponiveis],
   )
 
-  /** A análise e o score de cada coluna — a mesma conta das outras telas. */
+  /** A análise de cada coluna — a mesma conta das outras telas. */
   const analises = useMemo(
     () =>
-      selecionadas.map((item) => {
-        const analise = analisarUnidade(item.unidade, item.empreendimento.unidades)
-        return { ...item, analise, score: calcularScore(analise, item.empreendimento.unidades, pesos) }
-      }),
-    [selecionadas, pesos],
+      selecionadas.map((item) => ({
+        ...item,
+        analise: analisarUnidade(item.unidade, item.empreendimento.unidades),
+      })),
+    [selecionadas],
   )
 
   function alternar(id: number) {
@@ -190,8 +186,6 @@ export function CompararUnidades({ lista, empreendimentoInicial, onFechar }: Pro
     return new Set(valores.filter((v) => v.valor === melhor).map((v) => v.id))
   }
 
-  const melhorScore = Math.max(...analises.map((a) => a.score.nota ?? -1), -1)
-
   return (
     <Modal
       titulo="Comparar unidades"
@@ -277,11 +271,6 @@ export function CompararUnidades({ lista, empreendimentoInicial, onFechar }: Pro
                       <div className="comparar__coluna">
                         <span className="comparar__unidade">{rotuloUnidade(item.unidade, indice)}</span>
                         <span className="comparar__empreendimento">{item.empreendimento.nome}</span>
-                        {item.score.nota !== null && (
-                          <Selo cor={item.score.nota === melhorScore ? 'verde' : 'cinza'}>
-                            {item.score.nota.toFixed(0)}/100
-                          </Selo>
-                        )}
                       </div>
                     </th>
                   ))}

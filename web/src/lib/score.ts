@@ -1,3 +1,9 @@
+/**
+ * ⚠️ DESLIGADO DA INTERFACE em 12/08 (pedido do Daniel: "não gostei do score,
+ * podemos remover por ora"). O modulo fica no repo porque a conta esta pronta
+ * e conferida — religar e voltar a renderizar <ScoreOportunidade> na
+ * `AnaliseUnidade` e o selo no cabecalho de `CompararUnidades`.
+ */
 import type { AnaliseDaUnidade } from './analise'
 import type { Unidade } from '../types'
 import { precoDaUnidade } from './unidades'

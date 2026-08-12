@@ -801,22 +801,13 @@ Uma barra proporcional repete as cores dos três números, e a seção final diz
 unidade cai dentro da faixa do empreendimento (*"6,7% mais barato por m² que a média das
 outras unidades"*).
 
-### O score da oportunidade
+### O score da oportunidade — desligado por ora
 
-Nota de 0 a 100 com seis critérios que saem do cadastro: **preço por m²** (peso 30),
-**entrada**, **capital até a entrega**, **saldo financiável**, **parcelamento** (15 cada) e
-**metragem** (10). Os pesos são ajustáveis na própria tela e ficam no navegador de quem usa.
-
-> ⚠️ **A nota nunca aparece sozinha.** Cada critério mostra a própria nota, o peso e a frase
-> que a justifica — um "74" que o corretor não sabe explicar vira desconfiança na primeira
-> pergunta do cliente. Critério **sem dado sai da conta** em vez de derrubar a nota, e a tela
-> avisa que saiu.
-
-Duas escolhas de cálculo que valem saber: o **saldo financiável** pontua por *faixa*
-(50%–70%), não por "quanto menor melhor" — os dois extremos são ruins, porque pouco saldo
-exige capital que o comprador não tem e saldo demais vira financiamento que o banco não
-aprova. E **localização, características e potencial de valorização ficaram de fora**: não há
-dado no sistema que os sustente, e nota inventada é pior que nota ausente.
+Existiu uma nota de 0 a 100 com seis critérios (preço por m², entrada, capital até a entrega,
+saldo financiável, parcelamento e metragem), cada um com a própria nota, o peso e a frase que
+o justificava. **Saiu da interface a pedido do Daniel em 12/08.** O cálculo continua no repo
+(`lib/score.ts` e `ScoreOportunidade.tsx`), pronto e conferido: religar é voltar a renderizar
+o componente na análise da unidade.
 
 ### Nível 2 — o empreendimento
 

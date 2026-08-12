@@ -6,7 +6,6 @@ import { fmtPercentual } from '../lib/cub'
 import { rotuloUnidade } from '../lib/unidades'
 import type { Unidade } from '../types'
 import { Icone, type NomeIcone } from './Icones'
-import { ScoreOportunidade } from './ScoreOportunidade'
 import { Modal, Selo } from './ui'
 
 /**
@@ -208,16 +207,6 @@ export function AnaliseUnidade({ unidade, unidades, indice, nomeDoEmpreendimento
           <strong>capital até a entrega</strong> soma a ele tudo que é pago durante a obra. O restante —{' '}
           {dinheiro(analise.saldo)} — é o que se financia quando as chaves saem.
         </p>
-      </section>
-
-      <section className="form-secao form-secao--pagamentos">
-        <h3 className="form-secao__titulo">
-          <Icone nome="alvo" tamanho={13} />
-          Score da oportunidade
-          <span className="form-secao__opcional">— e por que ele deu isso</span>
-        </h3>
-
-        <ScoreOportunidade analise={analise} unidades={unidades} />
       </section>
 
       <section className="form-secao form-secao--resultado">
