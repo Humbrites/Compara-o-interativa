@@ -95,6 +95,21 @@ const SERIES = [
     acumulado12: true,
   },
   {
+    chave: 'inpc',
+    nome: 'INPC',
+    descricao: 'inflação das famílias de menor renda',
+    serie: 188,
+    pontos: 13,
+    formato: 'percentual',
+    unidade: 'no mês',
+    comparar: 'anterior',
+    acumulado12: true,
+    // Entrou para o simulador (indexador de financiamento), nao para a faixa do
+    // cabecalho: um setimo cartao apertaria os seis que ja estao la. A consulta
+    // e a mesma; quem filtra e a tela.
+    noCabecalho: false,
+  },
+  {
     chave: 'tr',
     nome: 'TR',
     descricao: 'taxa referencial',
@@ -216,8 +231,17 @@ function montarIndicador(config, linhas) {
     tendencia: estavel ? 'estavel' : variacao > 0 ? 'alta' : 'baixa',
     acumulado12,
     serie: config.serie,
+    /** false = a serie existe para quem consulta (o simulador), mas nao vira cartao no topo. */
+    noCabecalho: config.noCabecalho !== false,
   }
 }
+
+/**
+ * A "assinatura" da lista de series. Vai gravada no cache: quando uma serie
+ * nova entra no codigo, o arquivo antigo deixa de valer na hora em vez de
+ * segurar o indicador novo pelas seis horas do TTL.
+ */
+const VERSAO_DAS_SERIES = SERIES.map((s) => `${s.chave}:${s.serie}`).join(',')
 
 /* ------------------------------------------------------------------ */
 /* Cache                                                               */
@@ -295,6 +319,7 @@ export function criarServicoIndicadores({ dataDir, log }) {
     return {
       atualizadoEm: new Date().toISOString(),
       fonte: 'Banco Central do Brasil · SGS',
+      versao: VERSAO_DAS_SERIES,
       indicadores,
       falhas,
       defasados: indicadores.filter((i) => i.defasado).map((i) => i.chave),
@@ -313,7 +338,11 @@ export function criarServicoIndicadores({ dataDir, log }) {
     // Cache incompleto vale 20 minutos, nao 6 horas: a serie que faltou tem de
     // ganhar nova chance logo.
     const validade = cache?.falhas?.length ? TTL_FALHA_MS : TTL_MS
-    if (!forcar && cache && idade < validade) return { ...cache, doCache: true, stale: false }
+    // Lista de series diferente da que gerou o arquivo = cache de outro
+    // contrato: serve o valor velho AGORA (melhor que tela vazia), mas nao
+    // impede a consulta, senao o indicador novo so apareceria horas depois.
+    const mesmaVersao = cache?.versao === VERSAO_DAS_SERIES
+    if (!forcar && cache && mesmaVersao && idade < validade) return { ...cache, doCache: true, stale: false }
 
     if (!emVoo) {
       emVoo = buscarTudo()

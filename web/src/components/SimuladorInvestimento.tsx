@@ -19,14 +19,18 @@ import {
   mesesDoPrazo,
   saldoDevedorSugerido,
   simularInvestimento,
+  taxaEfetivaAnual,
   textoDaConclusao,
   textoDoPrazo,
+  type CondicaoDoFinanciamento,
   type Conclusao,
+  type FinanciamentoChaves,
   type MesDaObra,
   type ResultadoInvestimento,
   type UnidadeIndice,
   type UnidadePrazo,
 } from '../lib/investimento'
+import { useIndicesDeMercado, type TaxaDoIndice } from '../lib/indicadores'
 import { exportarPdfInvestimento, type ImovelDaSimulacao } from '../lib/exportarSimulacao'
 import { precoDaUnidade, resumoUnidades, rotuloUnidade, valorM2Da, valorNoFluxo } from '../lib/unidades'
 import { Campo, Modal } from './ui'
@@ -41,10 +45,39 @@ const ATALHOS_CUB = [0.35, 0.6, 0.7, 0.75, 1]
 /** Ao ano os numeros redondos sao outros — o INCC costuma rodar nessa faixa. */
 const ATALHOS_CUB_ANO = [4, 6, 8, 10, 12]
 
+/**
+ * O indice que corrige o saldo devedor DURANTE A OBRA. Um so por vez: sao duas
+ * leituras alternativas do mesmo custo, e somar as duas nao existe no contrato.
+ * 'nenhum' = simular so com os valores do empreendimento.
+ */
+type IndiceDaObra = 'nenhum' | 'cub' | 'incc'
+
+/** O indexador do financiamento que comeca NAS CHAVES. */
+type IndiceDasChaves = 'nenhum' | 'ipca' | 'igpm' | 'inpc' | 'cub'
+
+interface OpcaoDeIndice<T> {
+  valor: T
+  rotulo: string
+  /** A chave da serie no serviço de indicadores; ausente = o corretor digita. */
+  serie?: string
+  dica: string
+}
+
+const INDICES_DA_OBRA: OpcaoDeIndice<Exclude<IndiceDaObra, 'nenhum'>>[] = [
+  { valor: 'cub', rotulo: 'CUB', dica: 'você informa o percentual do sindicato da sua região' },
+  { valor: 'incc', rotulo: 'INCC', serie: 'incc', dica: 'puxado do Banco Central, sem digitar nada' },
+]
+
+const INDICES_DAS_CHAVES: OpcaoDeIndice<Exclude<IndiceDasChaves, 'nenhum'>>[] = [
+  { valor: 'ipca', rotulo: 'IPCA', serie: 'ipca', dica: 'inflação oficial' },
+  { valor: 'igpm', rotulo: 'IGP-M', serie: 'igpm', dica: 'índice geral de preços' },
+  { valor: 'inpc', rotulo: 'INPC', serie: 'inpc', dica: 'inflação das famílias de menor renda' },
+  { valor: 'cub', rotulo: 'CUB', dica: 'você informa o percentual' },
+]
+
 interface Formulario {
   valorCompra: string
   entrada: string
-  valorPago: string
   saldoDevedor: string
   prazo: string
   unidadePrazo: UnidadePrazo
@@ -53,14 +86,21 @@ interface Formulario {
   parcelasRestantes: string
   reforcosQtd: string
   reforcoValor: string
+  /* Durante a obra */
+  indiceObra: IndiceDaObra
   cub: string
   unidadeCub: UnidadeIndice
+  /* Chaves — o financiamento que comeca na entrega */
+  indiceChaves: IndiceDasChaves
+  cubChaves: string
+  unidadeCubChaves: UnidadeIndice
+  juroChaves: string
+  prazoChaves: string
 }
 
 const VAZIO: Formulario = {
   valorCompra: '',
   entrada: '',
-  valorPago: '',
   saldoDevedor: '',
   prazo: '',
   unidadePrazo: 'meses',
@@ -69,11 +109,25 @@ const VAZIO: Formulario = {
   parcelasRestantes: '',
   reforcosQtd: '',
   reforcoValor: '',
+  indiceObra: 'nenhum',
   cub: '',
   unidadeCub: 'mes',
+  indiceChaves: 'nenhum',
+  cubChaves: '',
+  unidadeCubChaves: 'ano',
+  juroChaves: '',
+  prazoChaves: '',
 }
 
-function validar(form: Formulario, usarCub: boolean) {
+/** O que as duas seções de índice resolveram — já em número, já na unidade certa. */
+interface IndicesResolvidos {
+  /** Correção da obra, em % ao mês. null = nenhum índice escolhido. */
+  obraMensal: number | null
+  /** Indexador do financiamento, em % ao ano. */
+  chavesAnual: number | null
+}
+
+function validar(form: Formulario, indices: IndicesResolvidos) {
   const erros: Record<string, string> = {}
 
   const valorCompra = lerNumero(form.valorCompra)
@@ -89,17 +143,48 @@ function validar(form: Formulario, usarCub: boolean) {
   else if (valorizacao < -100) erros.valorizacao = 'Valorização inválida'
   else if (valorizacao > 100) erros.valorizacao = 'Valorização anual acima de 100% — confira'
 
-  // O CUB so e cobrado quando a opcao esta marcada; desmarcada, o campo nem existe.
-  // O teto muda com a unidade: 20% ao mes e absurdo, 20% ao ano e rotina.
-  const digitado = usarCub ? lerNumero(form.cub) : null
-  const tetoDoIndice = form.unidadeCub === 'mes' ? 20 : 100
-  if (usarCub) {
-    if (digitado === null) erros.cub = `Informe o percentual do índice (% ao ${form.unidadeCub})`
+  /* --- Durante a obra ------------------------------------------------ */
+
+  // O percentual so e cobrado no CUB: o INCC vem pronto do Banco Central, e
+  // no 'nenhum' o campo nem existe.
+  if (form.indiceObra === 'cub') {
+    const digitado = lerNumero(form.cub)
+    // O teto muda com a unidade: 20% ao mes e absurdo, 20% ao ano e rotina.
+    const teto = form.unidadeCub === 'mes' ? 20 : 100
+    if (digitado === null) erros.cub = `Informe o percentual do CUB (% ao ${form.unidadeCub})`
     else if (digitado < 0) erros.cub = 'O percentual não pode ser negativo'
-    else if (digitado > tetoDoIndice) erros.cub = `Percentual acima de ${tetoDoIndice}% ao ${form.unidadeCub} — confira`
+    else if (digitado > teto) erros.cub = `Percentual acima de ${teto}% ao ${form.unidadeCub} — confira`
+  } else if (form.indiceObra === 'incc' && indices.obraMensal === null) {
+    erros.indiceObra = 'O INCC não respondeu agora — escolha o CUB e informe o percentual'
   }
-  // O motor so trabalha ao mes; o anual e convertido por raiz, nao por divisao.
-  const cub = digitado === null ? null : mensalDoIndice(digitado, form.unidadeCub)
+
+  /* --- Chaves (financiamento) ---------------------------------------- */
+
+  let financiamento: CondicaoDoFinanciamento | null = null
+  if (form.indiceChaves !== 'nenhum') {
+    if (form.indiceChaves === 'cub') {
+      const digitado = lerNumero(form.cubChaves)
+      const teto = form.unidadeCubChaves === 'mes' ? 20 : 100
+      if (digitado === null) erros.cubChaves = `Informe o percentual do CUB (% ao ${form.unidadeCubChaves})`
+      else if (digitado < 0) erros.cubChaves = 'O percentual não pode ser negativo'
+      else if (digitado > teto) erros.cubChaves = `Percentual acima de ${teto}% ao ${form.unidadeCubChaves} — confira`
+    } else if (indices.chavesAnual === null) {
+      erros.indiceChaves = 'Este índice não respondeu agora — escolha outro ou use o CUB'
+    }
+
+    const juro = lerNumero(form.juroChaves)
+    if (juro === null) erros.juroChaves = 'Informe o juro do banco ou da construtora (% ao ano)'
+    else if (juro < 0) erros.juroChaves = 'O juro não pode ser negativo'
+    else if (juro > 50) erros.juroChaves = 'Juro acima de 50% ao ano — confira'
+
+    const anos = lerNumero(form.prazoChaves)
+    if (anos === null || anos <= 0) erros.prazoChaves = 'Informe o prazo do financiamento (anos)'
+    else if (anos > 40) erros.prazoChaves = 'No máximo 40 anos'
+
+    if (indices.chavesAnual !== null && juro !== null && anos !== null && anos > 0) {
+      financiamento = { indiceAnual: indices.chavesAnual, juroAnual: juro, anos }
+    }
+  }
 
   const opcional = (campo: keyof Formulario, rotulo: string) => {
     const texto = form[campo] as string
@@ -113,7 +198,6 @@ function validar(form: Formulario, usarCub: boolean) {
   }
 
   const entrada = opcional('entrada', 'Valor de entrada')
-  const valorPago = opcional('valorPago', 'Valor já pago')
   const saldoDevedor = opcional('saldoDevedor', 'Saldo devedor')
   const parcelaMensal = opcional('parcelaMensal', 'Valor da parcela')
   const parcelasRestantes = opcional('parcelasRestantes', 'Número de parcelas')
@@ -127,7 +211,9 @@ function validar(form: Formulario, usarCub: boolean) {
     entrada: {
       valorCompra: valorCompra as number,
       entrada,
-      valorPago,
+      // O que ja saiu do bolso e a entrada: e ela que a rentabilidade compara
+      // com o patrimonio no fim.
+      valorPago: entrada,
       saldoDevedor,
       prazo: prazo as number,
       unidadePrazo: form.unidadePrazo,
@@ -136,7 +222,8 @@ function validar(form: Formulario, usarCub: boolean) {
       parcelasRestantes: parcelasRestantes || null,
       reforcosQtd,
       reforcoValor,
-      cubMensal: cub,
+      cubMensal: indices.obraMensal,
+      financiamento,
     },
   }
 }
@@ -163,6 +250,146 @@ function Cartao({
       <span className="inv-cartao__valor">{valor}</span>
       {dica && <span className="inv-cartao__dica">{dica}</span>}
     </div>
+  )
+}
+
+/**
+ * A leitura publicada de um indice, quando quem escolhe nao digita nada.
+ *
+ * Mostra as DUAS formas do numero (12 meses e o equivalente mensal) porque e o
+ * mensal que entra na conta da obra, e uma tela que so exibisse "6,46% ao ano"
+ * deixaria o corretor sem saber de onde saiu o 0,52% do cronograma.
+ */
+function TaxaAutomatica({
+  taxa,
+  carregando,
+  mensalUsado,
+  periodo,
+}: {
+  taxa: TaxaDoIndice | null
+  carregando: boolean
+  mensalUsado: number | null
+  periodo: number | null
+}) {
+  if (carregando && !taxa) {
+    return (
+      <p className="campo__dica linha-calculo">
+        <Icone nome="spinner" tamanho={12} className="girando" /> Consultando o índice no Banco Central…
+      </p>
+    )
+  }
+
+  if (!taxa || taxa.anual === null) {
+    return (
+      <p className="campo__dica linha-calculo linha-calculo--alerta">
+        <Icone nome="alerta" tamanho={12} /> Não foi possível ler este índice agora. Escolha o CUB e informe o
+        percentual à mão.
+      </p>
+    )
+  }
+
+  return (
+    <div className="taxa-automatica">
+      <div className="taxa-automatica__numero">
+        <span className="taxa-automatica__valor">{fmtPercentual(taxa.anual, 2)}</span>
+        <span className="taxa-automatica__unidade">ao ano · acumulado de 12 meses</span>
+      </div>
+      <ul className="taxa-automatica__linhas">
+        <li>
+          <span>Na conta da obra</span>
+          <strong>{mensalUsado !== null ? `${fmtPercentual(mensalUsado, 4)} ao mês` : TRACO}</strong>
+        </li>
+        <li>
+          <span>Último mês publicado</span>
+          <strong>{fmtPercentual(taxa.mensalPublicado, 2)}</strong>
+        </li>
+        {periodo !== null && (
+          <li>
+            <span>Correção no período</span>
+            <strong>{fmtPercentual(periodo, 2)}</strong>
+          </li>
+        )}
+      </ul>
+      <p className="campo__dica">
+        {taxa.defasado ? (
+          <>
+            <Icone nome="alerta" tamanho={12} /> A série não respondeu na última consulta — leitura de{' '}
+            {taxa.referencia}.
+          </>
+        ) : (
+          <>
+            <Icone nome="info" tamanho={12} /> Fonte: Banco Central · leitura de {taxa.referencia}. O simulador projeta
+            pelos <strong>12 meses</strong>, não pelo mês corrente — um mês atípico distorceria a obra inteira.
+          </>
+        )}
+      </p>
+    </div>
+  )
+}
+
+/** O financiamento das chaves, na tela e no mesmo formato do PDF. */
+function QuadroFinanciamento({
+  financiamento,
+  titulo,
+  dica,
+  destaque = false,
+}: {
+  financiamento: FinanciamentoChaves
+  titulo: string
+  dica: string
+  destaque?: boolean
+}) {
+  return (
+    <article className={`inv-conclusao${destaque ? ' inv-conclusao--cub' : ''}`}>
+      <header className="inv-conclusao__topo">
+        <span className="inv-conclusao__titulo">
+          <Icone nome="chave" tamanho={13} />
+          {titulo}
+        </span>
+        <span className="inv-conclusao__dica">{dica}</span>
+      </header>
+
+      <dl className="inv-conclusao__linhas">
+        <div className="inv-conclusao__linha">
+          <dt>Saldo financiado</dt>
+          <dd>{fmtMoeda(financiamento.saldoFinanciado)}</dd>
+        </div>
+        <div className="inv-conclusao__linha">
+          <dt>Taxa efetiva</dt>
+          <dd>
+            {fmtPercentual(financiamento.efetivaAnual, 2)} a.a.
+            <span className="inv-conclusao__nota">{fmtPercentual(financiamento.efetivaMensal, 4)} a.m.</span>
+          </dd>
+        </div>
+        <div className="inv-conclusao__linha">
+          <dt>Parcela (Price)</dt>
+          <dd>{fmtMoeda(financiamento.price.parcela)}</dd>
+        </div>
+        <div className="inv-conclusao__linha">
+          <dt>Total pago (Price)</dt>
+          <dd>{fmtMoeda(financiamento.price.total)}</dd>
+        </div>
+        <div className="inv-conclusao__linha">
+          <dt>1ª parcela (SAC)</dt>
+          <dd>
+            {fmtMoeda(financiamento.sac.primeira)}
+            <span className="inv-conclusao__nota">última {fmtMoeda(financiamento.sac.ultima)}</span>
+          </dd>
+        </div>
+        <div className="inv-conclusao__linha">
+          <dt>Total pago (SAC)</dt>
+          <dd>{fmtMoeda(financiamento.sac.total)}</dd>
+        </div>
+      </dl>
+
+      <p className="inv-conclusao__frase">
+        {fmtMoeda(financiamento.saldoFinanciado)} em {textoDoPrazo(financiamento.meses)} a{' '}
+        {fmtPercentual(financiamento.efetivaAnual, 2)} ao ano: a Price começa em{' '}
+        {fmtMoeda(financiamento.price.parcela)} por mês e não muda; a SAC começa em{' '}
+        {fmtMoeda(financiamento.sac.primeira)} e cai até {fmtMoeda(financiamento.sac.ultima)}, custando{' '}
+        {fmtMoeda(financiamento.price.total - financiamento.sac.total)} a menos no total.
+      </p>
+    </article>
   )
 }
 
@@ -465,8 +692,10 @@ export function SimuladorInvestimento({
   const [unidadeId, setUnidadeId] = useState<number | null>(null)
   // O saldo devedor sai da conta sozinho ate alguem digitar outro valor ali.
   const [saldoManual, setSaldoManual] = useState(false)
-  // Desmarcado, o simulador conclui so com os valores do empreendimento.
-  const [usarCub, setUsarCub] = useState(false)
+
+  // Os indices publicados (INCC, IPCA, IGP-M, INPC) — a consulta ao Banco
+  // Central e do servidor, com cache; aqui e so leitura.
+  const { taxas, carregando: carregandoIndices } = useIndicesDeMercado()
 
   const empreendimento = useMemo(
     () => lista.find((e) => e.id === empreendimentoId) ?? null,
@@ -500,27 +729,68 @@ export function SimuladorInvestimento({
     if (erros[campo]) setErros((atual) => ({ ...atual, [campo]: '' }))
   }
 
-  /** O que falta pagar da compra — enquanto ninguem sobrescreve o campo. */
+  /** Valor de compra menos a entrada — enquanto ninguem sobrescreve o campo. */
   const saldoAutomatico = useMemo(
-    () => saldoDevedorSugerido(lerNumero(form.valorCompra), lerNumero(form.valorPago)),
-    [form.valorCompra, form.valorPago],
+    () => saldoDevedorSugerido(lerNumero(form.valorCompra), lerNumero(form.entrada)),
+    [form.valorCompra, form.entrada],
   )
   const saldoNoCampo = saldoManual
     ? form.saldoDevedor
     : saldoAutomatico !== null
       ? textoDoValor(saldoAutomatico)
       : ''
-  // O calculo automatico so vale se o "ja pago" tiver mesmo somado a entrada.
-  const entradaDigitada = lerNumero(form.entrada)
-  const pagoDigitado = lerNumero(form.valorPago)
-  const entradaForaDoPago =
-    !saldoManual && entradaDigitada !== null && pagoDigitado !== null && entradaDigitada > pagoDigitado
 
-  /** O indice sempre em % ao mes — e nessa unidade que a obra e simulada. */
+  /** A taxa publicada de uma serie, ou null quando ela nao respondeu. */
+  const taxaDaSerie = (chave: string | undefined): TaxaDoIndice | null =>
+    chave ? taxas[chave] ?? null : null
+
+  const incc = taxaDaSerie('incc')
+
+  /**
+   * O indice da obra sempre em % ao mes — e nessa unidade que a obra e
+   * simulada. O CUB vem do campo; o INCC vem do acumulado de 12 meses do
+   * Banco Central, convertido por raiz.
+   */
   const cubMensal = useMemo(() => {
-    const percentual = lerNumero(form.cub)
-    return percentual === null ? null : mensalDoIndice(percentual, form.unidadeCub)
-  }, [form.cub, form.unidadeCub])
+    if (form.indiceObra === 'cub') {
+      const percentual = lerNumero(form.cub)
+      return percentual === null ? null : mensalDoIndice(percentual, form.unidadeCub)
+    }
+    if (form.indiceObra === 'incc') {
+      return incc?.anual !== null && incc?.anual !== undefined ? mensalDoIndice(incc.anual, 'ano') : null
+    }
+    return null
+  }, [form.indiceObra, form.cub, form.unidadeCub, incc])
+
+  const indiceDasChaves = useMemo(
+    () => INDICES_DAS_CHAVES.find((opcao) => opcao.valor === form.indiceChaves) ?? null,
+    [form.indiceChaves],
+  )
+  const taxaDasChaves = taxaDaSerie(indiceDasChaves?.serie)
+
+  /** O indexador do financiamento, em % ao ano. */
+  const indiceChavesAnual = useMemo(() => {
+    if (form.indiceChaves === 'nenhum') return null
+    if (form.indiceChaves === 'cub') {
+      const percentual = lerNumero(form.cubChaves)
+      if (percentual === null) return null
+      // Digitado ao mes, vira anual por composicao — 0,6% ao mes sao 7,44% ao ano.
+      return form.unidadeCubChaves === 'ano' ? percentual : anualDoIndice(percentual)
+    }
+    return taxaDasChaves?.anual ?? null
+  }, [form.indiceChaves, form.cubChaves, form.unidadeCubChaves, taxaDasChaves])
+
+  const indicesResolvidos: IndicesResolvidos = { obraMensal: cubMensal, chavesAnual: indiceChavesAnual }
+
+  /**
+   * A previa do financiamento enquanto se digita — antes mesmo de simular. E o
+   * numero que o corretor quer ver na hora: "sai a X% ao ano".
+   */
+  const efetivaDasChaves = useMemo(() => {
+    const juro = lerNumero(form.juroChaves)
+    if (indiceChavesAnual === null || juro === null) return null
+    return taxaEfetivaAnual(indiceChavesAnual, juro)
+  }, [indiceChavesAnual, form.juroChaves])
 
   /**
    * O indice acumulado no periodo inteiro: 0,60% ao mes por 36 meses viram 24%
@@ -529,9 +799,9 @@ export function SimuladorInvestimento({
    */
   const cubNoPeriodo = useMemo(() => {
     const prazo = lerNumero(form.prazo)
-    if (!usarCub || cubMensal === null || prazo === null) return null
+    if (cubMensal === null || prazo === null) return null
     return (Math.pow(1 + cubMensal / 100, mesesDoPrazo(prazo, form.unidadePrazo)) - 1) * 100
-  }, [usarCub, cubMensal, form.prazo, form.unidadePrazo])
+  }, [cubMensal, form.prazo, form.unidadePrazo])
 
   /**
    * O que ainda vai ser pago ate a entrega, sem correcao nenhuma. Serve de
@@ -562,7 +832,7 @@ export function SimuladorInvestimento({
 
   function aoSimular() {
     // O campo do saldo pode estar so na tela (calculado) — a simulacao usa o que se ve.
-    const { erros: novosErros, entrada } = validar({ ...form, saldoDevedor: saldoNoCampo }, usarCub)
+    const { erros: novosErros, entrada } = validar({ ...form, saldoDevedor: saldoNoCampo }, indicesResolvidos)
     setErros(novosErros)
     if (!entrada) {
       setResultado(null)
@@ -577,16 +847,28 @@ export function SimuladorInvestimento({
     setErros({})
     setResultado(null)
     setSaldoManual(false)
-    setUsarCub(false)
   }
 
-  /** Desmarcar o CUB apaga o percentual e o erro dele — nada fica pendurado. */
-  function alternarCub(marcado: boolean) {
-    setUsarCub(marcado)
-    if (!marcado) {
-      setForm((atual) => ({ ...atual, cub: '' }))
-      setErros((atual) => ({ ...atual, cub: '' }))
-    }
+  /**
+   * Os botoes de indice funcionam como radio, com uma diferenca: clicar no que
+   * ja esta ativo DESLIGA. Sem isso nao haveria como voltar para "simular so
+   * com os valores do empreendimento" depois de espiar um indice.
+   */
+  function escolherIndiceObra(valor: Exclude<IndiceDaObra, 'nenhum'>) {
+    setForm((atual) => {
+      const novo = atual.indiceObra === valor ? 'nenhum' : valor
+      // Trocar de indice nao pode deixar o percentual do outro pendurado.
+      return { ...atual, indiceObra: novo, cub: novo === 'cub' ? atual.cub : '' }
+    })
+    setErros((atual) => ({ ...atual, cub: '', indiceObra: '' }))
+  }
+
+  function escolherIndiceChaves(valor: Exclude<IndiceDasChaves, 'nenhum'>) {
+    setForm((atual) => {
+      const novo = atual.indiceChaves === valor ? 'nenhum' : valor
+      return { ...atual, indiceChaves: novo, cubChaves: novo === 'cub' ? atual.cubChaves : '' }
+    })
+    setErros((atual) => ({ ...atual, cubChaves: '', indiceChaves: '', juroChaves: '', prazoChaves: '' }))
   }
 
   function aoExportarPdf() {
@@ -724,8 +1006,9 @@ export function SimuladorInvestimento({
                       valorM2Da(unidade) !== null ? `, ${fmtMoeda(valorM2Da(unidade))}/m²` : ''
                     })`
                   : ''}
-                {mesesAteAEntrega(empreendimento.entrega) !== null ? ' e o prazo até a entrega prevista' : ''}. O que já
-                foi pago e a valorização esperada continuam com você — o saldo devedor sai da conta sozinho.
+                {mesesAteAEntrega(empreendimento.entrega) !== null ? ' e o prazo até a entrega prevista' : ''}, além da
+                entrada e do parcelamento da tabela de venda. A valorização esperada continua com você — o saldo devedor
+                sai da conta sozinho.
               </p>
             )}
           </div>
@@ -740,13 +1023,9 @@ export function SimuladorInvestimento({
             {entradaMonetaria('entrada', '90.000,00')}
           </Campo>
 
-          <Campo rotulo="Valor já pago" dica="R$" erro={erros.valorPago}>
-            {entradaMonetaria('valorPago', '150.000,00')}
-          </Campo>
-
           <Campo
             rotulo="Saldo devedor"
-            dica={saldoManual ? 'informado à mão' : 'valor de compra − valor já pago'}
+            dica={saldoManual ? 'informado à mão' : 'valor de compra − entrada'}
             erro={erros.saldoDevedor}
           >
             <input
@@ -785,53 +1064,6 @@ export function SimuladorInvestimento({
             {entradaMonetaria('valorizacao', '10')}
           </Campo>
 
-          {/* Logo depois da valorizacao porque e a segunda taxa da conta — uma
-              empurra o valor do imovel para cima, a outra empurra a divida. */}
-          <div className="col-inteira opcao">
-            <label className="opcao__marcar">
-              <input type="checkbox" checked={usarCub} onChange={(e) => alternarCub(e.target.checked)} />
-              <span>Considerar a correção do CUB no saldo devedor</span>
-            </label>
-            <span className="campo__dica opcao__dica">
-              liga a segunda conclusão, com a dívida corrigida até a entrega
-            </span>
-          </div>
-
-          {usarCub && (
-            <Campo
-              rotulo="Correção (CUB/INCC)"
-              obrigatorio
-              dica={
-                form.unidadeCub === 'mes'
-                  ? cubMensal !== null
-                    ? `${fmtPercentual(anualDoIndice(cubMensal), 2)} ao ano`
-                    : 'como o índice é publicado'
-                  : cubMensal !== null
-                    ? `${fmtPercentual(cubMensal)} ao mês`
-                    : 'convertido para o mês'
-              }
-              erro={erros.cub}
-            >
-              <div className="entrada-com-unidade">
-                <input
-                  className={`entrada${erros.cub ? ' entrada--erro' : ''}`}
-                  value={form.cub}
-                  onChange={(e) => mudar('cub', e.target.value)}
-                  placeholder={form.unidadeCub === 'mes' ? '0,60' : '7,5'}
-                  inputMode="decimal"
-                />
-                <select
-                  className="entrada"
-                  value={form.unidadeCub}
-                  onChange={(e) => mudar('unidadeCub', e.target.value)}
-                  aria-label="Unidade do índice"
-                >
-                  <option value="mes">% ao mês</option>
-                  <option value="ano">% ao ano</option>
-                </select>
-              </div>
-            </Campo>
-          )}
         </div>
 
         {saldoManual && (
@@ -840,13 +1072,6 @@ export function SimuladorInvestimento({
             <button type="button" className="link-acao" onClick={voltarAoSaldoAutomatico}>
               Voltar ao cálculo automático
             </button>
-          </p>
-        )}
-
-        {entradaForaDoPago && (
-          <p className="campo__dica linha-calculo linha-calculo--alerta">
-            <Icone nome="alerta" tamanho={12} /> A entrada está maior que o valor já pago — some a entrada ali, senão o
-            saldo devedor calculado fica maior que o real.
           </p>
         )}
 
@@ -864,30 +1089,235 @@ export function SimuladorInvestimento({
           ))}
         </div>
 
-        {usarCub && (
-          <div className="atalhos-cub">
-            <span className="campo__dica">CUB:</span>
-            {(form.unidadeCub === 'mes' ? ATALHOS_CUB : ATALHOS_CUB_ANO).map((valor) => (
+        <p className="campo__dica" style={{ marginTop: 'var(--e3)' }}>
+          <Icone nome="info" tamanho={12} /> A valorização é composta sobre o valor de compra e a expectativa é{' '}
+          <strong>sua</strong> — esta é a única taxa que o simulador não busca no mercado. O saldo devedor já desconta
+          a entrada; as parcelas que ainda vão ser pagas entram mais abaixo.
+        </p>
+      </section>
+
+      {/* ---------------------------------------------------------------
+          Durante a obra: qual índice corrige o saldo devedor até a entrega.
+          Um OU outro — são duas leituras alternativas do mesmo custo, e no
+          contrato só uma delas está escrita.
+          --------------------------------------------------------------- */}
+      <section className="form-secao">
+        <h3 className="form-secao__titulo">
+          <Icone nome="obra" tamanho={13} />
+          Durante a obra
+          <span className="form-secao__opcional">— opcional; sem índice a dívida não é corrigida</span>
+        </h3>
+
+        <p className="campo__dica">Selecione o índice que deseja calcular</p>
+
+        <div className="seletor-indice" role="group" aria-label="Índice da obra">
+          {INDICES_DA_OBRA.map((opcao) => {
+            const ativa = form.indiceObra === opcao.valor
+            const taxa = taxaDaSerie(opcao.serie)
+            return (
               <button
-                key={valor}
+                key={opcao.valor}
                 type="button"
-                className={`atalho${lerNumero(form.cub) === valor ? ' atalho--ativo' : ''}`}
-                onClick={() => mudar('cub', String(valor).replace('.', ','))}
+                className={`seletor-indice__opcao${ativa ? ' seletor-indice__opcao--ativa' : ''}`}
+                aria-pressed={ativa}
+                onClick={() => escolherIndiceObra(opcao.valor)}
+                title={ativa ? 'Clique de novo para não usar índice nenhum' : undefined}
               >
-                {fmtPercentual(valor)}
+                <span className="seletor-indice__nome">{opcao.rotulo}</span>
+                <span className="seletor-indice__dica">
+                  {opcao.serie
+                    ? taxa?.anual !== null && taxa?.anual !== undefined
+                      ? `${fmtPercentual(taxa.anual, 2)} ao ano`
+                      : carregandoIndices
+                        ? 'consultando…'
+                        : 'indisponível agora'
+                    : opcao.dica}
+                </span>
               </button>
-            ))}
-            {cubNoPeriodo !== null && (
-              <span className="campo__dica">≈ {fmtPercentual(cubNoPeriodo, 2)} de correção no período</span>
-            )}
-          </div>
+            )
+          })}
+        </div>
+
+        {erros.indiceObra && (
+          <p className="campo__dica linha-calculo linha-calculo--alerta">
+            <Icone nome="alerta" tamanho={12} /> {erros.indiceObra}
+          </p>
         )}
 
-        <p className="campo__dica" style={{ marginTop: 'var(--e3)' }}>
-          <Icone nome="info" tamanho={12} /> A valorização é composta sobre o valor de compra e a expectativa é sua —
-          o simulador não busca índice de mercado. O <strong>valor já pago</strong> soma entrada, parcelas, reforços e
-          balões pagos <strong>até hoje</strong>; o que ainda vai ser pago entra logo abaixo.
-        </p>
+        {form.indiceObra === 'cub' && (
+          <>
+            <div className="grade">
+              <Campo
+                rotulo="Percentual do CUB"
+                obrigatorio
+                dica={
+                  form.unidadeCub === 'mes'
+                    ? cubMensal !== null
+                      ? `${fmtPercentual(anualDoIndice(cubMensal), 2)} ao ano`
+                      : 'como o índice é publicado'
+                    : cubMensal !== null
+                      ? `${fmtPercentual(cubMensal)} ao mês`
+                      : 'convertido para o mês'
+                }
+                erro={erros.cub}
+              >
+                <div className="entrada-com-unidade">
+                  <input
+                    className={`entrada${erros.cub ? ' entrada--erro' : ''}`}
+                    value={form.cub}
+                    onChange={(e) => mudar('cub', e.target.value)}
+                    placeholder={form.unidadeCub === 'mes' ? '0,60' : '7,5'}
+                    inputMode="decimal"
+                  />
+                  <select
+                    className="entrada"
+                    value={form.unidadeCub}
+                    onChange={(e) => mudar('unidadeCub', e.target.value)}
+                    aria-label="Unidade do CUB"
+                  >
+                    <option value="mes">% ao mês</option>
+                    <option value="ano">% ao ano</option>
+                  </select>
+                </div>
+              </Campo>
+            </div>
+
+            <div className="atalhos-cub">
+              <span className="campo__dica">CUB:</span>
+              {(form.unidadeCub === 'mes' ? ATALHOS_CUB : ATALHOS_CUB_ANO).map((valor) => (
+                <button
+                  key={valor}
+                  type="button"
+                  className={`atalho${lerNumero(form.cub) === valor ? ' atalho--ativo' : ''}`}
+                  onClick={() => mudar('cub', String(valor).replace('.', ','))}
+                >
+                  {fmtPercentual(valor)}
+                </button>
+              ))}
+              {cubNoPeriodo !== null && (
+                <span className="campo__dica">≈ {fmtPercentual(cubNoPeriodo, 2)} de correção no período</span>
+              )}
+            </div>
+          </>
+        )}
+
+        {form.indiceObra === 'incc' && (
+          <TaxaAutomatica taxa={incc} carregando={carregandoIndices} mensalUsado={cubMensal} periodo={cubNoPeriodo} />
+        )}
+      </section>
+
+      {/* ---------------------------------------------------------------
+          Chaves: o que sobra na entrega vai para o banco, corrigido por um
+          índice e remunerado por um juro. Os dois se compõem — nunca somam.
+          --------------------------------------------------------------- */}
+      <section className="form-secao">
+        <h3 className="form-secao__titulo">
+          <Icone nome="chave" tamanho={13} />
+          Chaves
+          <span className="form-secao__opcional">— cálculo do financiamento; opcional</span>
+        </h3>
+
+        <p className="campo__dica">Selecione o índice que corrige o financiamento</p>
+
+        <div className="seletor-indice seletor-indice--quatro" role="group" aria-label="Índice do financiamento">
+          {INDICES_DAS_CHAVES.map((opcao) => {
+            const ativa = form.indiceChaves === opcao.valor
+            const taxa = taxaDaSerie(opcao.serie)
+            return (
+              <button
+                key={opcao.valor}
+                type="button"
+                className={`seletor-indice__opcao${ativa ? ' seletor-indice__opcao--ativa' : ''}`}
+                aria-pressed={ativa}
+                onClick={() => escolherIndiceChaves(opcao.valor)}
+                title={ativa ? 'Clique de novo para não calcular o financiamento' : opcao.dica}
+              >
+                <span className="seletor-indice__nome">{opcao.rotulo}</span>
+                <span className="seletor-indice__dica">
+                  {opcao.serie
+                    ? taxa?.anual !== null && taxa?.anual !== undefined
+                      ? `${fmtPercentual(taxa.anual, 2)} ao ano`
+                      : carregandoIndices
+                        ? 'consultando…'
+                        : 'indisponível agora'
+                    : opcao.dica}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+
+        {erros.indiceChaves && (
+          <p className="campo__dica linha-calculo linha-calculo--alerta">
+            <Icone nome="alerta" tamanho={12} /> {erros.indiceChaves}
+          </p>
+        )}
+
+        {form.indiceChaves !== 'nenhum' && (
+          <>
+            <div className="grade">
+              {form.indiceChaves === 'cub' && (
+                <Campo
+                  rotulo="Percentual do CUB"
+                  obrigatorio
+                  dica={
+                    indiceChavesAnual !== null
+                      ? `${fmtPercentual(indiceChavesAnual, 2)} ao ano`
+                      : 'a correção do contrato'
+                  }
+                  erro={erros.cubChaves}
+                >
+                  <div className="entrada-com-unidade">
+                    <input
+                      className={`entrada${erros.cubChaves ? ' entrada--erro' : ''}`}
+                      value={form.cubChaves}
+                      onChange={(e) => mudar('cubChaves', e.target.value)}
+                      placeholder={form.unidadeCubChaves === 'mes' ? '0,60' : '7,5'}
+                      inputMode="decimal"
+                    />
+                    <select
+                      className="entrada"
+                      value={form.unidadeCubChaves}
+                      onChange={(e) => mudar('unidadeCubChaves', e.target.value)}
+                      aria-label="Unidade do CUB das chaves"
+                    >
+                      <option value="mes">% ao mês</option>
+                      <option value="ano">% ao ano</option>
+                    </select>
+                  </div>
+                </Campo>
+              )}
+
+              <Campo
+                rotulo="Juro do banco ou da construtora"
+                obrigatorio
+                dica="% ao ano"
+                erro={erros.juroChaves}
+              >
+                {entradaMonetaria('juroChaves', '9,5')}
+              </Campo>
+
+              <Campo rotulo="Prazo do financiamento" obrigatorio dica="anos" erro={erros.prazoChaves}>
+                {entradaMonetaria('prazoChaves', '30')}
+              </Campo>
+            </div>
+
+            {efetivaDasChaves !== null ? (
+              <p className="campo__dica linha-calculo">
+                <Icone nome="info" tamanho={12} /> {indiceDasChaves?.rotulo} de{' '}
+                {fmtPercentual(indiceChavesAnual ?? 0, 2)} com juro de {fmtPercentual(lerNumero(form.juroChaves) ?? 0, 2)}{' '}
+                dão <strong>{fmtPercentual(efetivaDasChaves, 2)} ao ano</strong> (
+                {fmtPercentual(mensalDoIndice(efetivaDasChaves, 'ano'), 4)} ao mês). As duas taxas se compõem sobre a
+                mesma dívida — somar as duas subestimaria a parcela.
+              </p>
+            ) : (
+              <p className="campo__dica linha-calculo">
+                <Icone nome="info" tamanho={12} /> O financiamento é calculado sobre o saldo que sobrar na entrega.
+                Preencha o juro e o prazo para ver a parcela.
+              </p>
+            )}
+          </>
+        )}
       </section>
 
       {/* O que ainda sai do bolso ate a entrega. E o que faz a divida andar:
@@ -1082,6 +1512,50 @@ export function SimuladorInvestimento({
                 <p className="campo__dica linha-calculo">
                   <Icone nome="info" tamanho={12} /> Sem saldo devedor não há o que corrigir: com o imóvel quitado, as
                   duas conclusões dão no mesmo.
+                </p>
+              )}
+            </section>
+          )}
+
+          {/* O que acontece DEPOIS da entrega: o saldo que sobra vira
+              financiamento, e a parcela e a pergunta que o cliente faz. */}
+          {(resultado.financiamento || resultado.cub?.financiamento) && (
+            <section className="form-secao">
+              <h3 className="form-secao__titulo">
+                <Icone nome="chave" tamanho={13} />
+                Financiamento nas chaves
+                <span className="form-secao__complemento">
+                  — {indiceDasChaves?.rotulo} + juro de {fmtPercentual(lerNumero(form.juroChaves) ?? 0, 2)} ao ano
+                </span>
+              </h3>
+
+              <div className="inv-conclusoes">
+                {resultado.financiamento && (
+                  <QuadroFinanciamento
+                    financiamento={resultado.financiamento}
+                    titulo={resultado.cub ? 'Sem correção na obra' : 'Financiamento na entrega'}
+                    dica={`${textoDoPrazo(resultado.financiamento.meses)} · sobre o saldo da entrega`}
+                  />
+                )}
+                {resultado.cub?.financiamento && (
+                  <QuadroFinanciamento
+                    financiamento={resultado.cub.financiamento}
+                    titulo="Com a obra corrigida"
+                    dica={`a dívida chega maior nas chaves · ${textoDoPrazo(resultado.cub.financiamento.meses)}`}
+                    destaque
+                  />
+                )}
+              </div>
+
+              {resultado.financiamento && resultado.cub?.financiamento && (
+                <p className="campo__dica linha-calculo">
+                  <Icone nome="info" tamanho={12} /> A correção da obra acrescenta{' '}
+                  {fmtMoeda(
+                    resultado.cub.financiamento.saldoFinanciado - resultado.financiamento.saldoFinanciado,
+                  )}{' '}
+                  ao que vai ser financiado — e{' '}
+                  {fmtMoeda(resultado.cub.financiamento.price.parcela - resultado.financiamento.price.parcela)} por mês
+                  na parcela da Price, por {textoDoPrazo(resultado.cub.financiamento.meses)}.
                 </p>
               )}
             </section>

@@ -17,14 +17,29 @@ import { fmtMoeda, fmtNumero } from './format'
 export type UnidadePrazo = 'meses' | 'anos'
 export type UnidadeIndice = 'mes' | 'ano'
 
+/**
+ * O financiamento que comeca NAS CHAVES: o saldo que sobra na entrega vai para
+ * o banco (ou para a construtora), corrigido por um indice e remunerado por um
+ * juro. Os dois sao informados ao ANO — e assim que banco e cliente conversam.
+ */
+export interface CondicaoDoFinanciamento {
+  /** Indice de correcao, em % ao ano (IPCA, IGP-M, INPC ou o CUB digitado). */
+  indiceAnual: number
+  /** Juro do banco ou da construtora, em % ao ano. */
+  juroAnual: number
+  /** Prazo do financiamento, em anos. */
+  anos: number
+}
+
 export interface EntradaInvestimento {
   /** Quanto o imovel custou na compra. */
   valorCompra: number
   /** Entrada paga na assinatura (opcional). */
   entrada?: number | null
   /**
-   * Tudo que ja saiu do bolso ate HOJE: entrada, parcelas, reforcos, baloes.
-   * O que ainda vai ser pago durante a obra entra pelo plano de pagamento.
+   * Tudo que ja saiu do bolso ate HOJE. Hoje o formulario manda a propria
+   * entrada aqui; o campo continua separado porque quem chama a funcao de fora
+   * (um teste, uma tela nova) pode ter mais coisa paga do que ela.
    */
   valorPago?: number | null
   /** O que se deve HOJE. Imovel quitado = 0. */
@@ -47,6 +62,8 @@ export interface EntradaInvestimento {
    * null/undefined = simular so com os valores do empreendimento.
    */
   cubMensal?: number | null
+  /** O que acontece DEPOIS da entrega. null = nao simular o financiamento. */
+  financiamento?: CondicaoDoFinanciamento | null
 }
 
 export interface PontoValorizacao {
@@ -92,6 +109,34 @@ export interface Conclusao {
   multiplicador: number | null
   /** A obra mes a mes — e o que a tela e o PDF mostram como evolucao. */
   evolucao: MesDaObra[]
+  /**
+   * O financiamento do saldo que sobra NESTE cenario. Fica dentro da conclusao
+   * (e nao ao lado dela) porque a parcela depende do saldo da entrega: com o
+   * indice da obra ligado, a divida chega maior nas chaves e a parcela sobe
+   * junto — e e exatamente esse efeito que a comparacao mostra.
+   */
+  financiamento: FinanciamentoChaves | null
+}
+
+/** As duas formas de amortizar que o mercado brasileiro usa. */
+export interface FinanciamentoChaves {
+  /** O saldo devedor da entrega, que e o que vai para o banco. */
+  saldoFinanciado: number
+  indiceAnual: number
+  juroAnual: number
+  /**
+   * O custo real do dinheiro: (1+indice)·(1+juro) − 1, em % ao ano. Somar os
+   * dois (indice + juro) subestima — sao duas correcoes sobre a mesma divida.
+   */
+  efetivaAnual: number
+  /** A mesma taxa ao mes (por raiz, nunca dividida por 12). */
+  efetivaMensal: number
+  meses: number
+  anos: number
+  /** Parcela fixa. */
+  price: { parcela: number; total: number; juros: number }
+  /** Amortizacao constante: a primeira parcela e a maior e elas caem. */
+  sac: { primeira: number; ultima: number; amortizacao: number; total: number; juros: number }
 }
 
 export interface CenarioCub extends Conclusao {
@@ -146,22 +191,82 @@ export interface PlanoDePagamento {
 }
 
 /**
- * O saldo devedor que o proprio formulario consegue deduzir: o que falta pagar
- * do valor de compra. O "valor ja pago" ja inclui a entrada (e a soma de tudo
- * que saiu do bolso), entao a conta e compra − pago, com piso em zero — pagar
- * mais que o combinado nao vira divida negativa.
+ * O saldo devedor que o proprio formulario deduz: valor de compra − entrada,
+ * com piso em zero (entrada maior que a compra nao vira divida negativa).
+ *
+ * Ate 12/08 a conta descontava um campo "valor ja pago" que somava entrada,
+ * parcelas e reforcos. Na venda que o corretor apresenta nao ha "ja pago" —
+ * ha entrada —, e o campo em branco fazia o saldo nascer igual ao valor cheio
+ * do imovel.
  *
  * Devolve null quando nao da para deduzir (sem valor de compra), e ai o campo
  * fica com o usuario.
  */
 export function saldoDevedorSugerido(
   valorCompra: number | null | undefined,
-  valorPago: number | null | undefined,
+  entrada: number | null | undefined,
 ): number | null {
   if (valorCompra === null || valorCompra === undefined || !Number.isFinite(valorCompra) || valorCompra <= 0) {
     return null
   }
-  return Math.max(0, valorCompra - ou(valorPago))
+  return Math.max(0, valorCompra - ou(entrada))
+}
+
+/**
+ * Duas taxas anuais sobre a MESMA divida se compoem, nao se somam: IPCA de
+ * 4,44% com juro de 9,5% custa 14,36% ao ano, nao 13,94%. A diferenca parece
+ * pequena no papel e vira dinheiro em trinta anos de financiamento.
+ */
+export function taxaEfetivaAnual(indiceAnual: number, juroAnual: number): number {
+  const indice = 1 + ou(indiceAnual) / 100
+  const juro = 1 + ou(juroAnual) / 100
+  return (indice * juro - 1) * 100
+}
+
+/**
+ * O financiamento que comeca nas chaves, nas duas tabelas que o cliente vai
+ * ouvir no banco. Devolve null quando nao ha o que financiar (saldo zerado) ou
+ * quando o prazo nao foi informado — sem prazo nao existe parcela.
+ */
+export function financiarSaldo(
+  saldo: number,
+  condicao: CondicaoDoFinanciamento | null | undefined,
+): FinanciamentoChaves | null {
+  if (!condicao) return null
+
+  const anos = ou(condicao.anos)
+  const meses = Math.round(anos * 12)
+  const saldoFinanciado = Math.max(0, ou(saldo))
+  if (meses <= 0 || saldoFinanciado <= 0) return null
+
+  const efetivaAnual = taxaEfetivaAnual(condicao.indiceAnual, condicao.juroAnual)
+  const efetivaMensal = mensalDoIndice(efetivaAnual, 'ano')
+  const i = efetivaMensal / 100
+
+  // Taxa zero e um caso real (construtora "sem juros"): a formula da Price
+  // divide por zero, entao a parcela e a divisao simples.
+  const parcelaPrice =
+    i === 0 ? saldoFinanciado / meses : (saldoFinanciado * i) / (1 - Math.pow(1 + i, -meses))
+  const totalPrice = parcelaPrice * meses
+
+  const amortizacao = saldoFinanciado / meses
+  const primeiraSac = amortizacao + saldoFinanciado * i
+  const ultimaSac = amortizacao + amortizacao * i
+  // Soma dos juros da SAC: i · PV · (n+1) / (2n) por mes, n meses.
+  const jurosSac = (i * saldoFinanciado * (meses + 1)) / 2
+  const totalSac = saldoFinanciado + jurosSac
+
+  return {
+    saldoFinanciado,
+    indiceAnual: ou(condicao.indiceAnual),
+    juroAnual: ou(condicao.juroAnual),
+    efetivaAnual,
+    efetivaMensal,
+    meses,
+    anos,
+    price: { parcela: parcelaPrice, total: totalPrice, juros: totalPrice - saldoFinanciado },
+    sac: { primeira: primeiraSac, ultima: ultimaSac, amortizacao, total: totalSac, juros: jurosSac },
+  }
 }
 
 /** Numero valido e positivo, ou o padrao. */
@@ -332,7 +437,12 @@ export function cronogramaDaObra(
 /** Fecha um cenario a partir do cronograma dele. */
 function concluir(
   evolucao: MesDaObra[],
-  base: { saldoInicial: number; valorPago: number; valorEstimadoEntrega: number },
+  base: {
+    saldoInicial: number
+    valorPago: number
+    valorEstimadoEntrega: number
+    financiamento?: CondicaoDoFinanciamento | null
+  },
 ): Conclusao {
   const ultimo = evolucao[evolucao.length - 1]
   const saldoDevedor = ultimo ? ultimo.saldoFinal : Math.max(0, base.saldoInicial)
@@ -355,6 +465,8 @@ function concluir(
     rentabilidade: investidoTotal > 0 ? (lucroPotencial / investidoTotal) * 100 : null,
     multiplicador: investidoTotal > 0 ? patrimonioLiquido / investidoTotal : null,
     evolucao,
+    // O que sobra na entrega e exatamente o que vai para o banco.
+    financiamento: financiarSaldo(saldoDevedor, base.financiamento),
   }
 }
 
@@ -374,7 +486,12 @@ export function simularInvestimento(dados: EntradaInvestimento): ResultadoInvest
   const ganhoPatrimonialBruto = valorEstimadoEntrega - valorCompra
 
   const plano = montarPlano(dados, meses)
-  const comum = { saldoInicial: saldoDevedorHoje, valorPago, valorEstimadoEntrega }
+  const comum = {
+    saldoInicial: saldoDevedorHoje,
+    valorPago,
+    valorEstimadoEntrega,
+    financiamento: dados.financiamento ?? null,
+  }
 
   // Cenario do empreendimento: mesma amortizacao, indice zero.
   const semIndice = concluir(cronogramaDaObra(saldoDevedorHoje, meses, 0, plano), comum)
@@ -421,6 +538,7 @@ function cenarioComCub(
     saldoInicial: number
     valorPago: number
     valorEstimadoEntrega: number
+    financiamento: CondicaoDoFinanciamento | null
     meses: number
     plano: PlanoDePagamento
     semIndice: Conclusao

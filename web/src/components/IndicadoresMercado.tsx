@@ -163,7 +163,12 @@ export function IndicadoresMercado() {
             <span>{erro}</span>
           </div>
         ) : (
-          dados?.indicadores.map((indicador) => <Cartao key={indicador.chave} indicador={indicador} />)
+          // Nem toda série vira cartão: o INPC entrou para o simulador usar
+          // como indexador de financiamento, e um sétimo cartão apertaria os
+          // seis que já estão aqui.
+          dados?.indicadores
+            .filter((indicador) => indicador.noCabecalho !== false)
+            .map((indicador) => <Cartao key={indicador.chave} indicador={indicador} />)
         )}
       </div>
 

@@ -79,7 +79,8 @@ e faixa de valor do m²; busca por nome, construtora, cidade ou bairro (ignora a
 
 **Indicadores de mercado** — a faixa do cabeçalho traz Selic, dólar, IPCA, IGP-M, INCC e TR
 atualizados diariamente pelo Banco Central, cada um com a variação, a seta de tendência e o
-acumulado de 12 meses.
+acumulado de 12 meses. O **INPC** também é consultado, mas não vira cartão: ele existe para
+o simulador usar como indexador de financiamento, e um sétimo cartão apertaria os seis.
 
 **Calculadora do CUB** — dentro do cadastro, o botão **Calcular valor com CUB** simula
 a evolução das parcelas até o fim da obra e vira um fluxo de pagamento pronto.
@@ -172,7 +173,8 @@ percentuais ficam sem conversão e a tela explica o porquê em vez de mostrar ca
 
 ## Indicadores de mercado
 
-A faixa do cabeçalho mostra seis índices que aparecem em toda conversa de venda:
+A faixa do cabeçalho mostra seis índices que aparecem em toda conversa de venda — e o
+serviço consulta um sétimo, o INPC, que o simulador usa como indexador de financiamento:
 
 | Indicador | O que é | Série no SGS |
 |---|---|---|
@@ -182,6 +184,7 @@ A faixa do cabeçalho mostra seis índices que aparecem em toda conversa de vend
 | **IGP-M** | o índice do reajuste de aluguel | 189 |
 | **INCC** | custo da construção (INCC-DI/FGV) | 192 |
 | **TR** | taxa referencial do mês | 7811 |
+| **INPC** *(só no simulador)* | inflação das famílias de menor renda | 188 |
 
 Cada cartão traz o valor, a variação em relação à leitura anterior (**verde para alta,
 vermelho para baixa**, com seta), e o **acumulado de 12 meses** nos índices mensais. A data
@@ -193,7 +196,9 @@ não há CORS, uma consulta serve todas as abas abertas e o número não depende
 quem está com a tela aberta.
 
 **Cache e falhas:** o resultado fica em `api/data/indicadores.json` (fora do Git) com
-validade de **6 horas** — a tela revalida ao abrir e a cada 30 minutos, e o servidor decide
+validade de **6 horas** — e o arquivo guarda também a *lista de séries* que o gerou: quando
+uma série nova entra no código, o cache antigo deixa de valer na hora, em vez de segurar o
+indicador novo por seis horas — — a tela revalida ao abrir e a cada 30 minutos, e o servidor decide
 se vale mesmo consultar. Enquanto os números não chegam, a faixa mostra o esqueleto dos
 cartões. Quando algo dá errado, em três níveis:
 
@@ -304,9 +309,8 @@ continuam por sua conta.
 **Simular investimento**, que já abre com ele escolhido — e "Digitar tudo à mão" volta ao
 modo livre a qualquer momento.
 
-**O que você informa:** valor de compra (obrigatório), entrada, **valor já pago** (entrada
-+ parcelas + reforços + balões pagos **até hoje** — é o que define a rentabilidade), tempo
-até a entrega (em **meses ou anos**) e a valorização anual esperada, com atalhos de 5% a 20%.
+**O que você informa:** valor de compra (obrigatório), **entrada**, tempo até a entrega
+(em **meses ou anos**) e a valorização anual esperada, com atalhos de 5% a 20%.
 
 **Pagamentos até a entrega** (bloco opcional) — parcela mensal, quantas parcelas ainda
 faltam (em branco = até a entrega), quantidade de reforços e o valor de cada um. É isso que
@@ -314,12 +318,16 @@ faz a dívida **andar** durante a obra: o saldo devedor cai a cada pagamento em 
 parado até a entrega. A linha abaixo mostra o total previsto sem correção. Sem preencher
 nada, a simulação se comporta como antes (dívida parada).
 
-O **saldo devedor sai da conta sozinho**: `valor de compra − valor já pago`, com piso em
-zero (pagar mais que o combinado não vira dívida negativa). Ele acompanha o que você
-digita, e o campo continua editável — escrever outro valor ali assume o comando e aparece
-um **"Voltar ao cálculo automático"** para desfazer. Como o *valor já pago* soma a entrada,
-uma entrada maior que ele é sinal de conta pela metade: a tela avisa, porque nesse caso o
-saldo calculado sairia maior que o real.
+O **saldo devedor sai da conta sozinho**: `valor de compra − entrada`, com piso em zero
+(entrada maior que a compra não vira dívida negativa). Ele acompanha o que você digita, e o
+campo continua editável — escrever outro valor ali assume o comando e aparece um **"Voltar
+ao cálculo automático"** para desfazer.
+
+> **Até 12/08 o desconto vinha de um campo "valor já pago"** que somava entrada, parcelas e
+> reforços já quitados. Na venda que o corretor apresenta não existe "já pago" — existe
+> entrada —, e o campo em branco fazia o saldo nascer igual ao valor cheio do imóvel. O
+> campo saiu; o que já saiu do bolso hoje **é a entrada**, e é ela que a rentabilidade
+> compara com o patrimônio no fim.
 
 **A conta:** valorização composta sobre o valor de compra —
 `valor na entrega = compra × (1 + valorização)^anos`, com o prazo convertido para anos
@@ -330,7 +338,7 @@ saldo calculado sairia maior que o real.
 | Valor estimado na entrega | compra corrigida pela valorização |
 | Ganho patrimonial | entrega − compra |
 | Saldo na entrega | o que sobra da dívida depois do cronograma da obra |
-| Investido até a entrega | valor já pago + parcelas e reforços do período |
+| Investido até a entrega | entrada + parcelas e reforços do período |
 | Patrimônio líquido | entrega − saldo na entrega |
 | Lucro potencial | entrega − investido (**não** desconta a dívida) |
 | Rentabilidade | lucro ÷ investido × 100 |
@@ -341,16 +349,28 @@ saldo calculado sairia maior que o real.
 > leitura que o investidor faz na conversa. O **lucro potencial** avisa no próprio card
 > que não desconta o saldo devedor — para o número "no bolso", olhe o patrimônio líquido.
 
-Sem informar o valor já pago, rentabilidade e ROI aparecem como "—" em vez de inventar
-divisão por zero. O gráfico mostra a curva de valorização até a entrega.
+Sem entrada nem parcelas, rentabilidade e ROI aparecem como "—" em vez de inventar divisão
+por zero. O gráfico mostra a curva de valorização até a entrega.
 
-### Considerar o CUB — as duas conclusões
+### Durante a obra — qual índice corrige a dívida
 
-Logo abaixo da valorização anual há a opção **"Considerar a correção do CUB no saldo
-devedor"**. Marcada, abre o campo da **correção (CUB/INCC)** — em **% ao mês ou % ao ano**,
-como o índice estiver na sua mão, com a conversão da outra unidade logo na dica e a correção
-acumulada no período ao lado dos atalhos. O resultado passa a sair em **duas conclusões
-lado a lado**.
+Depois dos dados vem o quadro **Durante a obra**, com dois botões (*"selecione o índice que
+deseja calcular"*). Um **ou** outro, nunca os dois: são leituras alternativas do mesmo
+custo, e no contrato só uma está escrita. Clicar no que já está ativo desliga e volta a
+simular só com os valores do empreendimento.
+
+| Botão | De onde vem a taxa |
+|---|---|
+| **CUB** | você digita, em **% ao mês ou % ao ano** (a dica converte para a outra unidade, e os atalhos trazem os percentuais de sempre) |
+| **INCC** | **automático**, do Banco Central — o mesmo serviço que alimenta a faixa do cabeçalho |
+
+O INCC entra pelo **acumulado de 12 meses**, convertido para o mês por raiz. Projetar a
+obra inteira pelo mês corrente seria refém de um mês atípico — o IGP-M fechou julho/2026 em
+−1,16%, e uma obra de três anos calculada com deflação seria mentira. O quadro mostra as
+duas leituras (12 meses e o equivalente mensal), o último mês publicado e a data da
+consulta; se a série não responder, ele diz isso e manda usar o CUB à mão.
+
+Com um índice escolhido, o resultado passa a sair em **duas conclusões lado a lado**.
 
 **A conta é um cronograma, não uma fórmula fechada.** Mês a mês, na ordem em que a
 construtora fecha o boleto:
@@ -380,12 +400,39 @@ a entrega e a tabela ano a ano (saldo no início, correção, pago no mês, sald
 saldo *sem* correção para comparar) — com "ver mês a mês" para abrir o cronograma inteiro.
 Sem saldo devedor não há o que corrigir: a tela avisa que as duas conclusões dão no mesmo.
 
-Desmarcada a opção, o campo some, o percentual é esquecido e volta a existir uma leitura
-só. As duas conclusões e a evolução da obra vão para o PDF.
+Sem índice escolhido volta a existir uma leitura só. As duas conclusões e a evolução da
+obra vão para o PDF.
 
 > **Por que o índice não pode ser dividido por 12.** "12% ao ano" são 0,9489% ao mês
 > (`(1,12)^(1/12) − 1`), não 1%. O campo converte por raiz e mostra o resultado na dica —
 > digitar o índice anual num campo mensal inflava a dívida em dezenas de pontos.
+
+### Chaves — o financiamento do saldo
+
+O que sobra na entrega vai para o banco (ou para a construtora), e a pergunta que o cliente
+faz é **"quanto fica a parcela?"**. O quadro **Chaves** responde: escolha o indexador entre
+**IPCA, IGP-M, INPC e CUB**, informe o **juro do banco ou da construtora (% ao ano)** e o
+**prazo em anos**.
+
+- **IPCA, IGP-M e INPC** vêm prontos, pelo acumulado de 12 meses do Banco Central — a taxa
+  de cada um aparece no próprio botão, antes de escolher.
+- **CUB** é o caso em que os **dois** números são seus: o percentual do índice (ao mês ou
+  ao ano) e o juro.
+
+> **As duas taxas se compõem, não se somam.** IPCA de 4,44% com juro de 9,5% custa
+> **14,37% ao ano** — `(1+índice)×(1+juro) − 1` —, não 13,94%. A diferença parece pequena
+> no papel e vira dinheiro em trinta anos. A tela mostra a taxa montada (ao ano e ao mês)
+> assim que os dois campos estão preenchidos, antes mesmo de simular.
+
+O resultado traz **Price e SAC** sobre o saldo da entrega: parcela fixa e total pago na
+Price; primeira parcela, última e total na SAC. Com um índice de obra ligado, saem **dois
+quadros** — o financiamento sem correção e o com a obra corrigida —, porque a dívida chega
+maior nas chaves e a parcela sobe junto; a linha abaixo diz exatamente quanto isso pesa por
+mês. Tudo isso vai para o PDF.
+
+> A conta assume a taxa **constante** por todo o prazo. Na prática o índice muda a cada mês
+> e o banco reavalia a taxa na assinatura — é uma projeção de venda, não uma proposta de
+> crédito, e a nota do PDF diz isso.
 
 ### Exportar PDF (a apresentação para o cliente)
 

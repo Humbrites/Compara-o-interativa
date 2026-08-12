@@ -133,6 +133,8 @@ export interface IndicadorMercado {
   acumulado12: number | null
   /** Codigo da serie no SGS do Banco Central. */
   serie: number
+  /** false = a serie existe para quem consulta (o simulador), mas nao vira cartao no topo. */
+  noCabecalho?: boolean
   /** true = a serie nao respondeu agora e este e o ultimo valor conhecido. */
   defasado?: boolean
 }

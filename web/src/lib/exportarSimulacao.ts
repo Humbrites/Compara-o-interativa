@@ -1,7 +1,13 @@
 import type { Simulacao } from './cub'
 import { fmtPercentual } from './cub'
 import { fmtMoeda, fmtNumero, TRACO } from './format'
-import { textoDaConclusao, textoDoPrazo, type Conclusao, type ResultadoInvestimento } from './investimento'
+import {
+  textoDaConclusao,
+  textoDoPrazo,
+  type Conclusao,
+  type FinanciamentoChaves,
+  type ResultadoInvestimento,
+} from './investimento'
 
 /**
  * Exportacoes sem biblioteca externa:
@@ -357,6 +363,91 @@ function blocoDasConclusoes(resultado: ResultadoInvestimento): string {
   </div>`
 }
 
+/** Um quadro de financiamento das chaves no papel. */
+function blocoDoFinanciamento(
+  financiamento: FinanciamentoChaves,
+  titulo: string,
+  dica: string,
+  destaque = false,
+): string {
+  const linha = (rotulo: string, valor: string) =>
+    `<div class="conclusao__linha"><span>${rotulo}</span><b>${valor}</b></div>`
+
+  return `<div class="conclusao${destaque ? ' conclusao--cub' : ''}">
+    <div class="conclusao__titulo">${esc(titulo)}</div>
+    <div class="conclusao__dica">${esc(dica)}</div>
+    ${linha('Saldo financiado', fmtMoeda(financiamento.saldoFinanciado))}
+    ${linha(
+      'Taxa efetiva',
+      `${fmtPercentual(financiamento.efetivaAnual, 2)} a.a. (${fmtPercentual(financiamento.efetivaMensal, 4)} a.m.)`,
+    )}
+    ${linha('Parcela (Price)', fmtMoeda(financiamento.price.parcela))}
+    ${linha('Total pago (Price)', fmtMoeda(financiamento.price.total))}
+    ${linha(
+      '1ª parcela (SAC)',
+      `${fmtMoeda(financiamento.sac.primeira)} → ${fmtMoeda(financiamento.sac.ultima)}`,
+    )}
+    ${linha('Total pago (SAC)', fmtMoeda(financiamento.sac.total))}
+  </div>`
+}
+
+/**
+ * O financiamento que comeca nas chaves. Sai do papel quando o corretor nao
+ * preencheu o quadro — e a pergunta que o cliente faz ("quanto vai ficar a
+ * parcela?"), entao quando existe vem logo depois da conclusao.
+ */
+function blocoDasChaves(resultado: ResultadoInvestimento): string {
+  const semIndice = resultado.financiamento
+  const comIndice = resultado.cub?.financiamento ?? null
+  if (!semIndice && !comIndice) return ''
+
+  const base = (semIndice ?? comIndice) as FinanciamentoChaves
+  const quadros = `<div class="conclusoes">
+    ${
+      semIndice
+        ? blocoDoFinanciamento(
+            semIndice,
+            comIndice ? 'Sem correção na obra' : 'Financiamento na entrega',
+            `${textoDoPrazo(semIndice.meses)} · índice de ${fmtPercentual(
+              semIndice.indiceAnual,
+              2,
+            )} a.a. + juro de ${fmtPercentual(semIndice.juroAnual, 2)} a.a.`,
+          )
+        : ''
+    }
+    ${
+      comIndice
+        ? blocoDoFinanciamento(
+            comIndice,
+            'Com a obra corrigida',
+            `a dívida chega maior nas chaves · ${textoDoPrazo(comIndice.meses)}`,
+            true,
+          )
+        : ''
+    }
+  </div>`
+
+  const comparacao =
+    semIndice && comIndice
+      ? `<p class="conclusao__frase" style="border:0;padding:0;margin-top:8px">
+          A correção da obra acrescenta ${fmtMoeda(
+            comIndice.saldoFinanciado - semIndice.saldoFinanciado,
+          )} ao valor financiado — e ${fmtMoeda(
+            comIndice.price.parcela - semIndice.price.parcela,
+          )} por mês na parcela da Price, por ${textoDoPrazo(comIndice.meses)}.
+        </p>`
+      : `<p class="conclusao__frase" style="border:0;padding:0;margin-top:8px">
+          A Price mantém a parcela fixa; a SAC começa mais cara e cai a cada mês, custando
+          ${fmtMoeda(base.price.total - base.sac.total)} a menos no total.
+        </p>`
+
+  return `<div class="secao">
+    <div class="secao__titulo">Financiamento nas chaves</div>
+    ${quadros}
+    ${comparacao}
+  </div>`
+}
+
 /**
  * A obra mes a mes no papel. Uma linha por ano (mais a entrega): mes a mes o
  * papel viraria tabela de dez paginas, e quem quer o detalhe tem a tela.
@@ -425,7 +516,6 @@ export function exportarPdfInvestimento(
   const investido = itensPreenchidos([
     ['Valor de compra', fmtMoeda(resultado.valorCompra)],
     ['Entrada', resultado.entrada > 0 ? fmtMoeda(resultado.entrada) : null],
-    ['Valor já pago', resultado.valorPago > 0 ? fmtMoeda(resultado.valorPago) : null],
     ['Saldo devedor hoje', resultado.saldoDevedorHoje > 0 ? fmtMoeda(resultado.saldoDevedorHoje) : 'quitado'],
     ['A pagar até a entrega', cenario.pagoNoPeriodo > 0 ? fmtMoeda(cenario.pagoNoPeriodo) : null],
     ['Investido até a entrega', cenario.investidoTotal > 0 ? fmtMoeda(cenario.investidoTotal) : null],
@@ -504,6 +594,8 @@ export function exportarPdfInvestimento(
 
   ${blocoDasConclusoes(resultado)}
 
+  ${blocoDasChaves(resultado)}
+
   ${blocoDaObra(resultado)}
 
   <div class="secao">
@@ -530,6 +622,12 @@ export function exportarPdfInvestimento(
       resultado.pagoNoPeriodo > 0
         ? ` As parcelas informadas abatem o saldo devedor durante a obra — o que sobra na entrega é o valor que
           costuma ir para o financiamento bancário.`
+        : ''
+    }${
+      resultado.financiamento || resultado.cub?.financiamento
+        ? ` No <strong>financiamento das chaves</strong>, o índice e o juro informados se compõem
+          ((1+índice)×(1+juro)−1) e valem por todo o prazo simulado; na prática o índice muda a cada mês e o banco
+          reavalia a taxa na assinatura do contrato.`
         : ''
     }
   </div>
