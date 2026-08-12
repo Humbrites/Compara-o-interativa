@@ -841,6 +841,32 @@
   margin-left: auto;
 }
 
+/* Com dois botoes (importar + adicionar), so o primeiro empurra: o segundo
+   fica colado nele, e nao no outro canto. */
+.unidades__topo .btn ~ .btn {
+  margin-left: 0;
+}
+
+/* Estado vazio com mais de uma saida: os botoes lado a lado, nao empilhados. */
+.estado__acoes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--e2);
+}
+
+/* "Adicionar outra unidade" ocupa a linha; "Importar tabela" acompanha ao lado. */
+.unidades__rodape {
+  display: flex;
+  align-items: stretch;
+  gap: var(--e2);
+}
+
+.unidades__rodape .btn--bloco {
+  flex: 1;
+}
+
 /* Secao da tela do imovel: cartao branco com titulo fixo. Sem abrir/fechar —
    o conteudo esta sempre la, no mesmo lugar, em toda visita. */
 .secao {

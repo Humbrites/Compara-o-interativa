@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import type { Unidade, UnidadeInput } from '../types'
+import type { Empreendimento, Unidade, UnidadeInput } from '../types'
 import { api } from '../lib/api'
 import { lerNumero } from '../lib/cub'
 import { fmtArea, fmtMoeda } from '../lib/format'
@@ -18,6 +18,8 @@ import {
   type FormularioFluxo,
 } from './FormFluxos'
 import { CalculadoraCub } from './CalculadoraCub'
+import { ImportarTabela } from './ImportarTabela'
+import { usePodeEditar } from '../lib/permissao'
 
 type Formulario = Record<string, string>
 
@@ -41,12 +43,27 @@ function paraFormulario(unidade: Unidade): Formulario {
 
 interface Props {
   empreendimentoId: number
+  /**
+   * O empreendimento inteiro, quando quem monta a tela ja o tem em maos (o
+   * cadastro, na etapa 2). Ele destrava o "Importar tabela" aqui dentro: a
+   * importacao precisa do NOME do predio para montar o prompt. Sem ele a
+   * secao segue exatamente como era — o painel do imovel tem o botao dele.
+   */
+  empreendimento?: Empreendimento
   unidades: Unidade[]
   onMudou: (unidades: Unidade[]) => void
   avisar: (texto: string, tipo?: 'sucesso' | 'erro') => void
 }
 
-export function UnidadesDoEmpreendimento({ empreendimentoId, unidades, onMudou, avisar }: Props) {
+export function UnidadesDoEmpreendimento({
+  empreendimentoId,
+  empreendimento,
+  unidades,
+  onMudou,
+  avisar,
+}: Props) {
+  const podeEditar = usePodeEditar()
+  const [importando, setImportando] = useState(false)
   const [form, setForm] = useState<Formulario | null>(null)
   const [editandoId, setEditandoId] = useState<number | null>(null)
   const [salvando, setSalvando] = useState(false)
@@ -262,18 +279,45 @@ export function UnidadesDoEmpreendimento({ empreendimentoId, unidades, onMudou, 
     avisar('Fluxo gerado pela calculadora do CUB')
   }
 
+  /**
+   * O atalho da tabela da construtora so aparece onde ha empreendimento em
+   * maos (e quem pode gravar): digitar a primeira unidade a mao para depois
+   * descobrir o importador seria a ordem errada.
+   */
+  const podeImportar = Boolean(empreendimento) && podeEditar
+
+  const botaoImportar = (pequeno: boolean) =>
+    podeImportar ? (
+      <button
+        type="button"
+        className={`btn btn--secundario${pequeno ? ' btn--pequeno' : ''}`}
+        onClick={() => setImportando(true)}
+        title="Ler a tabela de vendas da construtora e cadastrar as unidades de uma vez"
+      >
+        <Icone nome="lista" tamanho={pequeno ? 14 : 15} />
+        Importar tabela
+      </button>
+    ) : null
+
   return (
     <div>
       {unidades.length === 0 && !form && (
         <Estado
           icone="predio"
           titulo="Nenhuma unidade cadastrada"
-          texto="Cadastre as unidades que o corretor vende — cada uma com a própria metragem, dormitórios, vagas, posição e tabela de pagamento. Elas podem ser comparadas uma a uma."
+          texto={
+            podeImportar
+              ? 'Cadastre as unidades que o corretor vende — cada uma com a própria metragem, dormitórios, vagas, posição e tabela de pagamento. Se você tem a tabela de vendas da construtora, importe-a e o prédio inteiro entra de uma vez, sem digitar unidade por unidade.'
+              : 'Cadastre as unidades que o corretor vende — cada uma com a própria metragem, dormitórios, vagas, posição e tabela de pagamento. Elas podem ser comparadas uma a uma.'
+          }
           acao={
-            <button type="button" className="btn btn--primario" onClick={abrirNova}>
-              <Icone nome="mais" tamanho={15} />
-              Adicionar unidade
-            </button>
+            <div className="estado__acoes">
+              <button type="button" className="btn btn--primario" onClick={abrirNova}>
+                <Icone nome="mais" tamanho={15} />
+                Adicionar unidade
+              </button>
+              {botaoImportar(false)}
+            </div>
           }
         />
       )}
@@ -286,6 +330,7 @@ export function UnidadesDoEmpreendimento({ empreendimentoId, unidades, onMudou, 
           <span className="unidades__contagem">
             {unidades.length} {unidades.length === 1 ? 'unidade cadastrada' : 'unidades cadastradas'}
           </span>
+          {botaoImportar(true)}
           <button type="button" className="btn btn--secundario btn--pequeno" onClick={abrirNova}>
             <Icone nome="mais" tamanho={14} />
             Adicionar unidade
@@ -357,10 +402,24 @@ export function UnidadesDoEmpreendimento({ empreendimentoId, unidades, onMudou, 
       )}
 
       {!form && unidades.length > 0 && (
-        <button type="button" className="btn btn--secundario btn--bloco" onClick={abrirNova}>
-          <Icone nome="mais" tamanho={15} />
-          Adicionar outra unidade
-        </button>
+        <div className="unidades__rodape">
+          <button type="button" className="btn btn--secundario btn--bloco" onClick={abrirNova}>
+            <Icone nome="mais" tamanho={15} />
+            Adicionar outra unidade
+          </button>
+          {botaoImportar(false)}
+        </div>
+      )}
+
+      {importando && empreendimento && (
+        <ImportarTabela
+          empreendimento={empreendimento}
+          // A rota de confirmar devolve a lista inteira e pronta (com fluxos):
+          // a mesma porta por onde a unidade salva a mao entra na tela.
+          onImportou={(novas) => onMudou(novas)}
+          avisar={avisar}
+          onFechar={() => setImportando(false)}
+        />
       )}
 
       {form && (

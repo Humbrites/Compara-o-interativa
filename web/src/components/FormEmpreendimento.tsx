@@ -641,6 +641,7 @@ export function FormEmpreendimento({
         {salvo && (
           <UnidadesDoEmpreendimento
             empreendimentoId={salvo.id}
+            empreendimento={salvo}
             unidades={salvo.unidades}
             onMudou={(unidades) => aplicarUnidades(salvo.id, unidades)}
             avisar={avisar}
