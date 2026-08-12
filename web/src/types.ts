@@ -61,6 +61,112 @@ export type UnidadeInput = Partial<
   Record<keyof Omit<Unidade, 'id' | 'criado_em' | 'atualizado_em' | 'fluxos'>, string | number | null>
 >
 
+/* ------------------------------------------------------------------ */
+/* Importacao de tabela de unidades (leitura por IA)                   */
+/* ------------------------------------------------------------------ */
+
+/** Os quatro estados de disponibilidade que a importacao grava. */
+export type StatusUnidade = 'disponivel' | 'reservada' | 'vendida' | 'indisponivel'
+
+/** Os campos que a IA sabe extrair de uma linha da tabela. */
+export interface CamposImportados {
+  identificacao: string | null
+  torre: string | null
+  andar: number | null
+  numero: string | null
+  tipologia: string | null
+  metragem: number | null
+  metragem_total: number | null
+  dormitorios: number | null
+  suites: number | null
+  banheiros: number | null
+  vagas: number | null
+  valor: number | null
+  status: StatusUnidade | null
+  observacoes: string | null
+}
+
+export type CampoImportado = keyof CamposImportados
+
+export interface UnidadeNova {
+  chave: string | null
+  campos: CamposImportados
+}
+
+export interface UnidadeAlterada {
+  id: number
+  identificacao: string
+  antes: Partial<CamposImportados>
+  depois: Partial<CamposImportados>
+  campos: CampoImportado[]
+}
+
+export interface UnidadeAusente {
+  id: number
+  identificacao: string
+  status_atual: string | null
+}
+
+/** O que a IA nao teve certeza de ler — ela deixa null e avisa aqui. */
+export interface DuvidaImportacao {
+  unidade?: string | null
+  campo?: string | null
+  texto: string
+}
+
+/** A condicao de pagamento que veio na tabela, quando houver. */
+export interface FluxoDaConstrutora {
+  nome?: string | null
+  entrada_pct?: number | null
+  entrada_valor?: number | null
+  parcelas?: number | null
+  parcela_valor?: number | null
+  reforcos_qtd?: number | null
+  reforco_valor?: number | null
+  chaves_pct?: number | null
+  financiamento_pct?: number | null
+  financiamento_valor?: number | null
+  descricao?: string | null
+}
+
+/**
+ * O corpo que a tela manda para a PREVIA — exatamente o que
+ * `validarPayloadDaPrevia` (api/src/importacao.js) espera, e exatamente o que
+ * `validarRespostaDaIa` devolve. Os dois lados falam do mesmo objeto de
+ * proposito: qualquer campo a mais aqui e recusado la com "campo desconhecido".
+ */
+export interface EntradaImportacao {
+  unidades: CamposImportados[]
+  duvidas: DuvidaImportacao[]
+  fluxo_construtora: FluxoDaConstrutora | null
+}
+
+/** A previa: o que aconteceria se a importacao fosse confirmada. */
+export interface PreviaImportacao {
+  novas: UnidadeNova[]
+  alteradas: UnidadeAlterada[]
+  ausentes: UnidadeAusente[]
+  duvidas: DuvidaImportacao[]
+  fluxo_construtora: FluxoDaConstrutora | null
+  totalRecebidas: number
+}
+
+export interface ConfirmacaoImportacao {
+  criar: Partial<CamposImportados>[]
+  atualizar: { id: number; campos: Partial<CamposImportados> }[]
+  marcarIndisponiveis: number[]
+  fluxo_construtora?: FluxoDaConstrutora | null
+}
+
+export interface ResultadoImportacao {
+  importacaoId: number
+  criadas: number
+  atualizadas: number
+  indisponiveis: number
+  unidades: Unidade[]
+  fluxo_construtora: FluxoDaConstrutora | null
+}
+
 /** Foto enviada pelo usuario; o arquivo mora na API e chega aqui como URL. */
 export interface ImagemEmpreendimento {
   id: number

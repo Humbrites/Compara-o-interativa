@@ -26,17 +26,74 @@ export const POSICOES_SOLARES = [
 /** Onde ela fica no prédio em relacao a rua. */
 export const FACES = ['Frente', 'Fundos', 'Lateral', 'Esquina'] as const
 
-export const STATUS_UNIDADE = ['Disponível', 'Reservada', 'Vendida'] as const
+export const STATUS_UNIDADE = ['Disponível', 'Reservada', 'Vendida', 'Indisponível'] as const
 
-export const CORES_STATUS_UNIDADE: Record<string, string> = {
-  disponível: 'verde',
+/**
+ * Os quatro estados de disponibilidade, na forma NORMALIZADA (sem acento, em
+ * minusculas) — e a mesma que a API grava desde a importacao de tabela.
+ *
+ * A base tem os dois formatos: o que foi digitado no cadastro ("Disponível") e
+ * o que a importacao grava ("disponivel"). Por isso ninguem compara `status`
+ * cru em lugar nenhum: passa sempre por `normalizarStatusUnidade`.
+ */
+export const STATUS_UNIDADE_SLUG = ['disponivel', 'reservada', 'vendida', 'indisponivel'] as const
+
+export type StatusUnidadeSlug = (typeof STATUS_UNIDADE_SLUG)[number]
+
+const ROTULO_STATUS: Record<StatusUnidadeSlug, string> = {
+  disponivel: 'Disponível',
+  reservada: 'Reservada',
+  vendida: 'Vendida',
+  indisponivel: 'Indisponível',
+}
+
+/** Tira acento e pontuacao — o que sobra e o que compara. */
+const achatar = (texto: string) =>
+  texto
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '')
+
+/** O status num dos quatro valores; null quando nao da para afirmar qual e. */
+export function normalizarStatusUnidade(status: string | null | undefined): StatusUnidadeSlug | null {
+  if (!status) return null
+  const chave = achatar(status)
+  const equivalentes: Record<string, StatusUnidadeSlug> = {
+    disponivel: 'disponivel',
+    livre: 'disponivel',
+    avenda: 'disponivel',
+    reservada: 'reservada',
+    reservado: 'reservada',
+    vendida: 'vendida',
+    vendido: 'vendida',
+    indisponivel: 'indisponivel',
+    bloqueada: 'indisponivel',
+    permutada: 'indisponivel',
+  }
+  return equivalentes[chave] ?? null
+}
+
+/**
+ * Como o status aparece na tela. Status que nao e um dos quatro (veio digitado
+ * a mao antes disso existir) sai como esta — melhor mostrar o que o usuario
+ * escreveu do que engolir a informacao.
+ */
+export function rotuloStatusUnidade(status: string | null): string {
+  const slug = normalizarStatusUnidade(status)
+  return slug ? ROTULO_STATUS[slug] : (status ?? '').trim()
+}
+
+export const CORES_STATUS_UNIDADE: Record<StatusUnidadeSlug, string> = {
+  disponivel: 'verde',
   reservada: 'ambar',
   vendida: 'cinza',
+  indisponivel: 'cinza',
 }
 
 export function corDoStatusUnidade(status: string | null): string {
-  if (!status) return 'cinza'
-  return CORES_STATUS_UNIDADE[status.trim().toLowerCase()] ?? 'cinza'
+  const slug = normalizarStatusUnidade(status)
+  return slug ? CORES_STATUS_UNIDADE[slug] : 'cinza'
 }
 
 /** Peso de cada status: quanto maior, mais avancada a obra. */

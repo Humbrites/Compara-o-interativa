@@ -420,6 +420,23 @@ for (const coluna of COLUNAS_NOVAS) {
   }
 }
 
+// Historico de importacao de tabela de unidades (a etapa da IA). Guardamos o
+// RESUMO do que foi aplicado — quantas unidades nasceram, quantas mudaram e o
+// diff confirmado — porque quem recebe uma tabela nova da construtora toda
+// semana precisa saber o que a importacao de terca mexeu. Tabela nova entra
+// com CREATE TABLE IF NOT EXISTS, no mesmo padrao das demais.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS importacoes (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    empreendimento_id INTEGER NOT NULL REFERENCES empreendimentos(id) ON DELETE CASCADE,
+    criado_em         TEXT NOT NULL DEFAULT (datetime('now')),
+    resumo            TEXT
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_importacoes_empreendimento
+    ON importacoes(empreendimento_id, id);
+`)
+
 /** Colunas gravaveis de cada tabela — a fonte da verdade para montar INSERT/UPDATE. */
 export const CAMPOS_EMPREENDIMENTO = [
   'nome', 'construtora', 'cidade', 'bairro', 'endereco',
@@ -463,7 +480,7 @@ const NUMERICOS = new Set([
  */
 const SO_MILHAR = /^-?\d{1,3}(\.\d{3})+$/
 
-function lerNumero(bruto) {
+export function lerNumero(bruto) {
   const texto = String(bruto).replace(/[^\d,.-]/g, '').trim()
   if (!texto) return null
 

@@ -2,9 +2,13 @@
 // mesmo para os dados e para o acesso, e e quem avisa o portao no 401.
 import { request } from './http'
 import type {
+  ConfirmacaoImportacao,
   Empreendimento,
   EmpreendimentoInput,
   EnderecoEncontrado,
+  EntradaImportacao,
+  PreviaImportacao,
+  ResultadoImportacao,
   FluxoPagamento,
   FluxoInput,
   ImagemEmpreendimento,
@@ -50,6 +54,38 @@ export const api = {
     request<Unidade>(`/api/unidades/${id}`, { method: 'PUT', body: JSON.stringify(dados) }),
 
   excluirUnidade: (id: number) => request<void>(`/api/unidades/${id}`, { method: 'DELETE' }),
+
+  unidadesDe: (empreendimentoId: number) =>
+    request<Unidade[]>(`/api/empreendimentos/${empreendimentoId}/unidades`),
+
+  /* --- Importacao de tabela de unidades (leitura por IA) --------------- */
+
+  /**
+   * Manda o JSON JA VALIDADO (`validarRespostaDaIa`) e recebe a PREVIA — nada
+   * e gravado aqui. Quem le a tabela e a IA do usuario, fora daqui; o que a
+   * API faz e o DIFF, contra o que esta no banco. Diffar no navegador seria
+   * comparar com uma copia possivelmente velha da base.
+   *
+   * O servidor revalida o corpo do zero (`validarPayloadDaPrevia`): a
+   * validacao do navegador e conveniencia, nao guarda.
+   */
+  previaImportacao: (empreendimentoId: number, payload: EntradaImportacao) =>
+    request<PreviaImportacao>(`/api/empreendimentos/${empreendimentoId}/importacao/previa`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  /** Aplica o que a pessoa confirmou na previa, numa transacao so. */
+  confirmarImportacao: (empreendimentoId: number, payload: ConfirmacaoImportacao) =>
+    request<ResultadoImportacao>(`/api/empreendimentos/${empreendimentoId}/importacao/confirmar`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  importacoesDe: (empreendimentoId: number) =>
+    request<{ id: number; criado_em: string; contagens: Record<string, number> | null }[]>(
+      `/api/empreendimentos/${empreendimentoId}/importacoes`,
+    ),
 
   /**
    * Manda em lotes de 20 porque e o teto do multipart da API — passar disso

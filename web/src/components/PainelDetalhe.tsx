@@ -22,6 +22,7 @@ import { CompararUnidades } from './CompararUnidades'
 import { AnaliseUnidade } from './AnaliseUnidade'
 import { FluxosDoEmpreendimento, fluxoParaEnvio, fluxoParaFormulario } from './FormFluxos'
 import { Galeria } from './Galeria'
+import { ImportarTabela } from './ImportarTabela'
 import { Selo } from './ui'
 
 /**
@@ -150,6 +151,8 @@ export function PainelDetalhe({
   // Qual unidade esta com a analise de oportunidade aberta.
   const [analisando, setAnalisando] = useState<number | null>(null)
   const [comparandoUnidades, setComparandoUnidades] = useState(false)
+  // A importacao da tabela da construtora abre em modal, em passos.
+  const [importando, setImportando] = useState(false)
   // A lista de unidades pode ser recolhida: e a unica parte que cresce sem
   // limite. Nasce ABERTA — e o que o corretor abre a tela para ver.
   const [unidadesAbertas, setUnidadesAbertas] = useState(true)
@@ -158,6 +161,7 @@ export function PainelDetalhe({
   useEffect(() => {
     setAnalisando(null)
     setComparandoUnidades(false)
+    setImportando(false)
     setUnidadesAbertas(true)
     setUnidadeAberta(null)
   }, [e.id])
@@ -414,10 +418,23 @@ export function PainelDetalhe({
                   </button>
                 )}
                 {podeEditar && (
-                  <button type="button" className="btn btn--fantasma btn--pequeno" onClick={onAdicionarUnidade}>
-                    <Icone nome="mais" tamanho={13} />
-                    Adicionar
-                  </button>
+                  <>
+                    {/* Cadastrar unidade a unidade e o caminho de uma; a
+                        tabela da construtora traz o predio inteiro de uma vez. */}
+                    <button
+                      type="button"
+                      className="btn btn--secundario btn--pequeno"
+                      onClick={() => setImportando(true)}
+                      title="Ler a tabela de vendas da construtora e cadastrar as unidades de uma vez"
+                    >
+                      <Icone nome="lista" tamanho={13} />
+                      Importar tabela
+                    </button>
+                    <button type="button" className="btn btn--fantasma btn--pequeno" onClick={onAdicionarUnidade}>
+                      <Icone nome="mais" tamanho={13} />
+                      Adicionar
+                    </button>
+                  </>
                 )}
               </>
             }
@@ -554,6 +571,15 @@ export function PainelDetalhe({
           // a mesma tela já com a base inteira à mostra.
           soDoEmpreendimento
           onFechar={() => setComparandoUnidades(false)}
+        />
+      )}
+
+      {importando && (
+        <ImportarTabela
+          empreendimento={e}
+          onImportou={onMudouUnidades}
+          avisar={avisar}
+          onFechar={() => setImportando(false)}
         />
       )}
 

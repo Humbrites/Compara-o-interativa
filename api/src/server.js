@@ -24,6 +24,15 @@ import { criarServicoIndicadores } from './indicadores.js'
 import { criarServicoDeEndereco } from './geocodificar.js'
 import { registrarAutenticacao } from './rotas-auth.js'
 import { registrarPlataforma } from './rotas-plataforma.js'
+import {
+  CAMPOS_IMPORTAVEIS,
+  LIMITE_PAYLOAD,
+  montarDiff,
+  normalizarCampo,
+  normalizarUnidade,
+  PayloadInvalido,
+  validarPayloadDaPrevia,
+} from './importacao.js'
 
 const app = Fastify({ logger: true })
 
@@ -316,6 +325,170 @@ app.delete('/api/unidades/:id', (req, reply) => {
   db.prepare('DELETE FROM unidades WHERE id = ?').run(id)
   recalcularResumo(unidade.empreendimento_id)
   return reply.code(204).send()
+})
+
+/* ------------------------------------------------------------------ */
+/* Importação de tabela de unidades                                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A tabela da construtora, já em JSON, comparada com o cadastro.
+ *
+ * Quem LEU a tabela foi a IA do próprio usuário: a tela dá o prompt pronto,
+ * ele cola no ChatGPT dele junto com a planilha e traz o JSON de volta. Não há
+ * chave de IA nem chamada a serviço nenhum aqui — o sistema não fala com a
+ * OpenAI/Anthropic, fala com quem está na frente da tela.
+ *
+ * Duas rotas de propósito. Esta só MOSTRA o que aconteceria; a de baixo é a
+ * que grava, e só com o que a pessoa confirmou. Uma rota só (colar e aplicar
+ * no mesmo clique) faria a leitura errada de uma coluna virar preço errado em
+ * trinta apartamentos, sem ninguém ver.
+ *
+ * ⚠️ Tudo é revalidado aqui. A tela já valida antes de mandar, mas aquilo é
+ * conveniência: o corpo desta requisição foi montado a partir de um texto
+ * COLADO por uma pessoa, e nada dele é confiável por ter passado pelo front.
+ */
+app.post('/api/empreendimentos/:id/importacao/previa', (req, reply) => {
+  const { id } = req.params
+  if (!buscarEmpreendimento.get(id, contaDe(req))) {
+    return reply.code(404).send({ erro: 'Empreendimento nao encontrado' })
+  }
+
+  if (Buffer.byteLength(JSON.stringify(req.body ?? null), 'utf8') > LIMITE_PAYLOAD) {
+    return reply.code(413).send({
+      erro: 'A tabela é grande demais para uma importação só. Divida em partes (por torre, por exemplo) e importe uma de cada vez.',
+    })
+  }
+
+  let lido
+  try {
+    lido = validarPayloadDaPrevia(req.body)
+  } catch (erro) {
+    if (erro instanceof PayloadInvalido) {
+      return reply.code(400).send({
+        erro: erro.problemas.length === 1 ? erro.problemas[0] : `A resposta colada tem ${erro.problemas.length} problemas.`,
+        problemas: erro.problemas,
+      })
+    }
+    throw erro
+  }
+
+  return {
+    ...montarDiff(unidadesDoEmpreendimento.all(id), lido.unidades),
+    duvidas: lido.duvidas,
+    fluxo_construtora: lido.fluxo_construtora,
+    totalRecebidas: lido.unidades.length,
+  }
+})
+
+/**
+ * Aplica o que foi revisado. Tudo numa transação: metade de uma tabela de
+ * cinquenta unidades gravada é pior do que nenhuma — ninguém saberia onde a
+ * importação parou.
+ */
+app.post('/api/empreendimentos/:id/importacao/confirmar', (req, reply) => {
+  const { id } = req.params
+  if (!buscarEmpreendimento.get(id, contaDe(req))) {
+    return reply.code(404).send({ erro: 'Empreendimento nao encontrado' })
+  }
+
+  const corpo = req.body || {}
+  const criar = Array.isArray(corpo.criar) ? corpo.criar : []
+  const atualizar_ = Array.isArray(corpo.atualizar) ? corpo.atualizar : []
+  const marcarIndisponiveis = Array.isArray(corpo.marcarIndisponiveis) ? corpo.marcarIndisponiveis : []
+
+  if (criar.length === 0 && atualizar_.length === 0 && marcarIndisponiveis.length === 0) {
+    return reply.code(400).send({ erro: 'Nada foi marcado para importar' })
+  }
+
+  // Só id de unidade DESTE empreendimento é aceito: um id de outra conta
+  // enviado à mão não pode alterar nada.
+  const daCasa = new Set(unidadesDoEmpreendimento.all(id).map((u) => u.id))
+
+  const aplicar = db.transaction(() => {
+    const contagens = { criadas: 0, atualizadas: 0, indisponiveis: 0 }
+
+    for (const bruta of criar) {
+      const campos = normalizarUnidade(bruta)
+      const dados = sanitizar({ ...campos, empreendimento_id: Number(id) }, CAMPOS_UNIDADE)
+      inserir('unidades', dados)
+      contagens.criadas += 1
+    }
+
+    for (const item of atualizar_) {
+      const alvo = Number(item?.id)
+      if (!daCasa.has(alvo)) continue
+
+      const dados = {}
+      for (const [campo, valor] of Object.entries(item?.campos || {})) {
+        if (!CAMPOS_IMPORTAVEIS.includes(campo)) continue
+        dados[campo] = normalizarCampo(campo, valor)
+      }
+      if (Object.keys(dados).length === 0) continue
+
+      atualizar('unidades', alvo, dados)
+      contagens.atualizadas += 1
+    }
+
+    // A unidade que sumiu da tabela nova só muda de STATUS. Apagar seria
+    // perder o histórico de um apartamento por causa de uma coluna esquecida
+    // na planilha da construtora.
+    for (const bruto of marcarIndisponiveis) {
+      const alvo = Number(bruto)
+      if (!daCasa.has(alvo)) continue
+      atualizar('unidades', alvo, { status: 'indisponivel' })
+      contagens.indisponiveis += 1
+    }
+
+    const resumo = {
+      contagens,
+      criadas: criar.map(normalizarUnidade),
+      atualizadas: atualizar_.filter((i) => daCasa.has(Number(i?.id))),
+      indisponiveis: marcarIndisponiveis.map(Number).filter((i) => daCasa.has(i)),
+    }
+
+    const importacaoId = db
+      .prepare('INSERT INTO importacoes (empreendimento_id, resumo) VALUES (?, ?)')
+      .run(id, JSON.stringify(resumo)).lastInsertRowid
+
+    return { contagens, importacaoId }
+  })
+
+  const { contagens, importacaoId } = aplicar()
+
+  // Os números gerais do empreendimento saem das unidades — a importação mexeu
+  // em várias de uma vez, então o recálculo roda uma vez no fim.
+  recalcularResumo(Number(id))
+
+  return {
+    importacaoId,
+    ...contagens,
+    unidades: unidadesDoEmpreendimento.all(id).map(comFluxos),
+    // A condição de pagamento da construtora ainda NÃO é gravada: ela vira
+    // fluxo de pagamento na etapa 2 deste projeto. Devolvemos o que veio para
+    // a tela poder mostrar que foi lido.
+    fluxo_construtora: corpo.fluxo_construtora ?? null,
+  }
+})
+
+app.get('/api/empreendimentos/:id/importacoes', (req, reply) => {
+  const { id } = req.params
+  if (!buscarEmpreendimento.get(id, contaDe(req))) {
+    return reply.code(404).send({ erro: 'Empreendimento nao encontrado' })
+  }
+
+  return db
+    .prepare('SELECT id, criado_em, resumo FROM importacoes WHERE empreendimento_id = ? ORDER BY id DESC')
+    .all(id)
+    .map((linha) => {
+      let contagens = null
+      try {
+        contagens = JSON.parse(linha.resumo)?.contagens ?? null
+      } catch {
+        // Resumo ilegível não pode derrubar a lista do histórico.
+      }
+      return { id: linha.id, criado_em: linha.criado_em, contagens }
+    })
 })
 
 /* ------------------------------------------------------------------ */

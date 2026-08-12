@@ -1316,3 +1316,259 @@ select.entrada {
 .opcao__dica {
   padding-left: calc(16px + var(--e2));
 }
+
+/* ==========================================================================
+   Importacao da tabela da construtora
+   ========================================================================== */
+
+/* A trilha diz em que ponto do vaivem (tela → chat → tela) a pessoa esta.
+   Sem ela, o passo 2 chega como uma caixa de texto sem contexto. */
+.importacao__trilha {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e2) var(--e4);
+  margin: 0 0 var(--e5);
+  padding: 0;
+  list-style: none;
+}
+
+.importacao__etapa {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  font-size: 12.5px;
+  font-weight: 600;
+  /* --texto-3 sobre branco fica no limite do AA; o passo inativo continua
+     legivel em --texto-2. */
+  color: var(--texto-2);
+}
+
+.importacao__etapa-num {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--raio-pill);
+  background: var(--superficie-3);
+  color: var(--texto-2);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.importacao__etapa--atual {
+  color: var(--marca-600);
+}
+
+.importacao__etapa--atual .importacao__etapa-num {
+  background: var(--marca-500);
+  color: var(--texto-invertido);
+}
+
+.importacao__etapa--feita .importacao__etapa-num {
+  background: var(--vitoria-fundo);
+  color: var(--vitoria);
+}
+
+.importacao__instrucoes {
+  margin: 0;
+  padding-left: var(--e5);
+  display: grid;
+  gap: var(--e2);
+  font-size: 13.5px;
+  color: var(--texto-2);
+  line-height: 1.5;
+}
+
+.importacao__nota {
+  margin: var(--e3) 0 0;
+  font-size: 12.5px;
+  color: var(--texto-2);
+  line-height: 1.5;
+}
+
+/* O prompt e longo de proposito: mostrar tudo empurraria o botao de copiar
+   para fora da tela, entao o bloco rola dentro de si mesmo. */
+.importacao__prompt {
+  margin: var(--e3) 0 0;
+  max-height: 260px;
+  overflow: auto;
+  padding: var(--e4);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-sm);
+  background: var(--superficie-2);
+  color: var(--texto-2);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.importacao__area {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: var(--e3);
+  padding: var(--e3);
+  border: 1px solid var(--borda-forte);
+  border-radius: var(--raio-sm);
+  background: var(--superficie);
+  color: var(--texto);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.importacao__area:focus {
+  outline: none;
+  border-color: var(--marca-500);
+  box-shadow: var(--foco);
+}
+
+.importacao__erro,
+.importacao__problemas {
+  margin-bottom: var(--e5);
+  padding: var(--e4);
+  border: 1px solid var(--perigo);
+  border-radius: var(--raio-sm);
+  background: var(--perigo-fundo);
+  color: var(--texto);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.importacao__erro {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  color: var(--perigo);
+  font-weight: 600;
+}
+
+.importacao__problemas {
+  margin: var(--e4) 0 0;
+}
+
+.importacao__problemas > strong {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  color: var(--perigo);
+}
+
+.importacao__problemas ul {
+  margin: var(--e2) 0 0;
+  padding-left: var(--e5);
+  display: grid;
+  gap: var(--e1);
+}
+
+.importacao__lista-duvidas {
+  margin: 0;
+  padding-left: var(--e5);
+  display: grid;
+  gap: var(--e2);
+  font-size: 13px;
+  color: var(--texto-2);
+  line-height: 1.5;
+}
+
+.importacao__vazio {
+  margin: 0;
+  font-size: 13px;
+  color: var(--texto-2);
+}
+
+.importacao__itens {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--e2);
+}
+
+.importacao__item {
+  padding: var(--e3);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-sm);
+  background: var(--superficie-2);
+}
+
+.importacao__marca {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--texto);
+  cursor: pointer;
+}
+
+.importacao__marca input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--marca-500);
+  cursor: pointer;
+}
+
+.importacao__resumo {
+  display: block;
+  /* Alinhado com o texto do rotulo, nao com a caixinha. */
+  padding-left: calc(16px + var(--e2));
+  font-size: 12.5px;
+  color: var(--texto-2);
+}
+
+.importacao__mudancas {
+  margin: var(--e2) 0 0;
+  padding: 0 0 0 calc(16px + var(--e2));
+  list-style: none;
+  display: grid;
+  gap: var(--e1);
+  font-size: 12.5px;
+}
+
+.importacao__mudancas li {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--e2);
+  color: var(--texto-2);
+}
+
+.importacao__campo {
+  min-width: 130px;
+  color: var(--texto-2);
+}
+
+.importacao__antes {
+  color: var(--texto-2);
+  text-decoration: line-through;
+}
+
+.importacao__depois {
+  color: var(--texto);
+  font-weight: 700;
+}
+
+.importacao__mudancas--fluxo .importacao__campo {
+  text-transform: capitalize;
+}
+
+.importacao__contagens {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e2) var(--e6);
+  font-size: 13.5px;
+  color: var(--texto-2);
+}
+
+.importacao__contagens strong {
+  font-size: 20px;
+  color: var(--texto);
+  margin-right: var(--e1);
+}

@@ -1,4 +1,5 @@
 import type { FluxoPagamento, Unidade } from '../types'
+import { normalizarStatusUnidade } from './opcoes'
 
 /**
  * Como a unidade e chamada na tela. Cai para o numero, depois para a torre e,
@@ -101,7 +102,9 @@ function faixa(valores: (number | null)[]): Faixa {
 export function resumoUnidades(unidades: Unidade[]) {
   return {
     total: unidades.length,
-    disponiveis: unidades.filter((u) => (u.status || '').trim().toLowerCase() === 'disponível').length,
+    // A base tem os dois formatos de status (o digitado no cadastro e o que a
+    // importacao grava): quem conta passa pela normalizacao, nunca pelo texto cru.
+    disponiveis: unidades.filter((u) => normalizarStatusUnidade(u.status) === 'disponivel').length,
     metragem: faixa(unidades.map((u) => u.metragem)),
     valor: faixa(unidades.map(precoDaUnidade)),
     valorM2: faixa(unidades.map(valorM2Da)),

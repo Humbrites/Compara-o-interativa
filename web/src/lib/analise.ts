@@ -1,5 +1,8 @@
 import type { FluxoPagamento, Unidade } from '../types'
 import { detalharFluxo } from './fluxos'
+// O status gravado vem em formatos diferentes ("Disponível" do cadastro,
+// "disponivel" da importação): quem conta unidade disponível precisa dos dois.
+import { normalizarStatusUnidade } from './opcoes'
 import { precoDaUnidade, valorM2Da } from './unidades'
 
 /**
@@ -300,7 +303,7 @@ export function analisarEmpreendimento(unidades: Unidade[]): AnaliseDoEmpreendim
   return {
     unidades: unidades.length,
     comPreco: precos.length,
-    disponiveis: unidades.filter((u) => (u.status || '').trim().toLowerCase() === 'disponível').length,
+    disponiveis: unidades.filter((u) => normalizarStatusUnidade(u.status) === 'disponivel').length,
     valorMin: precos.length > 0 ? Math.min(...precos) : null,
     valorMax: precos.length > 0 ? Math.max(...precos) : null,
     ticketMedio,
