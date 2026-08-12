@@ -483,21 +483,51 @@ img {
   gap: var(--e2);
 }
 
+/* Dois andares: em cima "que imovel e este" (fotos + ficha), embaixo a lista
+   de unidades na largura inteira. */
 .imovel__corpo {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  display: grid;
-  /* A esquerda e o que se vende; a direita, o que se consulta. Larguras fixas
-     em fracao para as duas colunas nao trocarem de tamanho entre um imovel e
-     outro — coluna que dança tambem faz procurar. */
-  grid-template-columns: minmax(0, 1.7fr) minmax(320px, 1fr);
-  align-items: start;
+  display: flex;
+  flex-direction: column;
   gap: var(--e4);
   padding: var(--e4) var(--e5) var(--e5);
 }
 
-.imovel__coluna {
+.imovel__apresentacao {
+  display: grid;
+  /* Fracoes fixas para as duas metades nao trocarem de tamanho de um imovel
+     para outro — coluna que dança tambem faz procurar. */
+  grid-template-columns: minmax(0, 1.4fr) minmax(320px, 1fr);
+  align-items: start;
+  gap: var(--e4);
+}
+
+.imovel__ficha {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e4);
+  min-width: 0;
+}
+
+.imovel__apresentacao--sem-fotos {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* Sem foto, as tres secoes de consulta se espalham na horizontal em vez de
+   empilhar numa coluna com meia tela vazia ao lado. */
+.imovel__apresentacao--sem-fotos .imovel__ficha {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  align-items: start;
+}
+
+.imovel__apresentacao--sem-fotos .capa-vazia {
+  display: none;
+}
+
+.imovel__unidades {
   display: flex;
   flex-direction: column;
   gap: var(--e4);

@@ -17,8 +17,7 @@ import { usePodeEditar } from '../lib/permissao'
 import { precoDaUnidade, resumoUnidades, rotuloUnidade } from '../lib/unidades'
 import { Icone, type NomeIcone } from './Icones'
 import { CartaoFluxo } from './CartaoFluxo'
-import { CartaoUnidade } from './CartaoUnidade'
-import { AnaliseEmpreendimento } from './AnaliseEmpreendimento'
+import { LinhaUnidade } from './LinhaUnidade'
 import { CompararUnidades } from './CompararUnidades'
 import { AnaliseUnidade } from './AnaliseUnidade'
 import { FluxosDoEmpreendimento, fluxoParaEnvio, fluxoParaFormulario } from './FormFluxos'
@@ -61,23 +60,44 @@ function Secao({
   titulo,
   contador,
   acao,
+  recolher,
   children,
 }: {
   icone: NomeIcone
   titulo: string
   contador?: number
   acao?: ReactNode
+  /**
+   * Só a lista de unidades recolhe, e por um motivo concreto: ela é a única
+   * que cresce sem limite (um prédio pode ter dezenas). O resto da tela
+   * continua sempre visível — recolher tudo era o problema antigo.
+   */
+  recolher?: { aberta: boolean; onAlternar: () => void }
   children: ReactNode
 }) {
+  const aberta = recolher ? recolher.aberta : true
   return (
-    <section className="secao">
+    <section className={`secao${recolher && !aberta ? ' secao--recolhida' : ''}`}>
       <div className="secao__cabecalho">
-        <Icone nome={icone} tamanho={14} />
-        <h3 className="secao__titulo">{titulo}</h3>
-        {contador !== undefined && <span className="secao__contador">{contador}</span>}
-        {acao && <div className="secao__acoes">{acao}</div>}
+        {recolher ? (
+          <button type="button" className="secao__alternar" onClick={recolher.onAlternar} aria-expanded={aberta}>
+            <Icone nome={icone} tamanho={14} />
+            <h3 className="secao__titulo">{titulo}</h3>
+            {contador !== undefined && <span className="secao__contador">{contador}</span>}
+            <span className="secao__seta">
+              <Icone nome={aberta ? 'seta_cima' : 'seta_baixo'} tamanho={14} />
+            </span>
+          </button>
+        ) : (
+          <>
+            <Icone nome={icone} tamanho={14} />
+            <h3 className="secao__titulo">{titulo}</h3>
+            {contador !== undefined && <span className="secao__contador">{contador}</span>}
+          </>
+        )}
+        {acao && aberta && <div className="secao__acoes">{acao}</div>}
       </div>
-      <div className="secao__corpo">{children}</div>
+      {aberta && <div className="secao__corpo">{children}</div>}
     </section>
   )
 }
@@ -130,9 +150,16 @@ export function PainelDetalhe({
   // Qual unidade esta com a analise de oportunidade aberta.
   const [analisando, setAnalisando] = useState<number | null>(null)
   const [comparandoUnidades, setComparandoUnidades] = useState(false)
+  // A lista de unidades pode ser recolhida: e a unica parte que cresce sem
+  // limite. Nasce ABERTA — e o que o corretor abre a tela para ver.
+  const [unidadesAbertas, setUnidadesAbertas] = useState(true)
+  // Qual unidade esta com a linha expandida (detalhe + acoes).
+  const [unidadeAberta, setUnidadeAberta] = useState<number | null>(null)
   useEffect(() => {
     setAnalisando(null)
     setComparandoUnidades(false)
+    setUnidadesAbertas(true)
+    setUnidadeAberta(null)
   }, [e.id])
   useEffect(() => setFluxosAbertos(null), [e.id])
   // Para qual unidade cada tabela antiga vai ser copiada.
@@ -289,8 +316,15 @@ export function PainelDetalhe({
           unidades), a DIREITA e o que se consulta sobre o predio. Cada assunto
           tem um lugar so — antes tudo era acordeao empilhado e a mesma
           informacao mudava de altura conforme o que estivesse aberto. */}
+      {/* A tela tem DOIS andares. Em cima, "que imovel e este": as fotos e a
+          ficha, lado a lado, que se le uma vez. Embaixo, a lista de unidades na
+          largura INTEIRA — e uma tabela de vendas, e tabela se le comparando
+          linha com linha, o que uma coluna estreita impede. */}
       <div className="imovel__corpo">
-        <div className="imovel__coluna imovel__coluna--principal">
+        {/* Sem fotos, a coluna da esquerda fica vazia e a ficha sozinha na
+            direita deixa meia tela em branco — entao a apresentacao vira uma
+            faixa horizontal. */}
+        <div className={`imovel__apresentacao${temCapa ? '' : ' imovel__apresentacao--sem-fotos'}`}>
           {temCapa && <Galeria key={e.id} fotos={fotos} nome={e.nome} tipo={e.tipo} onVazia={setGaleriaVazia} />}
 
           {!temCapa && (
@@ -299,11 +333,73 @@ export function PainelDetalhe({
               <span>Não há fotos disponíveis no momento</span>
             </div>
           )}
+        <aside className="imovel__ficha">
+          <Secao icone="lista" titulo="Ficha técnica">
+            <div className="ficha">
+              <ItemFicha
+                icone="cama"
+                rotulo="Dormitórios"
+                valor={
+                  temUnidades
+                    ? fmtFaixaInteiro(resumo.dormitorios.min, resumo.dormitorios.max)
+                    : fmtInteiro(e.dormitorios)
+                }
+              />
+              <ItemFicha icone="predio" rotulo="Suítes" valor={fmtInteiro(e.suites)} />
+              <ItemFicha icone="banheira" rotulo="Banheiros" valor={fmtInteiro(e.banheiros)} />
+              <ItemFicha
+                icone="carro"
+                rotulo="Vagas"
+                valor={temUnidades ? fmtFaixaInteiro(resumo.vagas.min, resumo.vagas.max) : fmtInteiro(e.vagas)}
+              />
+              <ItemFicha
+                icone="regua"
+                rotulo="Metragem"
+                valor={
+                  temUnidades
+                    ? fmtFaixaMetragem(resumo.metragem.min, resumo.metragem.max)
+                    : fmtFaixaMetragem(e.metragem_min, e.metragem_max)
+                }
+              />
+            </div>
 
+            {temUnidades && (
+              <p className="campo__dica">
+                <Icone nome="info" tamanho={12} /> Dormitórios, vagas e metragem vêm das unidades cadastradas.
+              </p>
+            )}
+          </Secao>
+
+          {(e.endereco || e.latitude !== null || e.longitude !== null) && (
+            <Secao icone="pino" titulo="Localização">
+              <div className="ficha">
+                {e.endereco && <ItemFicha icone="pino" rotulo="Endereço" valor={e.endereco} />}
+                <ItemFicha icone="local" rotulo="Cidade" valor={fmtTexto(local)} />
+                {(e.latitude !== null || e.longitude !== null) && (
+                  <ItemFicha
+                    icone="alvo"
+                    rotulo="Coordenadas"
+                    valor={`${e.latitude ?? TRACO}, ${e.longitude ?? TRACO}`}
+                  />
+                )}
+              </div>
+            </Secao>
+          )}
+
+          {e.observacoes && (
+            <Secao icone="lista" titulo="Observações">
+              <div className="observacao">{e.observacoes}</div>
+            </Secao>
+          )}
+        </aside>
+        </div>
+
+        <div className="imovel__unidades">
           <Secao
             icone="predio"
             titulo="Unidades"
             contador={temUnidades ? resumo.total : undefined}
+            recolher={temUnidades ? { aberta: unidadesAbertas, onAlternar: () => setUnidadesAbertas((a) => !a) } : undefined}
             acao={
               <>
                 {resumo.total > 1 && (
@@ -333,35 +429,41 @@ export function PainelDetalhe({
               </div>
             ) : (
               e.unidades.map((unidade, indice) => (
-                <CartaoUnidade
+                <LinhaUnidade
                   key={unidade.id}
                   unidade={unidade}
                   indice={indice}
-                  rodape={
+                  aberta={unidadeAberta === unidade.id}
+                  onAlternar={() =>
+                    setUnidadeAberta((atual) => (atual === unidade.id ? null : unidade.id))
+                  }
+                  detalhe={
                     <>
-                      {/* A análise responde "esta unidade é interessante?" —
-                          a pergunta que vem antes de abrir a tabela. */}
-                      <button
-                        type="button"
-                        className="btn btn--secundario btn--pequeno"
-                        onClick={() => setAnalisando(unidade.id)}
-                      >
-                        <Icone nome="alvo" tamanho={13} />
-                        Analisar
-                      </button>
+                      <div className="linha-unidade__acoes">
+                        {/* A análise responde "esta unidade é interessante?" —
+                            a pergunta que vem antes de abrir a tabela. */}
+                        <button
+                          type="button"
+                          className="btn btn--secundario btn--pequeno"
+                          onClick={() => setAnalisando(unidade.id)}
+                        >
+                          <Icone nome="alvo" tamanho={13} />
+                          Analisar
+                        </button>
 
-                      {/* O fluxo abre aqui mesmo: e no atendimento que a
-                          condicao vira proposta de um cliente. */}
-                      <button
-                        type="button"
-                        className="btn btn--fantasma btn--pequeno"
-                        onClick={() => setFluxosAbertos((atual) => (atual === unidade.id ? null : unidade.id))}
-                      >
-                        <Icone nome={fluxosAbertos === unidade.id ? 'seta_cima' : 'seta_baixo'} tamanho={13} />
-                        {unidade.fluxos.length === 0
-                          ? 'Fluxo de pagamento'
-                          : `Fluxos de pagamento (${unidade.fluxos.length})`}
-                      </button>
+                        {/* O fluxo abre aqui mesmo: e no atendimento que a
+                            condicao vira proposta de um cliente. */}
+                        <button
+                          type="button"
+                          className="btn btn--fantasma btn--pequeno"
+                          onClick={() => setFluxosAbertos((atual) => (atual === unidade.id ? null : unidade.id))}
+                        >
+                          <Icone nome={fluxosAbertos === unidade.id ? 'seta_cima' : 'seta_baixo'} tamanho={13} />
+                          {unidade.fluxos.length === 0
+                            ? 'Fluxo de pagamento'
+                            : `Fluxos de pagamento (${unidade.fluxos.length})`}
+                        </button>
+                      </div>
 
                       {fluxosAbertos === unidade.id && (
                         <div className="unidade__fluxos">
@@ -442,71 +544,6 @@ export function PainelDetalhe({
           )}
         </div>
 
-        <aside className="imovel__coluna imovel__coluna--lateral">
-          {temUnidades && (
-            <Secao icone="grafico" titulo="Análise do empreendimento">
-              <AnaliseEmpreendimento unidades={e.unidades} />
-            </Secao>
-          )}
-
-          <Secao icone="lista" titulo="Ficha técnica">
-            <div className="ficha">
-              <ItemFicha
-                icone="cama"
-                rotulo="Dormitórios"
-                valor={
-                  temUnidades
-                    ? fmtFaixaInteiro(resumo.dormitorios.min, resumo.dormitorios.max)
-                    : fmtInteiro(e.dormitorios)
-                }
-              />
-              <ItemFicha icone="predio" rotulo="Suítes" valor={fmtInteiro(e.suites)} />
-              <ItemFicha icone="banheira" rotulo="Banheiros" valor={fmtInteiro(e.banheiros)} />
-              <ItemFicha
-                icone="carro"
-                rotulo="Vagas"
-                valor={temUnidades ? fmtFaixaInteiro(resumo.vagas.min, resumo.vagas.max) : fmtInteiro(e.vagas)}
-              />
-              <ItemFicha
-                icone="regua"
-                rotulo="Metragem"
-                valor={
-                  temUnidades
-                    ? fmtFaixaMetragem(resumo.metragem.min, resumo.metragem.max)
-                    : fmtFaixaMetragem(e.metragem_min, e.metragem_max)
-                }
-              />
-            </div>
-
-            {temUnidades && (
-              <p className="campo__dica">
-                <Icone nome="info" tamanho={12} /> Dormitórios, vagas e metragem vêm das unidades cadastradas.
-              </p>
-            )}
-          </Secao>
-
-          {(e.endereco || e.latitude !== null || e.longitude !== null) && (
-            <Secao icone="pino" titulo="Localização">
-              <div className="ficha">
-                {e.endereco && <ItemFicha icone="pino" rotulo="Endereço" valor={e.endereco} />}
-                <ItemFicha icone="local" rotulo="Cidade" valor={fmtTexto(local)} />
-                {(e.latitude !== null || e.longitude !== null) && (
-                  <ItemFicha
-                    icone="alvo"
-                    rotulo="Coordenadas"
-                    valor={`${e.latitude ?? TRACO}, ${e.longitude ?? TRACO}`}
-                  />
-                )}
-              </div>
-            </Secao>
-          )}
-
-          {e.observacoes && (
-            <Secao icone="lista" titulo="Observações">
-              <div className="observacao">{e.observacoes}</div>
-            </Secao>
-          )}
-        </aside>
       </div>
 
       {comparandoUnidades && (

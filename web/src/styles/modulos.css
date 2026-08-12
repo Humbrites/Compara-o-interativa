@@ -850,6 +850,39 @@
   overflow: hidden;
 }
 
+.secao--recolhida {
+  background: var(--superficie);
+}
+
+.secao--recolhida .secao__cabecalho {
+  border-bottom: 0;
+}
+
+/* O cabecalho inteiro e o alvo do clique quando a secao recolhe. */
+.secao__alternar {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  padding: 0;
+  background: none;
+  border: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.secao__alternar:hover .secao__titulo {
+  color: var(--marca-600);
+}
+
+.secao__seta {
+  margin-left: auto;
+  display: inline-flex;
+  color: var(--texto-3);
+}
+
 .secao__cabecalho {
   display: flex;
   align-items: center;
@@ -908,6 +941,141 @@
 .secao__corpo .unidade:last-child,
 .secao__corpo .fluxo:last-child {
   margin-bottom: 0;
+}
+
+/* A unidade em UMA LINHA: com seis plantas, os cartoes passavam de mil pixels
+   e engoliam a tela. Os numeros ficam sempre nas mesmas colunas — e o
+   alinhamento que deixa comparar uma linha com a outra. */
+.linha-unidade {
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  background: var(--superficie);
+  overflow: hidden;
+}
+
+.linha-unidade--aberta {
+  border-color: var(--marca-300);
+  box-shadow: 0 1px 3px rgba(19, 26, 51, 0.06);
+}
+
+.linha-unidade__resumo {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 18px minmax(140px, 1.4fr) auto minmax(210px, auto) minmax(130px, auto);
+  align-items: center;
+  gap: var(--e3);
+  padding: var(--e3) var(--e4);
+  background: none;
+  border: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.linha-unidade__resumo:hover {
+  background: var(--marca-50);
+}
+
+.linha-unidade__seta {
+  display: inline-flex;
+  color: var(--texto-3);
+}
+
+.linha-unidade__quem {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.linha-unidade__nome {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--texto);
+}
+
+.linha-unidade__tipologia {
+  font-size: 11.5px;
+  color: var(--texto-3);
+}
+
+.linha-unidade__numeros {
+  display: flex;
+  align-items: baseline;
+  gap: var(--e4);
+  justify-content: flex-end;
+  font-size: 12.5px;
+  color: var(--texto-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.linha-unidade__uni {
+  color: var(--texto-3);
+  font-size: 11px;
+}
+
+.linha-unidade__preco {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+
+.linha-unidade__valor {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--marca-700);
+  font-variant-numeric: tabular-nums;
+}
+
+.linha-unidade__m2 {
+  font-size: 11px;
+  color: var(--texto-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.linha-unidade__detalhe {
+  padding: 0 var(--e4) var(--e4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--e3);
+  border-top: 1px solid var(--borda);
+  padding-top: var(--e3);
+}
+
+.linha-unidade__ficha {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e2) var(--e4);
+  font-size: 12px;
+  color: var(--texto-2);
+}
+
+.linha-unidade__ficha span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.linha-unidade__acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e2);
+}
+
+/* Telas estreitas: a linha vira duas, com os numeros embaixo do nome. */
+@media (max-width: 900px) {
+  .linha-unidade__resumo {
+    grid-template-columns: 18px 1fr auto;
+    row-gap: var(--e2);
+  }
+
+  .linha-unidade__numeros,
+  .linha-unidade__preco {
+    grid-column: 2 / -1;
+    justify-content: flex-start;
+    align-items: flex-start;
+  }
 }
 
 /* Com dois botoes de acao ao lado (o bloco Unidades tem "Comparar unidades" e
@@ -3058,7 +3226,7 @@
 }
 
 @media (max-width: 1180px) {
-  .imovel__corpo {
+  .imovel__apresentacao {
     grid-template-columns: minmax(0, 1fr);
   }
 
