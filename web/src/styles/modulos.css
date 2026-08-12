@@ -3495,3 +3495,148 @@
   text-overflow: ellipsis;
   max-width: 100%;
 }
+
+
+/* --------------------------------------------------------------------------
+   Score da oportunidade
+
+   A nota grande de um lado, a razao dela do outro. Nunca uma sem a outra: um
+   "82" que ninguem sabe justificar vira desconfianca na primeira pergunta.
+   -------------------------------------------------------------------------- */
+
+.score {
+  display: grid;
+  grid-template-columns: minmax(150px, 200px) 1fr;
+  gap: var(--e4);
+  align-items: start;
+}
+
+@media (max-width: 640px) {
+  .score {
+    grid-template-columns: 1fr;
+  }
+}
+
+.score__nota {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--e1);
+  padding: var(--e5) var(--e4);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  background: var(--superficie-2);
+  text-align: center;
+}
+
+.score__nota--verde {
+  border-color: var(--vitoria-borda);
+  background: var(--vitoria-fundo);
+  color: var(--vitoria);
+}
+.score__nota--azul {
+  border-color: var(--marca-400);
+  background: var(--marca-50);
+  color: var(--marca-700);
+}
+.score__nota--ambar {
+  border-color: var(--alerta);
+  background: var(--alerta-fundo);
+  color: var(--alerta);
+}
+.score__nota--vermelho {
+  border-color: var(--perigo);
+  background: var(--perigo-fundo);
+  color: var(--perigo);
+}
+
+.score__numero {
+  font-size: 40px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.score__de {
+  font-size: 16px;
+  font-weight: 600;
+  opacity: 0.7;
+}
+
+.score__rotulo {
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.score__criterios {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e3);
+  min-width: 0;
+}
+
+.score__criterio--sem {
+  opacity: 0.55;
+}
+
+.score__linha {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--e3);
+}
+
+.score__criterio-nome {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.score__peso {
+  width: 64px;
+  height: 28px;
+  padding: 0 var(--e2);
+  font-size: 12px;
+}
+
+.score__criterio-nota {
+  font-size: 12px;
+  color: var(--texto-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.score__trilho {
+  height: 6px;
+  margin: 4px 0 3px;
+  border-radius: var(--raio-pill);
+  background: var(--neutro-fundo);
+  overflow: hidden;
+}
+
+.score__preenchido {
+  display: block;
+  height: 100%;
+  border-radius: var(--raio-pill);
+  background: var(--marca-500);
+}
+
+.score__explicacao {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--texto-3);
+}
+
+.score__rodape {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--e2) var(--e4);
+  padding-top: var(--e3);
+  border-top: 1px solid var(--borda);
+}
