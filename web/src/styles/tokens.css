@@ -45,6 +45,22 @@
   --roxo-fundo: #f2ebfe;
   --ciano: #0891b2;
   --ciano-fundo: #e4f6fa;
+
+  /* Acentos das seções de formulário. Cada assunto tem a própria cor — é o que
+     separa "onde estou preenchendo" num formulário longo sem depender só do
+     espaço em branco.
+     ⚠️ Os tons são as versões ESCURAS de propósito: o número da etapa sai em
+     branco sobre eles, e o âmbar/ciano/verde claros ficam abaixo de 4,5:1. */
+  --tom-dados: #3552a0;
+  --tom-dados-fundo: #f1f5ff;
+  --tom-obra: #b45309;
+  --tom-obra-fundo: #fef4e6;
+  --tom-chaves: #0e7490;
+  --tom-chaves-fundo: #e4f6fa;
+  --tom-pagamentos: #6d28d9;
+  --tom-pagamentos-fundo: #f2ebfe;
+  --tom-resultado: #0f766e;
+  --tom-resultado-fundo: #e6f7f4;
   --neutro-fundo: #eef1f6;
 
   /* Raios ------------------------------------------------------------- */

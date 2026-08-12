@@ -319,7 +319,7 @@ export function FormEmpreendimento({
         }
       >
         <form onSubmit={(e) => e.preventDefault()}>
-          <section className="form-secao">
+          <section className="form-secao form-secao--dados">
             <h3 className="form-secao__titulo">
               <Icone nome="predio" tamanho={13} />
               Identificação
@@ -344,7 +344,7 @@ export function FormEmpreendimento({
             </div>
           </section>
 
-          <section className="form-secao">
+          <section className="form-secao form-secao--chaves">
             <h3 className="form-secao__titulo">
               <Icone nome="local" tamanho={13} />
               Localização
@@ -369,7 +369,7 @@ export function FormEmpreendimento({
             </p>
           </section>
 
-          <section className="form-secao">
+          <section className="form-secao form-secao--obra">
             <h3 className="form-secao__titulo">
               <Icone nome="obra" tamanho={13} />
               Obra
@@ -395,7 +395,7 @@ export function FormEmpreendimento({
             </div>
           </section>
 
-          <section className="form-secao">
+          <section className="form-secao form-secao--pagamentos">
             <h3 className="form-secao__titulo">
               <Icone nome="imagem" tamanho={13} />
               Fotos
@@ -448,7 +448,7 @@ export function FormEmpreendimento({
             </div>
           </section>
 
-          <section className="form-secao">
+          <section className="form-secao form-secao--resultado">
             <h3 className="form-secao__titulo">
               <Icone nome="lista" tamanho={13} />
               Observações
@@ -514,7 +514,7 @@ export function FormEmpreendimento({
       >
         {calculadora}
 
-        <section className="form-secao">
+        <section className="form-secao form-secao--dados">
           <h3 className="form-secao__titulo">
             <Icone nome="regua" tamanho={13} />
             Produto

@@ -332,14 +332,16 @@ img {
 .campo {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--e2);
   min-width: 0;
 }
 
 .campo__rotulo {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
-  color: var(--texto-2);
+  /* O rótulo é o nome do dado; em cinza médio ele pesava menos que o valor
+     digitado e a leitura da coluna se perdia. */
+  color: var(--texto);
   display: flex;
   align-items: center;
   /* Sem isso, uma dica comprida espreme e quebra o proprio rotulo em duas
@@ -359,8 +361,9 @@ img {
 }
 
 .entrada {
-  height: 38px;
+  height: 42px;
   padding: 0 var(--e3);
+  font-size: 14.5px;
   background: var(--superficie);
   border: 1px solid var(--borda-forte);
   border-radius: var(--raio-sm);
@@ -683,6 +686,12 @@ select.entrada {
   padding: var(--e6);
   overflow-y: auto;
   flex: 1;
+  /* Cinza claro para as seções (brancas) se destacarem como cartões. Um
+     formulário longo todo na mesma cor vira parede de campos: o olho não acha
+     onde um assunto termina e o outro começa. */
+  background: var(--superficie-2);
+  /* A numeração das etapas conta daqui. */
+  counter-reset: passo-do-formulario;
 }
 
 .modal__rodape {
@@ -791,8 +800,44 @@ select.entrada {
    Grade de formulario
    ========================================================================== */
 
+/* Cada assunto do formulário é um cartão: fundo próprio, borda e espaço em
+   volta. Antes eram blocos separados só por uma linha fina, e um formulário de
+   cinco assuntos chegava ao usuário como um bloco só. */
 .form-secao {
-  margin-bottom: var(--e6);
+  /* Tom padrão; cada `--tom-*` abaixo troca os dois de uma vez. */
+  --tom: var(--tom-dados);
+  --tom-fundo: var(--tom-dados-fundo);
+
+  margin-bottom: var(--e5);
+  padding: var(--e5);
+  border: 1px solid var(--borda);
+  /* A faixa colorida no topo é o que dá cor à seção sem tingir o fundo do
+     formulário — campo colorido atrás de texto derruba a legibilidade. */
+  border-top: 3px solid var(--tom);
+  border-radius: var(--raio);
+  background: var(--superficie);
+  box-shadow: var(--sombra-xs);
+}
+
+.form-secao--dados {
+  --tom: var(--tom-dados);
+  --tom-fundo: var(--tom-dados-fundo);
+}
+.form-secao--obra {
+  --tom: var(--tom-obra);
+  --tom-fundo: var(--tom-obra-fundo);
+}
+.form-secao--chaves {
+  --tom: var(--tom-chaves);
+  --tom-fundo: var(--tom-chaves-fundo);
+}
+.form-secao--pagamentos {
+  --tom: var(--tom-pagamentos);
+  --tom-fundo: var(--tom-pagamentos-fundo);
+}
+.form-secao--resultado {
+  --tom: var(--tom-resultado);
+  --tom-fundo: var(--tom-resultado-fundo);
 }
 .form-secao:last-child {
   margin-bottom: 0;
@@ -801,31 +846,77 @@ select.entrada {
 .form-secao__titulo {
   display: flex;
   align-items: center;
-  gap: var(--e2);
-  font-size: 12px;
+  gap: var(--e3);
+  /* Tamanho de título de verdade (era 12px em caixa-alta cinza, do tamanho da
+     dica de um campo): é ele que responde "de que trata esta parte". */
+  font-size: 15px;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--texto-3);
-  margin-bottom: var(--e3);
-  padding-bottom: var(--e2);
-  border-bottom: 1px solid var(--borda);
+  letter-spacing: -0.01em;
+  color: var(--texto);
+  margin: 0 0 var(--e4);
 }
 
-/* Complemento ao lado do titulo: some do caixa-alta para nao virar ordem. */
+/* O ícone ganha uma pastilha: vira âncora visual da seção, em vez de um
+   risquinho cinza colado no texto. */
+.form-secao__titulo > svg {
+  box-sizing: content-box;
+  flex: none;
+  padding: 7px;
+  border-radius: var(--raio-sm);
+  background: var(--tom-fundo);
+  color: var(--tom);
+}
+
+/* Complemento ao lado do titulo: peso e cor menores, para nao competir. */
 .form-secao__opcional,
 .form-secao__complemento {
-  font-weight: 600;
-  text-transform: none;
+  font-size: 12.5px;
+  font-weight: 500;
   letter-spacing: 0;
   color: var(--texto-3);
-  opacity: 0.8;
+}
+
+/* Formulário que abre DENTRO de outra seção (nova unidade, novo fluxo): fundo
+   invertido e sem sombra, para se ler como parte do cartão que o contém e não
+   como mais um assunto no mesmo nível. */
+.form-secao--aninhada {
+  background: var(--superficie-2);
+  border-radius: var(--raio-lg);
+  border-top-width: 1px;
+  border-top-color: var(--borda);
+  box-shadow: none;
+}
+
+/* Etapas numeradas (o simulador). A numeração vem do CSS: o passo é a POSIÇÃO
+   na tela, e mantê-la no JSX faria toda seção nova exigir renumerar as outras
+   à mão. */
+.form-secao--passo .form-secao__titulo::before {
+  counter-increment: passo-do-formulario;
+  content: counter(passo-do-formulario);
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--raio-pill);
+  background: var(--tom);
+  color: var(--texto-invertido);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* Com o número na frente, o ícone vira um terceiro elemento antes do texto —
+   a bolinha já é a âncora, e o ícone só afastava o título dela. */
+.form-secao--passo .form-secao__titulo > svg {
+  display: none;
 }
 
 .grade {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  gap: var(--e4);
+  /* 190px cabiam cinco campos numa fileira de modal largo — e cinco campos
+     lado a lado leem-se como um paredão. */
+  grid-template-columns: repeat(auto-fit, minmax(215px, 1fr));
+  gap: var(--e5) var(--e4);
   /* Rotulo de duas linhas nao pode empurrar o campo para baixo da fileira:
      o alinhamento e pela base, entao os inputs ficam sempre na mesma linha. */
   align-items: end;
@@ -833,6 +924,21 @@ select.entrada {
 
 .grade--2 {
   grid-template-columns: repeat(2, 1fr);
+}
+
+/* Campos curtos (percentual, juro, prazo) não devem esticar pela largura toda
+   do modal: um input de "0,60" com 900px de largura parece um banner, não um
+   campo — e o olho perde a relação entre o rótulo e o valor. */
+.grade--compacta {
+  grid-template-columns: repeat(auto-fill, minmax(200px, 260px));
+}
+
+/* Instrução curta que rege um grupo de botões ("selecione o índice…"). */
+.instrucao-do-grupo {
+  margin: 0 0 var(--e1);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--texto-2);
 }
 
 .col-span-2 {

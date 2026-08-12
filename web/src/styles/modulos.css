@@ -1682,14 +1682,16 @@
 }
 
 .atalho:hover {
-  border-color: var(--marca-400);
-  color: var(--marca-700);
+  border-color: var(--tom, var(--marca-400));
+  color: var(--tom, var(--marca-700));
 }
 
+/* Também na cor da seção: o atalho é um jeito rápido de preencher o campo que
+   está logo acima dele, e mudar de cor no meio do bloco confundiria os dois. */
 .atalho--ativo {
-  border-color: var(--marca-500);
-  background: var(--marca-50);
-  color: var(--marca-700);
+  border-color: var(--tom, var(--marca-500));
+  background: var(--tom-fundo, var(--marca-50));
+  color: var(--tom, var(--marca-700));
 }
 
 .resumo-cub {
@@ -2257,8 +2259,8 @@
 }
 
 .seletor-indice__opcao:hover {
-  border-color: var(--marca-400);
-  background: var(--marca-50);
+  border-color: var(--tom, var(--marca-400));
+  background: var(--tom-fundo, var(--marca-50));
 }
 
 .seletor-indice__opcao:focus-visible {
@@ -2266,10 +2268,12 @@
   box-shadow: var(--foco);
 }
 
+/* Ativa na cor da própria seção: o botão escolhido responde ao tom do bloco em
+   que ele está, em vez de puxar o azul da marca para dentro de uma seção âmbar. */
 .seletor-indice__opcao--ativa {
-  border-color: var(--marca-600);
-  background: var(--marca-50);
-  box-shadow: inset 0 0 0 1px var(--marca-600);
+  border-color: var(--tom, var(--marca-600));
+  background: var(--tom-fundo, var(--marca-50));
+  box-shadow: inset 0 0 0 1px var(--tom, var(--marca-600));
 }
 
 .seletor-indice__nome {
@@ -2279,7 +2283,7 @@
 }
 
 .seletor-indice__opcao--ativa .seletor-indice__nome {
-  color: var(--marca-700);
+  color: var(--tom, var(--marca-700));
 }
 
 .seletor-indice__dica {

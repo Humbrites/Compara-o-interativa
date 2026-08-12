@@ -527,15 +527,7 @@ export function FluxosDoEmpreendimento({
       )}
 
       {form && (
-        <section
-          className="form-secao"
-          style={{
-            padding: 'var(--e5)',
-            border: '1px solid var(--borda)',
-            borderRadius: 'var(--raio-lg)',
-            background: 'var(--superficie-2)',
-          }}
-        >
+        <section className="form-secao form-secao--aninhada">
           <h3 className="form-secao__titulo">
             <Icone nome="cartao" tamanho={13} />
             {editandoId !== null ? 'Editar fluxo' : 'Novo fluxo de pagamento'}

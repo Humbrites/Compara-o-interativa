@@ -748,6 +748,30 @@ não entrou).
 
 ---
 
+## O visual dos formulários
+
+Todo formulário longo do sistema (cadastro, simulador, calculadora) segue o mesmo padrão,
+que mora no CSS — nenhuma tela precisa reinventar:
+
+- **Cada assunto é um cartão** branco sobre o fundo cinza do modal, com espaço em volta. A
+  versão anterior separava os blocos por uma linha fina de 1px, e um formulário de cinco
+  assuntos chegava ao usuário como um bloco só.
+- **Cada cartão tem a sua cor** numa faixa de 3px no topo, repetida no ícone e nos controles
+  de dentro (botões de índice, atalhos). É o que responde "em que parte eu estou" sem ler
+  título nenhum. Os tons são as versões escuras (`--tom-*` em `tokens.css`) porque o número
+  da etapa sai em **branco** sobre eles — âmbar e ciano claros ficariam abaixo dos 4,5:1 de
+  contraste exigidos.
+- **O simulador numera as etapas** (1 a 4). A numeração vem de um `counter` do CSS, não do
+  JSX: o passo é a *posição* na tela, e escrevê-lo à mão faria toda seção nova exigir
+  renumerar as outras.
+- **Formulário que abre dentro de outro** (nova unidade, novo fluxo) usa
+  `.form-secao--aninhada`: fundo invertido e sem faixa, para não competir com o cartão que
+  o contém.
+- Campos curtos (percentual, juro, prazo) vão em `.grade--compacta`, com largura de campo e
+  não de banner.
+
+---
+
 ## Notas técnicas
 
 - **Sem dependências externas em tempo de execução** além dos tiles do OpenStreetMap:

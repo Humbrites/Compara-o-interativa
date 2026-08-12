@@ -957,7 +957,7 @@ export function SimuladorInvestimento({
         </>
       }
     >
-      <section className="form-secao">
+      <section className="form-secao form-secao--passo form-secao--dados">
         <h3 className="form-secao__titulo">
           <Icone nome="dinheiro" tamanho={13} />
           Dados do investimento
@@ -1101,14 +1101,14 @@ export function SimuladorInvestimento({
           Um OU outro — são duas leituras alternativas do mesmo custo, e no
           contrato só uma delas está escrita.
           --------------------------------------------------------------- */}
-      <section className="form-secao">
+      <section className="form-secao form-secao--passo form-secao--obra">
         <h3 className="form-secao__titulo">
           <Icone nome="obra" tamanho={13} />
           Durante a obra
           <span className="form-secao__opcional">— opcional; sem índice a dívida não é corrigida</span>
         </h3>
 
-        <p className="campo__dica">Selecione o índice que deseja calcular</p>
+        <p className="instrucao-do-grupo">Selecione o índice que deseja calcular</p>
 
         <div className="seletor-indice" role="group" aria-label="Índice da obra">
           {INDICES_DA_OBRA.map((opcao) => {
@@ -1146,7 +1146,7 @@ export function SimuladorInvestimento({
 
         {form.indiceObra === 'cub' && (
           <>
-            <div className="grade">
+            <div className="grade grade--compacta">
               <Campo
                 rotulo="Percentual do CUB"
                 obrigatorio
@@ -1210,14 +1210,14 @@ export function SimuladorInvestimento({
           Chaves: o que sobra na entrega vai para o banco, corrigido por um
           índice e remunerado por um juro. Os dois se compõem — nunca somam.
           --------------------------------------------------------------- */}
-      <section className="form-secao">
+      <section className="form-secao form-secao--passo form-secao--chaves">
         <h3 className="form-secao__titulo">
           <Icone nome="chave" tamanho={13} />
           Chaves
           <span className="form-secao__opcional">— cálculo do financiamento; opcional</span>
         </h3>
 
-        <p className="campo__dica">Selecione o índice que corrige o financiamento</p>
+        <p className="instrucao-do-grupo">Selecione o índice que corrige o financiamento</p>
 
         <div className="seletor-indice seletor-indice--quatro" role="group" aria-label="Índice do financiamento">
           {INDICES_DAS_CHAVES.map((opcao) => {
@@ -1255,7 +1255,7 @@ export function SimuladorInvestimento({
 
         {form.indiceChaves !== 'nenhum' && (
           <>
-            <div className="grade">
+            <div className="grade grade--compacta">
               {form.indiceChaves === 'cub' && (
                 <Campo
                   rotulo="Percentual do CUB"
@@ -1323,7 +1323,7 @@ export function SimuladorInvestimento({
       {/* O que ainda sai do bolso ate a entrega. E o que faz a divida andar:
           sem isso o saldo devedor ficava parado ate a entrega e a correcao do
           CUB era cobrada sobre o valor cheio o tempo todo. */}
-      <section className="form-secao">
+      <section className="form-secao form-secao--passo form-secao--pagamentos">
         <h3 className="form-secao__titulo">
           <Icone nome="cartao" tamanho={13} />
           Pagamentos até a entrega
@@ -1369,7 +1369,7 @@ export function SimuladorInvestimento({
 
       {resultado && (
         <>
-          <section className="form-secao">
+          <section className="form-secao form-secao--resultado">
             <h3 className="form-secao__titulo">
               <Icone nome="alvo" tamanho={13} />
               Projeção da entrega
@@ -1467,7 +1467,7 @@ export function SimuladorInvestimento({
           </section>
 
           {resultado.cub && (
-            <section className="form-secao">
+            <section className="form-secao form-secao--resultado">
               <h3 className="form-secao__titulo">
                 <Icone nome="lista" tamanho={13} />
                 Conclusão
@@ -1520,7 +1520,7 @@ export function SimuladorInvestimento({
           {/* O que acontece DEPOIS da entrega: o saldo que sobra vira
               financiamento, e a parcela e a pergunta que o cliente faz. */}
           {(resultado.financiamento || resultado.cub?.financiamento) && (
-            <section className="form-secao">
+            <section className="form-secao form-secao--chaves">
               <h3 className="form-secao__titulo">
                 <Icone nome="chave" tamanho={13} />
                 Financiamento nas chaves
@@ -1564,7 +1564,7 @@ export function SimuladorInvestimento({
           {/* A obra mes a mes: e aqui que se ve a divida subir pelo indice e
               cair pelo pagamento, em vez de so o numero final. */}
           {resultado.evolucao.length > 0 && resultado.saldoDevedorHoje > 0 && (
-            <section className="form-secao">
+            <section className="form-secao form-secao--obra">
               <h3 className="form-secao__titulo">
                 <Icone nome="chave" tamanho={13} />
                 Evolução do saldo devedor
@@ -1587,7 +1587,7 @@ export function SimuladorInvestimento({
             </section>
           )}
 
-          <section className="form-secao">
+          <section className="form-secao form-secao--resultado">
             <h3 className="form-secao__titulo">
               <Icone nome="grafico" tamanho={13} />
               Valorização até a entrega
