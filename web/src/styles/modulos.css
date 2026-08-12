@@ -824,6 +824,75 @@
   box-shadow: var(--sombra-xs);
 }
 
+/* Secao da tela do imovel: cartao branco com titulo fixo. Sem abrir/fechar —
+   o conteudo esta sempre la, no mesmo lugar, em toda visita. */
+.secao {
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-lg);
+  overflow: hidden;
+}
+
+.secao__cabecalho {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  padding: var(--e3) var(--e4);
+  border-bottom: 1px solid var(--borda);
+  background: var(--superficie-2);
+}
+
+.secao__cabecalho > svg {
+  box-sizing: content-box;
+  flex: none;
+  padding: 5px;
+  border-radius: var(--raio-sm);
+  background: var(--marca-50);
+  color: var(--marca-600);
+}
+
+.secao__titulo {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--texto);
+}
+
+.secao__contador {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: var(--raio-pill);
+  background: var(--marca-100);
+  color: var(--marca-700);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.secao__acoes {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  margin-left: auto;
+}
+
+.secao__corpo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e3);
+  padding: var(--e4);
+}
+
+.secao__corpo .unidade:last-child,
+.secao__corpo .fluxo:last-child {
+  margin-bottom: 0;
+}
+
 /* Com dois botoes de acao ao lado (o bloco Unidades tem "Comparar unidades" e
    "Adicionar"), o titulo era espremido ate virar "U..". O cabecalho passa a
    QUEBRAR em duas linhas quando falta largura — nome truncado e o tipo de
@@ -2955,6 +3024,36 @@
 @media (min-width: 2300px) {
   :root {
     --largura-painel: 580px;
+  }
+}
+
+/* Notebook estreito: as duas colunas do imovel viram uma so, na ordem em que
+   se le — fotos, unidades e depois o que se consulta. */
+@media (max-width: 1180px) {
+  .imovel__corpo {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .imovel__preco {
+    margin-left: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .imovel__topo {
+    padding: var(--e3) var(--e4);
+  }
+
+  .imovel__corpo {
+    padding: var(--e3) var(--e4) var(--e4);
+  }
+
+  .imovel__acoes {
+    width: 100%;
+  }
+
+  .imovel__acoes .btn--primario {
+    flex: 1;
   }
 }
 

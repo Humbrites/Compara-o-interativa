@@ -194,7 +194,10 @@ export default function App({ sessao, aoMudarSessao, aoSair }: AppProps) {
       {/* Topo enxuto: a marca, o caminho para os empreendimentos, o cadastro
           e os indicadores de mercado. Comparar e simular investimento moram
           no painel do imovel — e la que a decisao acontece. */}
-      <header className="topo">
+      {/* Com o imovel aberto a barra de indicadores encolhe: SELIC e dolar
+          servem ao simulador e ao dashboard, nao a leitura de um predio — e
+          eram 90px de altura roubados de quem esta lendo as unidades. */}
+      <header className={`topo${empreendimentoA ? ' topo--imovel' : ''}`}>
         <div className="topo__linha">
           <div className="topo__marca">
             <div className="topo__logo">
@@ -354,7 +357,10 @@ export default function App({ sessao, aoMudarSessao, aoSair }: AppProps) {
         <IndicadoresMercado />
       </header>
 
-      <div className="corpo">
+      {/* Abrir um empreendimento TROCA o mapa pela tela dele: dividir a largura
+          entre mapa e painel deixava as informacoes espremidas numa coluna
+          estreita, que e o que obrigava a rolar procurando. */}
+      <div className={`corpo${empreendimentoA ? ' corpo--imovel' : ''}`}>
         <div className="coluna-mapa">
           {!carregando && !erroCarga && lista.length > 0 && (
             <BarraFiltros filtros={filtros} onMudar={setFiltros} lista={lista} totalFiltrado={filtrados.length} />
@@ -420,7 +426,7 @@ export default function App({ sessao, aoMudarSessao, aoSair }: AppProps) {
         </div>
 
         {empreendimentoA && (
-          <aside className="coluna-painel">
+          <section className="tela-imovel">
             <PainelDetalhe
               empreendimento={empreendimentoA}
               lista={lista}
@@ -439,7 +445,7 @@ export default function App({ sessao, aoMudarSessao, aoSair }: AppProps) {
                 setSelecionadoB(null)
               }}
             />
-          </aside>
+          </section>
         )}
       </div>
 

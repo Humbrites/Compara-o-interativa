@@ -229,6 +229,116 @@ img {
   position: relative;
 }
 
+/* A tela do imovel toma o lugar do mapa: largura inteira, uma barra fixa no
+   topo e o conteudo em duas colunas. Antes era uma coluna de 420px ao lado do
+   mapa — a mesma quantidade de informacao empilhada num tubo estreito. */
+.topo--imovel .indicadores {
+  display: none;
+}
+
+/* O atributo `hidden` sozinho nao esconde: `display: flex` da .coluna-mapa
+   vence a regra do navegador para [hidden]. */
+.corpo--imovel .coluna-mapa {
+  display: none;
+}
+
+.tela-imovel {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--superficie-2);
+  animation: surgir var(--transicao) both;
+}
+
+.imovel__topo {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--e4);
+  padding: var(--e4) var(--e5);
+  background: var(--superficie);
+  border-bottom: 1px solid var(--borda);
+}
+
+.imovel__quem {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e1);
+  min-width: 0;
+}
+
+.imovel__nome {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  color: var(--texto);
+}
+
+.imovel__linha {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--e3);
+}
+
+.imovel__sub {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12.5px;
+  color: var(--texto-2);
+}
+
+.imovel__selos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e2);
+  margin-top: 2px;
+}
+
+/* O preco fica NA BARRA, nao no meio do conteudo: e o numero que a conversa
+   de venda usa o tempo todo, e assim ele nao sai da tela ao rolar. */
+.imovel__preco {
+  display: flex;
+  gap: var(--e4);
+  margin-left: auto;
+  padding: var(--e2) var(--e4);
+  background: linear-gradient(135deg, var(--marca-50), var(--superficie-2));
+  border: 1px solid var(--marca-100);
+  border-radius: var(--raio-lg);
+}
+
+.imovel__acoes {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+}
+
+.imovel__corpo {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  /* A esquerda e o que se vende; a direita, o que se consulta. Larguras fixas
+     em fracao para as duas colunas nao trocarem de tamanho entre um imovel e
+     outro — coluna que dança tambem faz procurar. */
+  grid-template-columns: minmax(0, 1.7fr) minmax(320px, 1fr);
+  align-items: start;
+  gap: var(--e4);
+  padding: var(--e4) var(--e5) var(--e5);
+}
+
+.imovel__coluna {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e4);
+  min-width: 0;
+}
+
 .coluna-painel {
   width: var(--largura-painel);
   flex-shrink: 0;
