@@ -3029,6 +3029,17 @@
 
 /* Notebook estreito: as duas colunas do imovel viram uma so, na ordem em que
    se le — fotos, unidades e depois o que se consulta. */
+/* Tela estreita: a lista vira uma faixa acima do mapa em vez de espremer os
+   dois. */
+@media (max-width: 1080px) {
+  .lista-lateral {
+    width: 100%;
+    max-height: 320px;
+    border-right: none;
+    border-bottom: 1px solid var(--borda);
+  }
+}
+
 @media (max-width: 1180px) {
   .imovel__corpo {
     grid-template-columns: minmax(0, 1fr);

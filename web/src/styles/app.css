@@ -221,6 +221,171 @@ img {
   position: relative;
 }
 
+/* A lista dos imoveis: coluna fixa a esquerda, do lado do mapa. */
+.lista-lateral {
+  width: 340px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--superficie);
+  border-right: 1px solid var(--borda);
+}
+
+.lista-lateral__topo {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  padding: var(--e3) var(--e4);
+  border-bottom: 1px solid var(--borda);
+}
+
+.lista-lateral__contagem {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--texto-2);
+}
+
+.lista-lateral__ordem {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  margin-left: auto;
+  min-width: 0;
+}
+
+.lista-lateral__ordem-rotulo {
+  font-size: 11px;
+  color: var(--texto-3);
+  white-space: nowrap;
+}
+
+.lista-lateral__select {
+  height: 30px;
+  padding: 0 26px 0 8px;
+  font-size: 12px;
+}
+
+.lista-lateral__itens {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--e2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--e2);
+}
+
+.lista-lateral__vazia {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--e2);
+  padding: var(--e5) var(--e4);
+  text-align: center;
+  color: var(--texto-2);
+  font-size: 13px;
+}
+
+.lista-lateral__rodape {
+  padding: var(--e3);
+  border-top: 1px solid var(--borda);
+}
+
+.lista-lateral__rodape .btn {
+  width: 100%;
+  justify-content: center;
+}
+
+/* Cada imovel da lista: foto, nome, onde fica e o numero que abre a conversa. */
+.item-imovel {
+  display: flex;
+  gap: var(--e3);
+  padding: var(--e3);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  background: var(--superficie);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--transicao), background var(--transicao);
+}
+
+.item-imovel:hover {
+  border-color: var(--marca-300);
+  background: var(--marca-50);
+}
+
+.item-imovel--ativo {
+  border-color: var(--marca-500);
+  background: var(--marca-50);
+  box-shadow: inset 3px 0 0 var(--marca-600);
+}
+
+.item-imovel__foto {
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--raio-sm);
+  background: var(--superficie-3);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: var(--texto-3);
+}
+
+.item-imovel__foto img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.item-imovel__texto {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.item-imovel__nome {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--texto);
+  line-height: 1.25;
+}
+
+.item-imovel__local {
+  font-size: 11.5px;
+  color: var(--texto-3);
+}
+
+.item-imovel__selos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.item-imovel__numeros {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--e2);
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--texto-2);
+}
+
+.item-imovel__preco strong {
+  font-size: 13px;
+  color: var(--marca-700);
+  font-variant-numeric: tabular-nums;
+}
+
+.item-imovel__unidades {
+  color: var(--texto-3);
+}
+
 .coluna-mapa {
   flex: 1;
   min-width: 0;

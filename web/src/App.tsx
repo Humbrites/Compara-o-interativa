@@ -10,7 +10,7 @@ import { PainelDetalhe } from './components/PainelDetalhe'
 import { FormEmpreendimento } from './components/FormEmpreendimento'
 import { Comparativo } from './components/Comparativo'
 import { CompararUnidades } from './components/CompararUnidades'
-import { ListaEmpreendimentos } from './components/ListaEmpreendimentos'
+import { ListaLateral } from './components/ListaLateral'
 import { CalculadoraCub } from './components/CalculadoraCub'
 import { SimuladorInvestimento } from './components/SimuladorInvestimento'
 import { Icone } from './components/Icones'
@@ -50,7 +50,6 @@ export default function App({ sessao, aoMudarSessao, aoSair }: AppProps) {
   const [form, setForm] = useState<EstadoForm | null>(null)
   const [comparando, setComparando] = useState(false)
   const [comparandoUnidades, setComparandoUnidades] = useState(false)
-  const [vendoLista, setVendoLista] = useState(false)
   const [calculandoCub, setCalculandoCub] = useState(false)
   // false = fechado; null = aberto sem imovel; id = aberto com aquele imovel.
   const [simulandoInvestimento, setSimulandoInvestimento] = useState<false | number | null>(false)
@@ -210,17 +209,6 @@ export default function App({ sessao, aoMudarSessao, aoSair }: AppProps) {
           </div>
 
           <div className="topo__acoes">
-            <button
-              type="button"
-              className="btn btn--secundario"
-              onClick={() => setVendoLista(true)}
-              title="Abrir a lista de empreendimentos cadastrados"
-            >
-              <Icone nome="predio" tamanho={15} />
-              <span>Empreendimentos</span>
-              {lista.length > 0 && <span className="btn__contador">{lista.length}</span>}
-            </button>
-
             {/* Comparar unidades ATRAVESSA os empreendimentos — por isso mora
                 aqui em cima, e não só dentro do painel de um imóvel. */}
             {totalDeUnidades > 1 && (
@@ -360,12 +348,24 @@ export default function App({ sessao, aoMudarSessao, aoSair }: AppProps) {
       {/* Abrir um empreendimento TROCA o mapa pela tela dele: dividir a largura
           entre mapa e painel deixava as informacoes espremidas numa coluna
           estreita, que e o que obrigava a rolar procurando. */}
-      <div className={`corpo${empreendimentoA ? ' corpo--imovel' : ''}`}>
-        <div className="coluna-mapa">
-          {!carregando && !erroCarga && lista.length > 0 && (
-            <BarraFiltros filtros={filtros} onMudar={setFiltros} lista={lista} totalFiltrado={filtrados.length} />
-          )}
+      {!empreendimentoA && !carregando && !erroCarga && lista.length > 0 && (
+        <BarraFiltros filtros={filtros} onMudar={setFiltros} lista={lista} totalFiltrado={filtrados.length} />
+      )}
 
+      <div className={`corpo${empreendimentoA ? ' corpo--imovel' : ''}`}>
+        {/* A lista fica SEMPRE na tela, ao lado do mapa: escolher o imovel e o
+            primeiro trabalho de toda visita e estava atras de um botao, num
+            modal com uma segunda busca. */}
+        {!empreendimentoA && !carregando && !erroCarga && lista.length > 0 && (
+          <ListaLateral
+            lista={filtrados}
+            total={lista.length}
+            selecionado={selecionadoA}
+            onSelecionar={selecionar}
+          />
+        )}
+
+        <div className="coluna-mapa">
           {carregando ? (
             <div className="mapa-area" style={{ display: 'grid', placeItems: 'center' }}>
               <Carregando texto="Carregando empreendimentos…" />
@@ -461,27 +461,6 @@ export default function App({ sessao, aoMudarSessao, aoSair }: AppProps) {
           onMudouImagens={atualizarImagens}
           onMudouUnidades={atualizarUnidades}
           avisar={avisar}
-        />
-      )}
-
-      {vendoLista && (
-        <ListaEmpreendimentos
-          lista={lista}
-          selecionado={selecionadoA}
-          onSelecionar={(id) => {
-            selecionar(id)
-            setVendoLista(false)
-          }}
-          onEditar={(e) => {
-            setVendoLista(false)
-            setForm({ empreendimento: e })
-          }}
-          onExcluir={(e) => void excluirEmpreendimento(e)}
-          onAdicionar={() => {
-            setVendoLista(false)
-            setForm({ empreendimento: null })
-          }}
-          onFechar={() => setVendoLista(false)}
         />
       )}
 

@@ -408,15 +408,6 @@ export function Comparativo({ a, b, lista, onEscolherA, onEscolherB, onTrocarLad
         />
       </div>
 
-      <div className="bloco-comp">
-        <TabelaComparativa
-          legenda="Características do empreendimento"
-          linhas={linhasGerais}
-          nomeA={a.nome}
-          nomeB={b.nome}
-        />
-      </div>
-
       {(a.unidades.length > 0 || b.unidades.length > 0) && (
         <div className="bloco-comp">
           <div className="seletor-fluxo">
@@ -446,6 +437,16 @@ export function Comparativo({ a, b, lista, onEscolherA, onEscolherB, onTrocarLad
           )}
         </div>
       )}
+
+      <div className="bloco-comp">
+        <TabelaComparativa
+          legenda="Características do empreendimento"
+          linhas={linhasGerais}
+          nomeA={a.nome}
+          nomeB={b.nome}
+        />
+      </div>
+
 
       <div className="bloco-comp">
         <div className="seletor-fluxo">
