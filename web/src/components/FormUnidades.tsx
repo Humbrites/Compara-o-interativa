@@ -278,6 +278,21 @@ export function UnidadesDoEmpreendimento({ empreendimentoId, unidades, onMudou, 
         />
       )}
 
+      {/* Com seis unidades cadastradas, o "Adicionar" do fim da lista fica a uma
+          rolagem de distancia — quem esta cadastrando o predio inteiro adiciona
+          uma atras da outra. O mesmo botao aparece aqui em cima. */}
+      {unidades.length > 2 && !form && (
+        <div className="unidades__topo">
+          <span className="unidades__contagem">
+            {unidades.length} {unidades.length === 1 ? 'unidade cadastrada' : 'unidades cadastradas'}
+          </span>
+          <button type="button" className="btn btn--secundario btn--pequeno" onClick={abrirNova}>
+            <Icone nome="mais" tamanho={14} />
+            Adicionar unidade
+          </button>
+        </div>
+      )}
+
       {unidades.length > 0 && (
         <div style={{ marginBottom: form ? 'var(--e5)' : 0 }}>
           {unidades.map((unidade, indice) => (
