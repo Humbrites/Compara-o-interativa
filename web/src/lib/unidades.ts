@@ -109,3 +109,29 @@ export function resumoUnidades(unidades: Unidade[]) {
     vagas: faixa(unidades.map((u) => u.vagas)),
   }
 }
+
+
+/**
+ * O valor medio do m² do empreendimento: soma dos precos ÷ soma das metragens.
+ *
+ * ⚠️ Ponderado, e nao a media dos m² de cada unidade: um studio de 30 m² nao
+ * pode pesar o mesmo que uma cobertura de 200 m² na hora de dizer quanto custa
+ * o metro ali. E a MESMA conta que o servidor grava em `empreendimentos.valor_m2`
+ * (`api/src/resumo.js`) — duas contas diferentes dariam dois numeros para o
+ * mesmo predio.
+ */
+export function valorM2MedioDe(unidades: Unidade[]): number | null {
+  let somaPreco = 0
+  let somaMetragem = 0
+
+  for (const unidade of unidades) {
+    const preco = precoDaUnidade(unidade)
+    const metragem = unidade.metragem_total ?? unidade.metragem
+    if (preco !== null && metragem !== null && metragem > 0) {
+      somaPreco += preco
+      somaMetragem += metragem
+    }
+  }
+
+  return somaMetragem > 0 ? somaPreco / somaMetragem : null
+}

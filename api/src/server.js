@@ -18,6 +18,7 @@ import {
   UPLOAD_DIR,
 } from './db.js'
 import { listarBaseDaConta, comUrl } from './base.js'
+import { recalcularResumo } from './resumo.js'
 import { ehMaster } from './contas.js'
 import { criarServicoIndicadores } from './indicadores.js'
 import { criarServicoDeEndereco } from './geocodificar.js'
@@ -237,12 +238,16 @@ app.post('/api/fluxos', (req, reply) => {
   }
 
   const id = inserir('fluxos_pagamento', dados)
+  // A tabela de venda carrega o "valor total do imóvel", que é o preço da
+  // unidade quando ela não tem valor próprio — e o m² médio depende dele.
+  recalcularResumo(dados.empreendimento_id)
   return reply.code(201).send(db.prepare('SELECT * FROM fluxos_pagamento WHERE id = ?').get(id))
 })
 
 app.put('/api/fluxos/:id', (req, reply) => {
   const { id } = req.params
-  if (!buscarFluxo.get(id, contaDe(req))) return reply.code(404).send({ erro: 'Fluxo nao encontrado' })
+  const fluxo = buscarFluxo.get(id, contaDe(req))
+  if (!fluxo) return reply.code(404).send({ erro: 'Fluxo nao encontrado' })
 
   // Os vinculos (empreendimento e unidade) nao mudam por edicao.
   const dados = sanitizar(
@@ -250,14 +255,17 @@ app.put('/api/fluxos/:id', (req, reply) => {
     CAMPOS_FLUXO.filter((c) => c !== 'empreendimento_id' && c !== 'unidade_id'),
   )
   atualizar('fluxos_pagamento', id, dados)
+  recalcularResumo(fluxo.empreendimento_id)
   return db.prepare('SELECT * FROM fluxos_pagamento WHERE id = ?').get(id)
 })
 
 app.delete('/api/fluxos/:id', (req, reply) => {
   const { id } = req.params
-  if (!buscarFluxo.get(id, contaDe(req))) return reply.code(404).send({ erro: 'Fluxo nao encontrado' })
+  const fluxo = buscarFluxo.get(id, contaDe(req))
+  if (!fluxo) return reply.code(404).send({ erro: 'Fluxo nao encontrado' })
 
   db.prepare('DELETE FROM fluxos_pagamento WHERE id = ?').run(id)
+  recalcularResumo(fluxo.empreendimento_id)
   return reply.code(204).send()
 })
 
@@ -281,25 +289,32 @@ app.post('/api/unidades', (req, reply) => {
   }
 
   const id = inserir('unidades', dados)
+  // Os números gerais do empreendimento saem das unidades: unidade nova muda a
+  // faixa de metragem, o valor do m² e o teto de dormitórios na mesma hora.
+  recalcularResumo(dados.empreendimento_id)
   return reply.code(201).send(comFluxos(db.prepare('SELECT * FROM unidades WHERE id = ?').get(id)))
 })
 
 app.put('/api/unidades/:id', (req, reply) => {
   const { id } = req.params
-  if (!buscarUnidade.get(id, contaDe(req))) return reply.code(404).send({ erro: 'Unidade nao encontrada' })
+  const unidade = buscarUnidade.get(id, contaDe(req))
+  if (!unidade) return reply.code(404).send({ erro: 'Unidade nao encontrada' })
 
   // A unidade nao troca de empreendimento por edicao.
   const dados = sanitizar(req.body || {}, CAMPOS_UNIDADE.filter((c) => c !== 'empreendimento_id'))
   atualizar('unidades', id, dados)
+  recalcularResumo(unidade.empreendimento_id)
   return comFluxos(db.prepare('SELECT * FROM unidades WHERE id = ?').get(id))
 })
 
 app.delete('/api/unidades/:id', (req, reply) => {
   const { id } = req.params
-  if (!buscarUnidade.get(id, contaDe(req))) return reply.code(404).send({ erro: 'Unidade nao encontrada' })
+  const unidade = buscarUnidade.get(id, contaDe(req))
+  if (!unidade) return reply.code(404).send({ erro: 'Unidade nao encontrada' })
 
   // ON DELETE CASCADE leva junto os fluxos de pagamento da unidade.
   db.prepare('DELETE FROM unidades WHERE id = ?').run(id)
+  recalcularResumo(unidade.empreendimento_id)
   return reply.code(204).send()
 })
 

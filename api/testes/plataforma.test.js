@@ -858,3 +858,121 @@ test('quem tem base própria não personifica outra conta', async () => {
   })
   assert.equal((await cliente.pedir('/api/plataforma/ver-como', { metodo: 'POST', corpo: {} })).status, 404)
 })
+
+/* ------------------------------------------------------------------ */
+/* Os numeros do empreendimento saem das UNIDADES                      */
+/* ------------------------------------------------------------------ */
+
+test('a faixa, o teto e o m² médio se refazem a cada unidade', async () => {
+  const cliente = await abrirConta({
+    conta: 'Casa dos Números',
+    nome: 'Rita Alves',
+    email: 'rita@numeros.com.br',
+    senha: 'rita-2026-forte',
+  })
+
+  const criado = await cliente.pedir('/api/empreendimentos', {
+    metodo: 'POST',
+    corpo: { nome: 'Edifício Calculado' },
+  })
+  const id = criado.corpo.id
+
+  const numeros = async () => (await cliente.pedir(`/api/empreendimentos/${id}`)).corpo
+
+  // Studio de 30 m² por 300 mil: 10.000/m².
+  await cliente.pedir('/api/unidades', {
+    metodo: 'POST',
+    corpo: {
+      empreendimento_id: id,
+      identificacao: 'Studio',
+      metragem: 30,
+      metragem_total: 30,
+      valor: 300000,
+      dormitorios: 1,
+      suites: 0,
+      vagas: 1,
+    },
+  })
+
+  let e = await numeros()
+  assert.equal(e.metragem_min, 30)
+  assert.equal(e.metragem_max, 30)
+  assert.equal(e.valor_m2, 10000)
+  assert.equal(e.dormitorios, 1)
+
+  // Cobertura de 200 m² por 3 milhões: 15.000/m².
+  const cobertura = await cliente.pedir('/api/unidades', {
+    metodo: 'POST',
+    corpo: {
+      empreendimento_id: id,
+      identificacao: 'Cobertura',
+      tipologia: 'Cobertura',
+      metragem: 200,
+      metragem_total: 200,
+      valor: 3000000,
+      dormitorios: 4,
+      suites: 2,
+      vagas: 3,
+    },
+  })
+  assert.equal(cobertura.status, 201)
+  assert.equal(cobertura.corpo.tipologia, 'Cobertura')
+
+  e = await numeros()
+  assert.equal(e.metragem_min, 30)
+  assert.equal(e.metragem_max, 200)
+  // Dormitórios do empreendimento é o TETO do que ele oferece — o filtro
+  // "4 dormitórios" tem de achar este prédio.
+  assert.equal(e.dormitorios, 4)
+  assert.equal(e.suites, 2)
+  assert.equal(e.vagas, 3)
+  // ⚠️ PONDERADO: (300k + 3M) ÷ (30 + 200) = 14.347,83/m². A média simples dos
+  // dois m² daria 12.500 — o studio pesando igual à cobertura.
+  assert.equal(Math.round(e.valor_m2), 14348)
+
+  // Editar a cobertura refaz tudo na mesma hora.
+  await cliente.pedir(`/api/unidades/${cobertura.corpo.id}`, {
+    metodo: 'PUT',
+    corpo: { valor: 4000000, dormitorios: 3 },
+  })
+  e = await numeros()
+  assert.equal(e.dormitorios, 3)
+  assert.equal(Math.round(e.valor_m2), Math.round(4300000 / 230))
+
+  // E remover volta para o que sobrou.
+  await cliente.pedir(`/api/unidades/${cobertura.corpo.id}`, { metodo: 'DELETE' })
+  e = await numeros()
+  assert.equal(e.metragem_max, 30)
+  assert.equal(e.valor_m2, 10000)
+  assert.equal(e.dormitorios, 1)
+})
+
+test('unidade sem preço próprio usa o valor total da tabela de venda', async () => {
+  const cliente = criarCliente()
+  await cliente.pedir('/api/auth/login', {
+    metodo: 'POST',
+    corpo: { identificador: 'rita@numeros.com.br', senha: 'rita-2026-forte' },
+  })
+
+  const criado = await cliente.pedir('/api/empreendimentos', {
+    metodo: 'POST',
+    corpo: { nome: 'Preço na Tabela' },
+  })
+  const id = criado.corpo.id
+
+  const unidade = await cliente.pedir('/api/unidades', {
+    metodo: 'POST',
+    corpo: { empreendimento_id: id, identificacao: 'Tipo A', metragem: 80, metragem_total: 80 },
+  })
+
+  // Sem valor na unidade não há m² que se calcule.
+  assert.equal((await cliente.pedir(`/api/empreendimentos/${id}`)).corpo.valor_m2, null)
+
+  // O valor total do imóvel mora na tabela de venda — e é ele que vale.
+  await cliente.pedir('/api/fluxos', {
+    metodo: 'POST',
+    corpo: { unidade_id: unidade.corpo.id, nome: 'Tabela padrão', cub_valor_imovel: 800000 },
+  })
+
+  assert.equal((await cliente.pedir(`/api/empreendimentos/${id}`)).corpo.valor_m2, 10000)
+})

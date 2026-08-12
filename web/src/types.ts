@@ -35,6 +35,8 @@ export interface Unidade {
   id: number
   empreendimento_id: number
   identificacao: string | null
+  /** O que a planta e: studio, 2 dormitorios, cobertura, garden. */
+  tipologia: string | null
   torre: string | null
   andar: number | null
   numero: string | null

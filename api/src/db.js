@@ -387,6 +387,13 @@ export const migracaoContas = adotarDadosSemDono()
 // Fluxo de pagamento passou a poder ser de uma unidade especifica; os que ja
 // existiam ficam com unidade_id NULL e seguem valendo como tabela geral do
 // empreendimento. ADD COLUMN so roda quando a coluna ainda nao existe.
+// A tipologia da UNIDADE (studio, 2 dormitorios, cobertura, garden): o `tipo`
+// do empreendimento diz o que o predio e, nao o que cada planta oferece.
+const colunasUnidade = db.prepare('PRAGMA table_info(unidades)').all()
+if (!colunasUnidade.some((coluna) => coluna.name === 'tipologia')) {
+  db.exec('ALTER TABLE unidades ADD COLUMN tipologia TEXT;')
+}
+
 const colunasFluxo = db.prepare('PRAGMA table_info(fluxos_pagamento)').all()
 if (!colunasFluxo.some((coluna) => coluna.name === 'unidade_id')) {
   db.exec(`
@@ -432,7 +439,7 @@ export const CAMPOS_FLUXO = [
 ]
 
 export const CAMPOS_UNIDADE = [
-  'empreendimento_id', 'identificacao', 'torre', 'andar', 'numero',
+  'empreendimento_id', 'identificacao', 'tipologia', 'torre', 'andar', 'numero',
   'metragem', 'metragem_total',
   'dormitorios', 'suites', 'banheiros', 'vagas',
   'posicao_solar', 'face', 'valor', 'valor_m2', 'status', 'observacoes',

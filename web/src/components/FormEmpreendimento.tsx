@@ -1,9 +1,11 @@
-import { Fragment, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import type { Empreendimento, EmpreendimentoInput, ImagemEmpreendimento, Unidade } from '../types'
 import { STATUS_OBRA, TIPOS } from '../lib/opcoes'
 import { api } from '../lib/api'
+import { fmtArea, fmtMoeda, TRACO } from '../lib/format'
+import { resumoUnidades, valorM2MedioDe } from '../lib/unidades'
 import { Campo, Modal } from './ui'
-import { Icone } from './Icones'
+import { Icone, type NomeIcone } from './Icones'
 import { UnidadesDoEmpreendimento } from './FormUnidades'
 import { GaleriaUpload } from './GaleriaUpload'
 import { SeletorDeLocal } from './SeletorDeLocal'
@@ -68,6 +70,93 @@ function validarProduto(form: Formulario): Record<string, string> {
   }
 
   return erros
+}
+
+/**
+ * Os números do empreendimento, lidos das unidades cadastradas.
+ *
+ * A mesma conta do servidor (que grava as colunas usadas pelos filtros e pelo
+ * comparativo), refeita aqui só para exibir — a tela precisa reagir à unidade
+ * que acabou de ser criada, antes de qualquer recarga.
+ */
+function ResumoDasUnidades({ unidades }: { unidades: Unidade[] }) {
+  const resumo = useMemo(() => resumoUnidades(unidades), [unidades])
+  const m2 = useMemo(() => valorM2MedioDe(unidades), [unidades])
+
+  if (unidades.length === 0) {
+    return (
+      <p className="campo__dica linha-calculo">
+        <Icone nome="info" tamanho={12} /> Estes números saem das unidades: assim que a primeira for cadastrada
+        abaixo, a faixa de preço, as metragens e o valor do m² aparecem aqui — e se refazem a cada unidade
+        adicionada, editada ou removida.
+      </p>
+    )
+  }
+
+  const faixa = (min: number | null, max: number | null, formatar: (v: number) => string) => {
+    if (min === null) return TRACO
+    return max !== null && max !== min ? `${formatar(min)} — ${formatar(max)}` : formatar(min)
+  }
+
+  return (
+    <>
+      <div className="indicadores-produto">
+        <Indicador
+          icone="dinheiro"
+          rotulo="Valor das unidades"
+          valor={faixa(resumo.valor.min, resumo.valor.max, (v) => fmtMoeda(v))}
+          dica={resumo.valor.min === null ? 'nenhuma unidade com preço' : 'da menor à maior'}
+        />
+        <Indicador
+          icone="regua"
+          rotulo="Metragem"
+          valor={faixa(resumo.metragem.min, resumo.metragem.max, (v) => fmtArea(v))}
+          dica="privativa"
+        />
+        <Indicador
+          icone="grafico"
+          rotulo="Valor médio do m²"
+          valor={m2 === null ? TRACO : fmtMoeda(m2)}
+          dica="soma dos preços ÷ soma das metragens"
+        />
+        <Indicador
+          icone="predio"
+          rotulo="Unidades"
+          valor={String(resumo.total)}
+          dica={`${resumo.disponiveis} disponível(is)`}
+        />
+      </div>
+
+      <p className="campo__dica linha-calculo">
+        <Icone nome="info" tamanho={12} /> Calculado a partir das {resumo.total} unidade(s) abaixo — é isto que
+        alimenta os filtros do dashboard e o comparativo. Dormitórios, suítes e vagas também: cada unidade tem os
+        seus, e o empreendimento mostra o que ele oferece.
+      </p>
+    </>
+  )
+}
+
+function Indicador({
+  icone,
+  rotulo,
+  valor,
+  dica,
+}: {
+  icone: NomeIcone
+  rotulo: string
+  valor: string
+  dica: string
+}) {
+  return (
+    <div className="indicador-produto">
+      <span className="indicador-produto__rotulo">
+        <Icone nome={icone} tamanho={12} />
+        {rotulo}
+      </span>
+      <span className="indicador-produto__valor">{valor}</span>
+      <span className="indicador-produto__dica">{dica}</span>
+    </div>
+  )
 }
 
 interface Props {
@@ -217,10 +306,16 @@ export function FormEmpreendimento({
   }
 
   /** Campo em branco vai como null para a API nao gravar string vazia. */
+  /**
+   * ⚠️ Os números do produto (m², metragens, dormitórios, suítes, banheiros e
+   * vagas) NÃO vão no payload: quem os mantém é o servidor, a cada mudança de
+   * unidade. Mandá-los daqui sobrescreveria o cálculo com o que estava na tela
+   * quando o formulário abriu.
+   */
   function montarPayload(): EmpreendimentoInput {
     const dados: Record<string, string | null> = { nome: form.nome.trim() }
     for (const campo of CAMPOS) {
-      if (campo === 'nome') continue
+      if (campo === 'nome' || CAMPOS_PRODUTO.includes(campo)) continue
       dados[campo] = form[campo].trim() || null
     }
     return dados as EmpreendimentoInput
@@ -519,59 +614,26 @@ export function FormEmpreendimento({
       >
         {calculadora}
 
+        {/* Os números do empreendimento saem das UNIDADES, não da digitação.
+            Eram sete campos aqui — os mesmos que quem cadastra já preenche em
+            cada unidade —, e duas versões da mesma verdade sempre terminam com
+            a de cima envelhecendo calada. */}
         <section className="form-secao form-secao--dados">
           <h3 className="form-secao__titulo">
             <Icone nome="regua" tamanho={13} />
-            Produto
-            <span className="form-secao__opcional">— números gerais do empreendimento</span>
+            Números do empreendimento
+            <span className="form-secao__opcional">— calculados a partir das unidades</span>
           </h3>
-          <div className="grade">
-            <Campo rotulo="Valor médio do m²" dica="R$">
-              {entrada('valor_m2', { placeholder: '10800', inputMode: 'decimal' })}
-            </Campo>
-            <Campo rotulo="Metragem mínima" dica="m²">
-              {entrada('metragem_min', { placeholder: '45', inputMode: 'decimal' })}
-            </Campo>
-            <Campo rotulo="Metragem máxima" dica="m²" erro={erros.metragem_max}>
-              {entrada('metragem_max', { placeholder: '82', inputMode: 'decimal' })}
-            </Campo>
-            <Campo rotulo="Dormitórios">
-              {entrada('dormitorios', { placeholder: '3', inputMode: 'numeric' })}
-            </Campo>
-            <Campo rotulo="Suítes">{entrada('suites', { placeholder: '1', inputMode: 'numeric' })}</Campo>
-            <Campo rotulo="Banheiros">{entrada('banheiros', { placeholder: '2', inputMode: 'numeric' })}</Campo>
-            <Campo rotulo="Vagas">{entrada('vagas', { placeholder: '2', inputMode: 'numeric' })}</Campo>
-          </div>
+
+          <ResumoDasUnidades unidades={salvo?.unidades ?? []} />
 
           <div className="acoes-fluxo" style={{ marginTop: 'var(--e3)' }}>
-            {/* O salvar so aparece com algo por gravar; avancar de etapa tambem grava. */}
-            {produtoAlterado && (
-              <button
-                type="button"
-                className="btn btn--secundario"
-                onClick={() => void salvarProduto()}
-                disabled={salvandoProduto}
-              >
-                {salvandoProduto ? (
-                  <>
-                    <Icone nome="spinner" tamanho={15} className="girando" />
-                    Salvando…
-                  </>
-                ) : (
-                  <>
-                    <Icone nome="check" tamanho={15} />
-                    Salvar números gerais
-                  </>
-                )}
-              </button>
-            )}
-
             <button type="button" className="btn btn--secundario" onClick={() => setCalculadoraAberta(true)}>
               <Icone nome="grafico" tamanho={15} />
               Calcular valor com CUB
             </button>
             <span className="campo__dica">
-              Valem para o empreendimento inteiro; com unidades cadastradas, o painel mostra a faixa delas.
+              A calculadora só simula o reajuste — quem grava a tabela de venda é a unidade.
             </span>
           </div>
         </section>

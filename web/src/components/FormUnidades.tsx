@@ -3,7 +3,7 @@ import type { Unidade, UnidadeInput } from '../types'
 import { api } from '../lib/api'
 import { lerNumero } from '../lib/cub'
 import { fmtArea, fmtMoeda } from '../lib/format'
-import { FACES, POSICOES_SOLARES, STATUS_UNIDADE } from '../lib/opcoes'
+import { FACES, POSICOES_SOLARES, STATUS_UNIDADE, TIPOLOGIAS } from '../lib/opcoes'
 import { calcularValorM2, precoDaUnidade, rotuloUnidade, valorNoFluxo } from '../lib/unidades'
 import { Campo, Estado } from './ui'
 import { Icone } from './Icones'
@@ -22,7 +22,7 @@ import { CalculadoraCub } from './CalculadoraCub'
 type Formulario = Record<string, string>
 
 const CAMPOS = [
-  'identificacao', 'torre', 'andar', 'numero',
+  'identificacao', 'tipologia', 'torre', 'andar', 'numero',
   'metragem', 'metragem_total',
   'dormitorios', 'suites', 'banheiros', 'vagas',
   'posicao_solar', 'face', 'valor', 'valor_m2', 'status', 'observacoes',
@@ -359,6 +359,9 @@ export function UnidadesDoEmpreendimento({ empreendimentoId, unidades, onMudou, 
           <div className="grade">
             <Campo rotulo="Identificação" className="col-span-2" dica="como o corretor chama">
               {entrada('identificacao', { placeholder: 'Ex.: Tipo A, Cobertura, Apto 1204', autoFocus: true })}
+            </Campo>
+            <Campo rotulo="Tipologia" dica="o que a planta oferece">
+              {selecao('tipologia', TIPOLOGIAS)}
             </Campo>
             <Campo rotulo="Status">{selecao('status', STATUS_UNIDADE)}</Campo>
 

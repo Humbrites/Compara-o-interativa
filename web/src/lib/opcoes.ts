@@ -78,3 +78,17 @@ export function corDoStatus(status: string | null): string {
   if (!status) return 'cinza'
   return CORES_STATUS[status.trim().toLowerCase()] ?? 'cinza'
 }
+
+
+/** Tipologias de unidade — o que a planta oferece, nao o que o predio e. */
+export const TIPOLOGIAS = [
+  'Studio',
+  '1 dormitório',
+  '2 dormitórios',
+  '3 dormitórios',
+  '4 dormitórios ou mais',
+  'Cobertura',
+  'Garden',
+  'Duplex',
+  'Loft',
+]
