@@ -141,3 +141,133 @@ test('fluxo da construtora todo vazio não vira condição de pagamento', () => 
   assert.ok(resultado.ok)
   assert.equal(resultado.fluxo_construtora, null)
 })
+
+/* --- A condição de pagamento estruturada ---------------------------- */
+
+test('o prompt pede os blocos da condição de pagamento com as quantidades', () => {
+  const prompt = montarPromptDeImportacao()
+
+  // Cada bloco, com o nome que a tabela real usa.
+  for (const campo of [
+    'entrada_parcelas',
+    'parcelas',
+    'reforcos_qtd',
+    'reforcos_periodicidade',
+    'chaves_pct',
+    'financiamento_pct',
+    'pos_parcelas',
+    'pos_reforcos_qtd',
+  ]) {
+    assert.match(prompt, new RegExp(campo), `o prompt não pede ${campo}`)
+  }
+
+  // Balão = reforço = semestral: a mesma coisa com três nomes na planilha.
+  assert.match(prompt, /BALÕES/)
+  assert.match(prompt, /A MESMA COISA/)
+  // Financiamento é o saldo NA ENTREGA, não desembolso de obra.
+  assert.match(prompt, /SALDO NA ENTREGA/)
+  // Nem toda tabela tem todo bloco — o que falta vai null.
+  assert.match(prompt, /NEM TODA TABELA TEM TODOS OS BLOCOS/)
+  // Condição que varia por unidade.
+  assert.match(prompt, /"fluxo" DENTRO da unidade/)
+})
+
+test('a condição de pagamento completa é lida campo a campo', () => {
+  const resultado = validarRespostaDaIa(`{
+    "unidades": [{ "identificacao": "Apto 101", "valor": 800000 }],
+    "fluxo_construtora": {
+      "nome": "Tabela de lançamento",
+      "entrada_pct": 10,
+      "entrada_parcelas": 4,
+      "parcelas": 30,
+      "parcela_valor": "3.500",
+      "reforcos_qtd": 6,
+      "reforco_valor": 20000,
+      "reforcos_periodicidade": "Semestral",
+      "chaves_pct": 5,
+      "pos_parcelas": 24,
+      "pos_parcela_valor": 2000,
+      "pos_reforcos_qtd": 4,
+      "pos_reforco_valor": 15000
+    }
+  }`)
+
+  assert.ok(resultado.ok, resultado.problemas.join(' | '))
+  const fluxo = resultado.fluxo_construtora!
+  assert.equal(fluxo.entrada_parcelas, 4)
+  assert.equal(fluxo.parcela_valor, 3500, 'número em pt-BR converte na mesma regra do projeto')
+  assert.equal(fluxo.reforcos_periodicidade, 'semestral')
+  assert.equal(fluxo.pos_parcelas, 24)
+  assert.equal(fluxo.pos_reforco_valor, 15000)
+  // Bloco que a tabela não tem fica null — nunca 0.
+  assert.equal(fluxo.financiamento_pct, null)
+})
+
+test('a condição de pagamento recusa percentual absurdo, negativo e periodicidade inventada', () => {
+  const resultado = validarRespostaDaIa(`{
+    "unidades": [{ "identificacao": "Apto 101" }],
+    "fluxo_construtora": { "entrada_pct": 250, "parcelas": -3, "reforcos_qtd": 6, "reforcos_periodicidade": "quinzenal" }
+  }`)
+
+  assert.equal(resultado.ok, false)
+  const texto = resultado.problemas.join(' | ')
+  assert.match(texto, /"entrada_pct".*percentual e veio 250/)
+  assert.match(texto, /"parcelas".*não pode ser negativo/)
+  assert.match(texto, /periodicidade dos reforços/)
+})
+
+test('quantidade zerada é campo em branco, não zero', () => {
+  const resultado = validarRespostaDaIa(
+    '{"unidades":[{"identificacao":"Apto 1"}],"fluxo_construtora":{"parcelas":0,"parcela_valor":2500}}',
+  )
+  assert.ok(resultado.ok)
+  assert.equal(resultado.fluxo_construtora?.parcelas, null)
+  assert.equal(resultado.fluxo_construtora?.parcela_valor, 2500)
+})
+
+test('a unidade pode trazer condição de pagamento própria', () => {
+  const resultado = validarRespostaDaIa(`{
+    "unidades": [
+      { "identificacao": "Apto 101", "valor": 800000 },
+      { "identificacao": "Cobertura", "valor": 1500000, "fluxo": { "entrada_pct": 20, "parcelas": 24 } }
+    ],
+    "fluxo_construtora": { "entrada_pct": 10, "parcelas": 30 }
+  }`)
+
+  assert.ok(resultado.ok, resultado.problemas.join(' | '))
+  // "fluxo" não é campo desconhecido de unidade.
+  assert.equal(resultado.unidades[0].fluxo, undefined)
+  assert.equal(resultado.unidades[1].fluxo?.entrada_pct, 20)
+  assert.equal(resultado.fluxo_construtora?.entrada_pct, 10)
+})
+
+test('o outro formato: entrada, mensais, balões semestrais e financiamento, com status misto', () => {
+  const resultado = validarRespostaDaIa(`{
+    "unidades": [
+      { "identificacao": "Apto 301", "numero": "301", "valor": 1000000, "status": "disponível" },
+      { "identificacao": "Apto 302", "numero": "302", "valor": 1000000, "status": "reservado" }
+    ],
+    "fluxo_construtora": {
+      "nome": "Tabela obra",
+      "entrada_pct": 20,
+      "parcelas": 48,
+      "parcela_valor": 2500,
+      "reforcos_qtd": 8,
+      "reforco_valor": 25000,
+      "reforcos_periodicidade": "semestral",
+      "financiamento_pct": 40
+    }
+  }`)
+
+  assert.ok(resultado.ok, resultado.problemas.join(' | '))
+  assert.equal(resultado.unidades[0].status, 'disponivel')
+  assert.equal(resultado.unidades[1].status, 'reservada')
+
+  const fluxo = resultado.fluxo_construtora!
+  assert.equal(fluxo.parcelas, 48)
+  assert.equal(fluxo.reforcos_qtd, 8)
+  assert.equal(fluxo.financiamento_pct, 40)
+  // Esta tabela não tem pós-chaves nem entrada parcelada: null, não zero.
+  assert.equal(fluxo.pos_parcelas, null)
+  assert.equal(fluxo.entrada_parcelas, null)
+})

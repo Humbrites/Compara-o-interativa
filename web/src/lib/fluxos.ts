@@ -14,7 +14,7 @@ import { indiceFixo, simular, type Simulacao } from './cub'
 
 /** Uma parte da composição do preço. */
 export interface ParteDoFluxo {
-  chave: 'entrada' | 'parcelas' | 'reforcos' | 'chaves' | 'financiamento'
+  chave: 'entrada' | 'parcelas' | 'reforcos' | 'chaves' | 'financiamento' | 'pos_parcelas' | 'pos_reforcos'
   rotulo: string
   /** Quanto essa parte soma, em reais. null = não cadastrada. */
   valor: number | null
@@ -40,7 +40,14 @@ export interface DetalheFluxo {
    * chaves e financiar os outros 300 mil.
    */
   naEntrega: number
-  /** Tudo que foi alocado, inclusive chaves e financiamento. */
+  /**
+   * Mensais e semestrais DEPOIS das chaves — o financiamento direto com a
+   * construtora. Fica FORA de `durante` por definição: nada disso é
+   * desembolsado até a entrega, e somá-lo ali faria a obra parecer duas vezes
+   * mais cara do que é para quem ainda vai decidir a compra.
+   */
+  posChaves: number
+  /** Tudo que foi alocado, inclusive chaves, financiamento e pós-chaves. */
   alocado: number
   /**
    * base − alocado. Positivo = falta alocar (a tabela não fecha o preço);
@@ -79,6 +86,12 @@ export interface NumerosDoFluxo {
   reforcosQtd: number | null
   reforcoValor: number | null
   chavesPct: number | null
+  /** Mensais DEPOIS das chaves (financiamento direto com a construtora). */
+  posParcelas?: number | null
+  posParcelaValor?: number | null
+  /** Semestrais/balões depois das chaves. */
+  posReforcosQtd?: number | null
+  posReforcoValor?: number | null
 }
 
 export interface TotaisDoFluxo {
@@ -87,8 +100,11 @@ export interface TotaisDoFluxo {
   parcelas: number | null
   reforcos: number | null
   chaves: number | null
+  posParcelas: number | null
+  posReforcos: number | null
   /**
-   * O que sobra para o banco: base − entrada − parcelas − reforços − chaves.
+   * O que sobra para o banco: base menos tudo que o cliente paga direto —
+   * entrada, parcelas, reforços, chaves E o que ele paga depois das chaves.
    * Negativo = a tabela já passou do valor do imóvel. null sem base.
    */
   saldo: number | null
@@ -104,17 +120,41 @@ export interface TotaisDoFluxo {
  * o que está gravado) — duas contas dessas divergiriam no primeiro ajuste.
  */
 export function totalizarFluxo(n: NumerosDoFluxo): TotaisDoFluxo {
-  const entrada = n.entradaValor ?? daBase(n.base, n.entradaPct)
   // Sem a quantidade, o valor unitário ainda diz algo (uma parcela, um reforço).
-  const parcelas = n.parcelas !== null && n.parcelaValor !== null ? n.parcelas * n.parcelaValor : n.parcelaValor
-  const reforcos =
-    n.reforcosQtd !== null && n.reforcoValor !== null ? n.reforcosQtd * n.reforcoValor : n.reforcoValor
+  const serie = (qtd: number | null | undefined, valor: number | null | undefined) =>
+    qtd !== null && qtd !== undefined && valor !== null && valor !== undefined ? qtd * valor : (valor ?? null)
+
+  const entrada = n.entradaValor ?? daBase(n.base, n.entradaPct)
+  const parcelas = serie(n.parcelas, n.parcelaValor)
+  const reforcos = serie(n.reforcosQtd, n.reforcoValor)
   const chaves = daBase(n.base, n.chavesPct)
+  const posParcelas = serie(n.posParcelas, n.posParcelaValor)
+  const posReforcos = serie(n.posReforcosQtd, n.posReforcoValor)
 
+  // O que o cliente paga DEPOIS das chaves também sai do valor do imóvel: numa
+  // tabela com financiamento direto, ignorá-lo aqui inflaria o saldo do banco
+  // com um dinheiro que a construtora já cobrou.
   const saldo =
-    n.base === null ? null : n.base - (entrada ?? 0) - (parcelas ?? 0) - (reforcos ?? 0) - (chaves ?? 0)
+    n.base === null
+      ? null
+      : n.base -
+        (entrada ?? 0) -
+        (parcelas ?? 0) -
+        (reforcos ?? 0) -
+        (chaves ?? 0) -
+        (posParcelas ?? 0) -
+        (posReforcos ?? 0)
 
-  return { entrada, parcelas, reforcos, chaves, saldo, saldoPct: percentualDe(n.base, saldo) }
+  return {
+    entrada,
+    parcelas,
+    reforcos,
+    chaves,
+    posParcelas,
+    posReforcos,
+    saldo,
+    saldoPct: percentualDe(n.base, saldo),
+  }
 }
 
 /**
@@ -141,6 +181,11 @@ export function detalharFluxo(fluxo: FluxoPagamento, valorDaUnidade: number | nu
   const parcelaValor = num(fluxo.parcela_valor)
   const reforcos = num(fluxo.reforcos_qtd)
   const reforcoValor = num(fluxo.reforco_valor)
+  const posParcelas = num(fluxo.pos_parcelas)
+  const posParcelaValor = num(fluxo.pos_parcela_valor)
+  const posReforcos = num(fluxo.pos_reforcos_qtd)
+  const posReforcoValor = num(fluxo.pos_reforco_valor)
+  const entradaParcelas = num(fluxo.entrada_parcelas)
 
   const totais = totalizarFluxo({
     base,
@@ -151,6 +196,10 @@ export function detalharFluxo(fluxo: FluxoPagamento, valorDaUnidade: number | nu
     reforcosQtd: reforcos,
     reforcoValor,
     chavesPct: num(fluxo.chaves_pct),
+    posParcelas,
+    posParcelaValor,
+    posReforcosQtd: posReforcos,
+    posReforcoValor,
   })
   const totalParcelas = totais.parcelas
   const totalReforcos = totais.reforcos
@@ -164,13 +213,27 @@ export function detalharFluxo(fluxo: FluxoPagamento, valorDaUnidade: number | nu
 
   const moeda = (valor: number) => valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
+  // "10% em 4x de R$ 20.000": a entrada parcelada é a informação que mais
+  // falta no cartão — o cliente pergunta "quanto entro hoje?", e a resposta é
+  // a primeira das N, não o total.
+  const entradaEmVezes =
+    entradaParcelas !== null && entradaParcelas > 1
+      ? entradaValor !== null
+        ? `em ${entradaParcelas}x de ${moeda(entradaValor / entradaParcelas)}`
+        : `em ${entradaParcelas}x`
+      : null
+
+  const detalheDaEntrada = [entradaEmVezes, entradaDivergente ? `${fluxo.entrada_pct}% cadastrados` : null]
+    .filter(Boolean)
+    .join(' · ')
+
   const partes: ParteDoFluxo[] = [
     {
       chave: 'entrada',
       rotulo: 'Entrada',
       valor: entradaValor,
       percentual: entradaPct,
-      detalhe: entradaDivergente ? `${fluxo.entrada_pct}% cadastrados` : null,
+      detalhe: detalheDaEntrada || null,
     },
     {
       chave: 'parcelas',
@@ -210,6 +273,30 @@ export function detalharFluxo(fluxo: FluxoPagamento, valorDaUnidade: number | nu
       percentual: financiamentoPct,
       detalhe: financiamento !== null ? 'saldo do valor do imóvel' : null,
     },
+    {
+      chave: 'pos_parcelas',
+      rotulo: 'Mensais pós-chaves',
+      valor: totais.posParcelas,
+      percentual: percentualDe(base, totais.posParcelas),
+      detalhe:
+        posParcelas !== null && posParcelaValor !== null
+          ? `${posParcelas} × ${moeda(posParcelaValor)} após a entrega`
+          : posParcelas !== null
+            ? `${posParcelas} parcelas após a entrega`
+            : null,
+    },
+    {
+      chave: 'pos_reforcos',
+      rotulo: 'Semestrais pós-chaves',
+      valor: totais.posReforcos,
+      percentual: percentualDe(base, totais.posReforcos),
+      detalhe:
+        posReforcos !== null && posReforcoValor !== null
+          ? `${posReforcos} × ${moeda(posReforcoValor)} após a entrega`
+          : posReforcos !== null
+            ? `${posReforcos} reforços após a entrega`
+            : null,
+    },
   ]
 
   const soma = (chaves_: ParteDoFluxo['chave'][]) =>
@@ -217,7 +304,10 @@ export function detalharFluxo(fluxo: FluxoPagamento, valorDaUnidade: number | nu
 
   const durante = soma(['entrada', 'parcelas', 'reforcos'])
   const naEntrega = soma(['chaves', 'financiamento'])
-  const alocado = durante + naEntrega
+  // Pós-chaves entra na CONFERÊNCIA da soma (é dinheiro que compõe o preço),
+  // mas nunca no desembolso até a entrega.
+  const posChaves = soma(['pos_parcelas', 'pos_reforcos'])
+  const alocado = durante + naEntrega + posChaves
 
   // A simulação só existe quando o fluxo saiu da calculadora do CUB — é ela
   // que grava percentual, meses e parcela inicial.
@@ -232,6 +322,7 @@ export function detalharFluxo(fluxo: FluxoPagamento, valorDaUnidade: number | nu
     partes,
     durante,
     naEntrega,
+    posChaves,
     alocado,
     diferenca: base === null ? null : base - alocado,
     cub: temCub ? { percentual, meses, parcelaInicial } : null,

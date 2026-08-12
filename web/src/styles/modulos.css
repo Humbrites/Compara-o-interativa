@@ -1314,6 +1314,14 @@
 .composicao__fatia--financiamento {
   background: var(--texto-3);
 }
+/* O que se paga DEPOIS das chaves: cor propria porque nao e desembolso de
+   obra nem saldo de banco — e financiamento direto com a construtora. */
+.composicao__fatia--pos_parcelas {
+  background: var(--roxo);
+}
+.composicao__fatia--pos_reforcos {
+  background: var(--tom-pagamentos);
+}
 
 .partes {
   border: 1px solid var(--borda);

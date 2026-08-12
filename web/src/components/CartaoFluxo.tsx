@@ -16,9 +16,23 @@ interface Celula {
 
 const num = (valor: number | null): boolean => valor !== null && Number.isFinite(valor)
 
+/** "10% · R$ 80.000 em 4x" — a entrada parcelada e a pergunta do cliente. */
 function celulaEntrada(f: FluxoPagamento): Celula {
-  if (num(f.entrada_pct)) return { principal: fmtPct(f.entrada_pct), complemento: num(f.entrada_valor) ? fmtMoeda(f.entrada_valor) : null }
-  if (num(f.entrada_valor)) return { principal: fmtMoeda(f.entrada_valor), complemento: null }
+  const vezes = num(f.entrada_parcelas) && (f.entrada_parcelas as number) > 1 ? ` em ${f.entrada_parcelas}x` : ''
+  if (num(f.entrada_pct)) {
+    return {
+      principal: fmtPct(f.entrada_pct),
+      complemento: num(f.entrada_valor) ? `${fmtMoeda(f.entrada_valor)}${vezes}` : vezes.trim() || null,
+    }
+  }
+  if (num(f.entrada_valor)) return { principal: fmtMoeda(f.entrada_valor), complemento: vezes.trim() || null }
+  return { principal: TRACO, complemento: null }
+}
+
+/** Uma serie "N × R$ X" — mensais e semestrais, na obra ou depois das chaves. */
+function celulaSerie(qtd: number | null, valor: number | null): Celula {
+  if (num(qtd)) return { principal: `${qtd}x`, complemento: num(valor) ? fmtMoeda(valor) : null }
+  if (num(valor)) return { principal: fmtMoeda(valor), complemento: null }
   return { principal: TRACO, complemento: null }
 }
 
@@ -124,6 +138,20 @@ export function CartaoFluxo({ fluxo, indice, onEditar, onExcluir, valorDaUnidade
           <CelulaFluxo rotulo="Reforços" celula={celulaReforcos(fluxo)} />
           <CelulaFluxo rotulo="Chaves" celula={{ principal: fmtPct(fluxo.chaves_pct), complemento: null }} />
           <CelulaFluxo rotulo="Financ." celula={celulaFinanciamento(fluxo)} />
+          {/* As duas ultimas so aparecem quando a tabela tem pos-chaves —
+              numa tabela sem elas, celulas vazias so poluiriam a grade. */}
+          {(num(fluxo.pos_parcelas) || num(fluxo.pos_parcela_valor)) && (
+            <CelulaFluxo
+              rotulo="Mensais pós"
+              celula={celulaSerie(fluxo.pos_parcelas, fluxo.pos_parcela_valor)}
+            />
+          )}
+          {(num(fluxo.pos_reforcos_qtd) || num(fluxo.pos_reforco_valor)) && (
+            <CelulaFluxo
+              rotulo="Semestrais pós"
+              celula={celulaSerie(fluxo.pos_reforcos_qtd, fluxo.pos_reforco_valor)}
+            />
+          )}
         </div>
 
         {/* Preço NOMINAL × custo EFETIVO. "R$ 500.000" não diz nada a quem vai
@@ -151,6 +179,21 @@ export function CartaoFluxo({ fluxo, indice, onEditar, onExcluir, valorDaUnidade
               <span className="custo__valor">{fmtMoeda(resumo.naEntrega)}</span>
               <span className="custo__dica">{fmtPercentualDaBase(resumo.naEntrega, resumo.base)}</span>
             </div>
+            {/* Só aparece quando a tabela tem financiamento direto: sem esta
+                terceira parcela a equação não fecharia e o corretor leria um
+                "saldo na entrega" que a construtora já parcelou. */}
+            {resumo.posChaves > 0 && (
+              <>
+                <span className="custo__sinal" aria-hidden="true">
+                  +
+                </span>
+                <div className="custo__parte custo__parte--entrega">
+                  <span className="custo__rotulo">Depois das chaves</span>
+                  <span className="custo__valor">{fmtMoeda(resumo.posChaves)}</span>
+                  <span className="custo__dica">{fmtPercentualDaBase(resumo.posChaves, resumo.base)}</span>
+                </div>
+              </>
+            )}
           </div>
         )}
 

@@ -225,7 +225,13 @@ test('confirmar cria, atualiza e marca indisponível — tudo numa transação, 
 
   const historico = (await sessao.pedir(`/api/empreendimentos/${id}/importacoes`)).corpo
   assert.equal(historico.length, 1)
-  assert.deepEqual(historico[0].contagens, { criadas: 1, atualizadas: 1, indisponiveis: 1 })
+  assert.deepEqual(historico[0].contagens, {
+    criadas: 1,
+    atualizadas: 1,
+    indisponiveis: 1,
+    fluxosCriados: 0,
+    fluxosAtualizados: 0,
+  })
 })
 
 test('o diff casa por torre+número e, na falta deles, pela identificação', async () => {
@@ -324,4 +330,262 @@ test('a importação respeita a conta e recusa o que não dá para aplicar', asy
 
   const vizinhas = (await sessao.pedir(`/api/empreendimentos/${outro}/unidades`)).corpo
   assert.equal(vizinhas[0].status, 'Disponível')
+})
+
+/* ------------------------------------------------------------------ */
+/* A condição de pagamento vira tabela de venda nas unidades           */
+/* ------------------------------------------------------------------ */
+
+/** A tabela rica: entrada parcelada, obra, chaves e pós-chaves. */
+const FLUXO_COMPLETO = {
+  nome: 'Tabela de lançamento',
+  entrada_pct: 10,
+  entrada_parcelas: 4,
+  parcelas: 30,
+  parcela_valor: 3500,
+  reforcos_qtd: 6,
+  reforco_valor: 20000,
+  reforcos_periodicidade: 'semestral',
+  chaves_pct: 5,
+  financiamento_pct: 30,
+  pos_parcelas: 24,
+  pos_parcela_valor: 2000,
+  pos_reforcos_qtd: 4,
+  pos_reforco_valor: 15000,
+}
+
+test('a condição de pagamento é revalidada: percentual absurdo e quantidade zerada não passam', async () => {
+  const id = await novoEmpreendimento('Residencial Fluxo Inválido')
+  const unidades = [{ identificacao: 'Apto 101', torre: 'A', numero: '101', valor: 800000 }]
+
+  const casos = [
+    [{ entrada_pct: 250 }, /percentual e veio 250/],
+    [{ parcelas: -3 }, /não pode ser negativo/],
+    [{ parcela_valor: { total: 1 } }, /precisa ser número/],
+    [{ reforco_valor: 'vinte mil' }, /não é um número válido/],
+    [{ reforcos_qtd: 6, reforcos_periodicidade: 'quinzenal' }, /periodicidade dos reforços/],
+  ]
+
+  for (const [fluxo, esperado] of casos) {
+    const resposta = await previa(id, { unidades, fluxo_construtora: fluxo })
+    assert.equal(resposta.status, 400, JSON.stringify(fluxo))
+    assert.match([resposta.corpo.erro, ...(resposta.corpo.problemas ?? [])].join(' | '), esperado)
+  }
+
+  // Quantidade 0 não é erro — é campo em branco, e vira NULL (nunca 0).
+  const zerada = await previa(id, { unidades, fluxo_construtora: { parcelas: 0, parcela_valor: 2500 } })
+  assert.equal(zerada.status, 200)
+  assert.equal(zerada.corpo.fluxo_construtora.parcelas, null)
+
+  // Condição só com nome não é condição nenhuma.
+  const vazia = await previa(id, { unidades, fluxo_construtora: { nome: 'Tabela padrão' } })
+  assert.equal(vazia.corpo.fluxo_construtora, null)
+})
+
+test('confirmar cria UM fluxo por unidade e a reimportação atualiza em vez de duplicar', async () => {
+  const id = await novoEmpreendimento('Residencial Fluxo Gravado')
+
+  const unidades = [
+    { identificacao: 'Apto 101', torre: 'A', numero: '101', metragem: 70, valor: 800000, status: 'disponivel' },
+    { identificacao: 'Apto 102', torre: 'A', numero: '102', metragem: 82, valor: 900000, status: 'disponivel' },
+  ]
+
+  const lida = await previa(id, { unidades, fluxo_construtora: FLUXO_COMPLETO })
+  assert.equal(lida.status, 200)
+  assert.equal(lida.corpo.fluxo_construtora.entrada_parcelas, 4)
+  assert.equal(lida.corpo.fluxo_construtora.pos_reforcos_qtd, 4)
+
+  const aplicado = await confirmar(id, {
+    criar: lida.corpo.novas.map((n) => n.campos),
+    fluxo_construtora: lida.corpo.fluxo_construtora,
+  })
+
+  assert.equal(aplicado.status, 200)
+  assert.equal(aplicado.corpo.criadas, 2)
+  assert.equal(aplicado.corpo.fluxosCriados, 2, 'o fluxo é POR UNIDADE')
+  assert.equal(aplicado.corpo.fluxosAtualizados, 0)
+
+  const primeira = aplicado.corpo.unidades.find((u) => u.numero === '101')
+  assert.equal(primeira.fluxos.length, 1)
+  const fluxo = primeira.fluxos[0]
+
+  assert.equal(fluxo.nome, 'Tabela de lançamento')
+  assert.equal(fluxo.unidade_id, primeira.id, 'a tabela geral (unidade_id nulo) é legado — não se usa mais')
+  assert.equal(fluxo.entrada_pct, 10)
+  assert.equal(fluxo.entrada_valor, 80000, 'o % vira R$ sobre o valor da unidade')
+  assert.equal(fluxo.entrada_parcelas, 4)
+  assert.equal(fluxo.parcelas, 30)
+  assert.equal(fluxo.reforcos_qtd, 6)
+  assert.equal(fluxo.pos_parcelas, 24)
+  assert.equal(fluxo.pos_reforco_valor, 15000)
+  assert.equal(fluxo.cub_valor_imovel, 800000, 'sem base, o detalhe do fluxo abriria em branco')
+  // A periodicidade não tem coluna: ela fica escrita onde o corretor lê.
+  assert.match(fluxo.descricao, /semestrais/i)
+
+  // O histórico conta o que foi gravado.
+  const historico = (await sessao.pedir(`/api/empreendimentos/${id}/importacoes`)).corpo
+  assert.equal(historico[0].contagens.fluxosCriados, 2)
+
+  /* --- A tabela da semana seguinte ---------------------------------- */
+
+  // Idêntica byte a byte, não há o que aplicar: o diff vem vazio e ninguém
+  // grava fluxo nenhum de novo.
+  const identica = await previa(id, { unidades, fluxo_construtora: FLUXO_COMPLETO })
+  assert.equal(identica.corpo.novas.length, 0)
+  assert.equal(identica.corpo.alteradas.length, 0)
+
+  // A tabela de verdade vem com um preço reajustado — e é aí que o fluxo da
+  // unidade tem de ser ATUALIZADO, nunca duplicado.
+  const semanaSeguinte = [{ ...unidades[0], valor: 830000 }, unidades[1]]
+  const denovo = await previa(id, { unidades: semanaSeguinte, fluxo_construtora: FLUXO_COMPLETO })
+  assert.equal(denovo.corpo.alteradas.length, 1)
+
+  const reimportado = await confirmar(id, {
+    criar: [],
+    atualizar: denovo.corpo.alteradas.map((a) => ({ id: a.id, campos: a.depois })),
+    marcarIndisponiveis: [],
+    fluxo_construtora: denovo.corpo.fluxo_construtora,
+  })
+
+  assert.equal(reimportado.status, 200)
+  assert.equal(reimportado.corpo.fluxosCriados, 0, 'reimportar a mesma tabela NÃO acumula cópias')
+  assert.equal(reimportado.corpo.fluxosAtualizados, 1)
+
+  const depois = (await sessao.pedir(`/api/empreendimentos/${id}/unidades`)).corpo
+  for (const unidade of depois) assert.equal(unidade.fluxos.length, 1, `${unidade.identificacao} ganhou uma cópia`)
+
+  // O fluxo acompanhou o preço novo: base e entrada refeitas.
+  const reajustada = depois.find((u) => u.numero === '101')
+  assert.equal(reajustada.fluxos[0].cub_valor_imovel, 830000)
+  assert.equal(reajustada.fluxos[0].entrada_valor, 83000)
+})
+
+test('a unidade com condição própria recebe a dela, e o resto recebe a geral', async () => {
+  const id = await novoEmpreendimento('Residencial Fluxo Por Unidade')
+
+  const unidades = [
+    { identificacao: 'Apto 201', torre: 'A', numero: '201', valor: 800000 },
+    {
+      identificacao: 'Cobertura',
+      torre: 'A',
+      numero: '1201',
+      valor: 1500000,
+      fluxo: { nome: 'Condição da cobertura', entrada_pct: 20, parcelas: 24, parcela_valor: 8000 },
+    },
+  ]
+
+  const lida = await previa(id, { unidades, fluxo_construtora: FLUXO_COMPLETO })
+  assert.equal(lida.status, 200)
+  const cobertura = lida.corpo.novas.find((n) => n.campos.numero === '1201')
+  assert.equal(cobertura.fluxo.entrada_pct, 20, 'a prévia mostra a condição própria na linha da unidade')
+  assert.equal(lida.corpo.novas.find((n) => n.campos.numero === '201').fluxo, null)
+
+  const aplicado = await confirmar(id, {
+    criar: lida.corpo.novas.map((n) => ({ ...n.campos, fluxo: n.fluxo })),
+    fluxo_construtora: lida.corpo.fluxo_construtora,
+  })
+  assert.equal(aplicado.corpo.fluxosCriados, 2)
+
+  const porNumero = Object.fromEntries(aplicado.corpo.unidades.map((u) => [u.numero, u]))
+  assert.equal(porNumero['1201'].fluxos[0].nome, 'Condição da cobertura')
+  assert.equal(porNumero['1201'].fluxos[0].entrada_pct, 20)
+  assert.equal(porNumero['1201'].fluxos[0].entrada_valor, 300000)
+  assert.equal(porNumero['201'].fluxos[0].nome, 'Tabela de lançamento')
+})
+
+test('o outro formato de tabela: entrada, mensais, balões semestrais e financiamento', async () => {
+  const id = await novoEmpreendimento('Residencial Balões')
+
+  // A segunda tabela real do cliente: cada bloco com a QUANTIDADE descrita, e
+  // status misto na mesma planilha. Sem pós-chaves — bloco ausente vai null.
+  const fluxo = {
+    nome: 'Tabela obra',
+    entrada_pct: 20,
+    parcelas: 48,
+    parcela_valor: 2500,
+    reforcos_qtd: 8,
+    reforco_valor: 25000,
+    reforcos_periodicidade: 'semestral',
+    financiamento_pct: 40,
+  }
+
+  const lida = await previa(id, {
+    unidades: [
+      { identificacao: 'Apto 301', torre: 'A', numero: '301', valor: 1000000, status: 'disponivel' },
+      { identificacao: 'Apto 302', torre: 'A', numero: '302', valor: 1000000, status: 'reservada' },
+    ],
+    fluxo_construtora: fluxo,
+  })
+
+  assert.equal(lida.status, 200)
+  // O que a tabela NÃO tem fica null — nunca 0, nunca inventado.
+  assert.equal(lida.corpo.fluxo_construtora.pos_parcelas, null)
+  assert.equal(lida.corpo.fluxo_construtora.entrada_parcelas, null)
+  assert.equal(lida.corpo.fluxo_construtora.chaves_pct, null)
+
+  const aplicado = await confirmar(id, {
+    criar: lida.corpo.novas.map((n) => n.campos),
+    fluxo_construtora: lida.corpo.fluxo_construtora,
+  })
+
+  assert.equal(aplicado.corpo.fluxosCriados, 2)
+  const porNumero = Object.fromEntries(aplicado.corpo.unidades.map((u) => [u.numero, u]))
+  assert.equal(porNumero['301'].status, 'disponivel')
+  assert.equal(porNumero['302'].status, 'reservada', 'status misto na mesma tabela')
+
+  const gravado = porNumero['301'].fluxos[0]
+  assert.equal(gravado.parcelas, 48)
+  assert.equal(gravado.reforcos_qtd, 8)
+  // "Financiamento" é o SALDO NA ENTREGA: o % vira R$ sobre o valor do imóvel.
+  assert.equal(gravado.financiamento_pct, 40)
+  assert.equal(gravado.financiamento_valor, 400000)
+  assert.equal(gravado.pos_parcelas, null)
+})
+
+test('desmarcar "criar a condição de pagamento" importa as unidades sem fluxo nenhum', async () => {
+  const id = await novoEmpreendimento('Residencial Sem Fluxo')
+
+  const lida = await previa(id, {
+    unidades: [{ identificacao: 'Apto 401', torre: 'A', numero: '401', valor: 700000 }],
+    fluxo_construtora: FLUXO_COMPLETO,
+  })
+
+  const aplicado = await confirmar(id, {
+    criar: lida.corpo.novas.map((n) => n.campos),
+    fluxo_construtora: lida.corpo.fluxo_construtora,
+    gravarFluxo: false,
+  })
+
+  assert.equal(aplicado.corpo.criadas, 1)
+  assert.equal(aplicado.corpo.fluxosCriados, 0)
+  assert.equal(aplicado.corpo.unidades[0].fluxos.length, 0)
+})
+
+test('a unidade que não mudou nada também recebe a condição de pagamento da tabela', async () => {
+  const id = await novoEmpreendimento('Residencial Só o Fluxo')
+
+  const unidades = [{ identificacao: 'Apto 501', torre: 'A', numero: '501', valor: 600000 }]
+
+  // Primeira importação: sem condição de pagamento nenhuma.
+  const primeira = await previa(id, { unidades })
+  await confirmar(id, { criar: primeira.corpo.novas.map((n) => n.campos) })
+
+  // A tabela de condições chega DEPOIS, com os mesmos preços de sempre.
+  const segunda = await previa(id, { unidades, fluxo_construtora: FLUXO_COMPLETO })
+  assert.equal(segunda.corpo.novas.length, 0)
+  assert.equal(segunda.corpo.alteradas.length, 0)
+  assert.equal(segunda.corpo.inalteradas.length, 1, 'a unidade casada precisa ser conhecida pela prévia')
+
+  const aplicado = await confirmar(id, {
+    criar: [],
+    // É o que a tela manda: a unidade sem mudança entra só para receber o fluxo.
+    atualizar: segunda.corpo.inalteradas.map((u) => ({ id: u.id, campos: {} })),
+    fluxo_construtora: segunda.corpo.fluxo_construtora,
+  })
+
+  assert.equal(aplicado.status, 200)
+  assert.equal(aplicado.corpo.atualizadas, 0, 'nenhum campo mudou — ela não conta como atualizada')
+  assert.equal(aplicado.corpo.fluxosCriados, 1)
+  assert.equal(aplicado.corpo.unidades[0].fluxos.length, 1)
+  assert.equal(aplicado.corpo.unidades[0].fluxos[0].parcelas, 30)
 })

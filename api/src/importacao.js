@@ -192,14 +192,23 @@ export function montarDiff(existentes, recebidas) {
 
   const novas = []
   const alteradas = []
+  // Casaram e não mudaram NADA. Elas não aparecem como mudança na prévia (não
+  // mudaram mesmo), mas precisam existir aqui: quando a importação traz uma
+  // condição de pagamento, é nelas que a tabela nova também tem de entrar —
+  // senão importar a condição de venda de um prédio inteiro só pegaria as
+  // unidades que por acaso mudaram de preço na mesma semana.
+  const inalteradas = []
 
   for (const bruta of recebidas) {
     const unidade = normalizarUnidade(bruta)
+    // A condição de pagamento SÓ desta unidade, quando a tabela varia de uma
+    // para a outra. Ela não é coluna de unidade: viaja ao lado dos campos.
+    const fluxo = bruta?.fluxo ?? null
     const chave = chavesDeBusca(unidade).find((c) => indice.has(c))
     const atual = chave ? indice.get(chave) : null
 
     if (!atual) {
-      novas.push({ chave: chaveNatural(unidade), campos: unidade })
+      novas.push({ chave: chaveNatural(unidade), campos: unidade, fluxo })
       continue
     }
 
@@ -221,8 +230,13 @@ export function montarDiff(existentes, recebidas) {
       campos.push(campo)
     }
 
-    if (campos.length > 0) {
-      alteradas.push({ id: atual.id, identificacao: rotulo(atual), antes, depois, campos })
+    // Unidade sem campo algum alterado ainda entra na lista quando trouxe
+    // condição de pagamento própria: é uma mudança de verdade, e sem isso o
+    // fluxo dela se perderia entre a prévia e a gravação.
+    if (campos.length > 0 || fluxo) {
+      alteradas.push({ id: atual.id, identificacao: rotulo(atual), antes, depois, campos, fluxo })
+    } else {
+      inalteradas.push({ id: atual.id, identificacao: rotulo(atual) })
     }
   }
 
@@ -230,7 +244,7 @@ export function montarDiff(existentes, recebidas) {
     .filter((u) => !casadas.has(u.id))
     .map((u) => ({ id: u.id, identificacao: rotulo(u), status_atual: u.status ?? null }))
 
-  return { novas, alteradas, ausentes }
+  return { novas, alteradas, inalteradas, ausentes }
 }
 
 /** Como a unidade gravada e chamada na previa. */
@@ -240,6 +254,190 @@ function rotulo(unidade) {
 
   const partes = [unidade.torre?.trim(), unidade.numero?.trim() ? `nº ${unidade.numero.trim()}` : null].filter(Boolean)
   return partes.length > 0 ? partes.join(' · ') : `Unidade ${unidade.id}`
+}
+
+
+/* ------------------------------------------------------------------ */
+/* A condição de pagamento que veio na tabela                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Os campos NUMÉRICOS de uma condição de pagamento, e a coluna de
+ * `fluxos_pagamento` em que cada um cai.
+ *
+ * `chaves_valor` é o único sem coluna: a tabela guarda chaves em PERCENTUAL, e
+ * o R$ vira percentual sobre o valor da unidade na hora de gravar. Guardar as
+ * duas formas daria duas fontes de verdade para o mesmo número.
+ */
+export const CAMPOS_FLUXO_IMPORTADO = [
+  'entrada_pct',
+  'entrada_valor',
+  'entrada_parcelas',
+  'parcelas',
+  'parcela_valor',
+  'reforcos_qtd',
+  'reforco_valor',
+  'chaves_pct',
+  'chaves_valor',
+  'financiamento_pct',
+  'financiamento_valor',
+  'pos_parcelas',
+  'pos_parcela_valor',
+  'pos_reforcos_qtd',
+  'pos_reforco_valor',
+]
+
+/** Quantidades: 30 parcelas, 6 reforços. Nunca fracionário, nunca 0. */
+const QUANTIDADES_FLUXO = new Set([
+  'entrada_parcelas',
+  'parcelas',
+  'reforcos_qtd',
+  'pos_parcelas',
+  'pos_reforcos_qtd',
+])
+
+/** Percentuais: acima de 100 é leitura errada de coluna, não condição exótica. */
+const PERCENTUAIS_FLUXO = new Set(['entrada_pct', 'chaves_pct', 'financiamento_pct'])
+
+const PERIODICIDADES = ['semestral', 'anual', 'trimestral', 'mensal']
+
+/**
+ * Uma condição de pagamento revalidada do zero, do jeito que sai do JSON.
+ *
+ * Devolve null quando não há condição nenhuma — objeto vazio, ou só nome. Um
+ * fluxo em branco gravado em trinta unidades é ruído puro para quem vende.
+ * Os problemas são ACRESCENTADOS na lista recebida: a pessoa precisa ver tudo
+ * de uma vez, não um erro por viagem ao chat.
+ */
+export function lerFluxoDaConstrutora(bruto, onde, problemas) {
+  if (bruto === undefined || bruto === null) return null
+  if (!ehObjeto(bruto)) {
+    problemas.push(`A condição de pagamento ${onde} precisa ser um objeto.`)
+    return null
+  }
+
+  const fluxo = {}
+
+  for (const campo of CAMPOS_FLUXO_IMPORTADO) {
+    const valor = bruto[campo]
+    if (valor === undefined || valor === null || valor === '') {
+      fluxo[campo] = null
+      continue
+    }
+    if (typeof valor !== 'number' && typeof valor !== 'string') {
+      problemas.push(`O campo "${campo}" da condição de pagamento ${onde} precisa ser número.`)
+      fluxo[campo] = null
+      continue
+    }
+
+    let numero = typeof valor === 'number' ? (Number.isFinite(valor) ? valor : null) : lerNumero(valor)
+    if (numero === null) {
+      problemas.push(
+        `O campo "${campo}" da condição de pagamento ${onde} não é um número válido ("${valor}").`,
+      )
+    } else if (numero < 0) {
+      problemas.push(`O campo "${campo}" da condição de pagamento ${onde} não pode ser negativo.`)
+      numero = null
+    } else if (PERCENTUAIS_FLUXO.has(campo) && numero > 100) {
+      problemas.push(
+        `O campo "${campo}" da condição de pagamento ${onde} é um percentual e veio ${numero} — use o número do percentual (20% → 20).`,
+      )
+      numero = null
+    } else if (QUANTIDADES_FLUXO.has(campo)) {
+      numero = Math.round(numero)
+      // Campo em branco vira NULL, nunca 0: "0 parcelas" não existe.
+      if (numero === 0) numero = null
+    }
+
+    fluxo[campo] = numero
+  }
+
+  const texto = (valor) => (typeof valor === 'string' && valor.trim() ? valor.trim() : null)
+  fluxo.nome = texto(bruto.nome)
+  fluxo.descricao = texto(bruto.descricao)
+
+  const periodicidade = achatar(bruto.reforcos_periodicidade)
+  if (periodicidade && !PERIODICIDADES.includes(periodicidade)) {
+    problemas.push(
+      `A periodicidade dos reforços ${onde} ("${bruto.reforcos_periodicidade}") não é reconhecida — use semestral ou anual.`,
+    )
+    fluxo.reforcos_periodicidade = null
+  } else {
+    fluxo.reforcos_periodicidade = periodicidade || null
+  }
+
+  const temNumero = CAMPOS_FLUXO_IMPORTADO.some((campo) => fluxo[campo] !== null)
+  return temNumero ? fluxo : null
+}
+
+/** "6 reforços semestrais" — o que a tabela disse e a coluna não guarda. */
+const NOME_PERIODICIDADE = {
+  semestral: 'semestrais',
+  anual: 'anuais',
+  trimestral: 'trimestrais',
+  mensal: 'mensais',
+}
+
+/** O nome de um fluxo importado quando o JSON não trouxe nenhum. */
+export const NOME_FLUXO_PADRAO = 'Tabela da construtora'
+
+/**
+ * A condição lida virando as COLUNAS de `fluxos_pagamento`.
+ *
+ * Duas conversões acontecem aqui, e as duas precisam do valor da unidade:
+ * chaves em R$ vira percentual (é assim que a coluna existe) e entrada em %
+ * vira também R$ (as telas mostram os dois lados). `cub_valor_imovel` recebe o
+ * preço da unidade porque é dele que todas as contas do fluxo saem — sem base,
+ * o detalhe do fluxo abriria com tudo em branco.
+ *
+ * @param valorDaUnidade preço da unidade a que o fluxo vai pertencer.
+ */
+export function fluxoParaColunas(fluxo, valorDaUnidade) {
+  const base = typeof valorDaUnidade === 'number' && Number.isFinite(valorDaUnidade) && valorDaUnidade > 0
+    ? valorDaUnidade
+    : null
+
+  const entradaPct = fluxo.entrada_pct
+  const entradaValor =
+    fluxo.entrada_valor ?? (base !== null && entradaPct !== null ? (base * entradaPct) / 100 : null)
+
+  const chavesPct =
+    fluxo.chaves_pct ?? (base !== null && fluxo.chaves_valor !== null ? (fluxo.chaves_valor / base) * 100 : null)
+
+  // A periodicidade não tem coluna: ela vira uma frase na descrição, que é
+  // onde o corretor lê "reforços semestrais" antes de falar com o cliente.
+  const nota =
+    fluxo.reforcos_periodicidade && fluxo.reforcos_qtd
+      ? `Reforços ${NOME_PERIODICIDADE[fluxo.reforcos_periodicidade] ?? fluxo.reforcos_periodicidade}.`
+      : null
+  const descricao = [nota, fluxo.descricao].filter(Boolean).join(' ') || null
+
+  return {
+    nome: fluxo.nome || NOME_FLUXO_PADRAO,
+    entrada_pct: entradaPct ?? (base !== null && entradaValor !== null ? (entradaValor / base) * 100 : null),
+    entrada_valor: entradaValor,
+    entrada_parcelas: fluxo.entrada_parcelas,
+    parcelas: fluxo.parcelas,
+    parcela_valor: fluxo.parcela_valor,
+    reforcos_qtd: fluxo.reforcos_qtd,
+    reforco_valor: fluxo.reforco_valor,
+    chaves_pct: chavesPct,
+    financiamento_pct: fluxo.financiamento_pct,
+    financiamento_valor:
+      fluxo.financiamento_valor ??
+      (base !== null && fluxo.financiamento_pct !== null ? (base * fluxo.financiamento_pct) / 100 : null),
+    pos_parcelas: fluxo.pos_parcelas,
+    pos_parcela_valor: fluxo.pos_parcela_valor,
+    pos_reforcos_qtd: fluxo.pos_reforcos_qtd,
+    pos_reforco_valor: fluxo.pos_reforco_valor,
+    descricao,
+    cub_valor_imovel: base,
+  }
+}
+
+/** Dois fluxos com o mesmo nome são o MESMO fluxo — é o que evita a cópia. */
+export function mesmoNomeDeFluxo(a, b) {
+  return achatar(a || NOME_FLUXO_PADRAO) === achatar(b || NOME_FLUXO_PADRAO)
 }
 
 /* ------------------------------------------------------------------ */
@@ -287,6 +485,9 @@ export function validarPayloadDaPrevia(corpo) {
     }
 
     for (const campo of Object.keys(bruta)) {
+      // "fluxo" é a exceção: não é coluna da unidade, é a condição de
+      // pagamento só dela.
+      if (campo === 'fluxo') continue
       if (!CAMPOS_IMPORTAVEIS.includes(campo)) problemas.push(`Campo desconhecido "${campo}" na ${linha}.`)
     }
 
@@ -313,6 +514,9 @@ export function validarPayloadDaPrevia(corpo) {
     }
 
     const unidade = normalizarUnidade(bruta)
+    const fluxoProprio = lerFluxoDaConstrutora(bruta.fluxo, `da ${linha}`, problemas)
+    if (fluxoProprio) unidade.fluxo = fluxoProprio
+
     // Sem nada que identifique a linha, ela não casa com nada e viraria uma
     // unidade fantasma no cadastro.
     if (!unidade.identificacao && !unidade.numero && !unidade.torre) {
@@ -325,15 +529,13 @@ export function validarPayloadDaPrevia(corpo) {
   if (corpo.duvidas !== undefined && corpo.duvidas !== null && !Array.isArray(corpo.duvidas)) {
     problemas.push('O campo "duvidas" precisa ser uma lista.')
   }
-  if (corpo.fluxo_construtora !== undefined && corpo.fluxo_construtora !== null && !ehObjeto(corpo.fluxo_construtora)) {
-    problemas.push('O campo "fluxo_construtora" precisa ser um objeto.')
-  }
+  const fluxoGeral = lerFluxoDaConstrutora(corpo.fluxo_construtora, 'da tabela', problemas)
 
   if (problemas.length > 0) throw new PayloadInvalido(problemas)
 
   return {
     unidades,
     duvidas: (corpo.duvidas ?? []).map((duvida) => (typeof duvida === 'string' ? { texto: duvida } : duvida)),
-    fluxo_construtora: corpo.fluxo_construtora ?? null,
+    fluxo_construtora: fluxoGeral,
   }
 }

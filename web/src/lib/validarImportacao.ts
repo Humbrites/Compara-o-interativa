@@ -121,7 +121,7 @@ export interface ResultadoValidacao {
   ok: boolean
   /** Tudo que impede de seguir, em português e apontando a unidade. */
   problemas: string[]
-  unidades: CamposImportados[]
+  unidades: (CamposImportados & { fluxo?: FluxoDaConstrutora | null })[]
   duvidas: DuvidaImportacao[]
   fluxo_construtora: FluxoDaConstrutora | null
 }
@@ -137,17 +137,128 @@ const recusar = (...problemas: string[]): ResultadoValidacao => ({
   fluxo_construtora: null,
 })
 
+/**
+ * Os campos NUMERICOS de uma condicao de pagamento — os mesmos na condicao
+ * geral da tabela e na de uma unidade especifica.
+ */
 const CAMPOS_FLUXO = [
   'entrada_pct',
   'entrada_valor',
+  'entrada_parcelas',
   'parcelas',
   'parcela_valor',
   'reforcos_qtd',
   'reforco_valor',
   'chaves_pct',
+  'chaves_valor',
   'financiamento_pct',
   'financiamento_valor',
+  'pos_parcelas',
+  'pos_parcela_valor',
+  'pos_reforcos_qtd',
+  'pos_reforco_valor',
 ] as const
+
+/** Quantidades: numero de parcelas nao e 3,5 nem -2. */
+const QUANTIDADES_FLUXO = new Set<string>([
+  'entrada_parcelas',
+  'parcelas',
+  'reforcos_qtd',
+  'pos_parcelas',
+  'pos_reforcos_qtd',
+])
+
+/** Percentuais: fora de 0–100 e leitura errada da tabela, nao condicao exotica. */
+const PERCENTUAIS_FLUXO = new Set<string>([
+  'entrada_pct',
+  'chaves_pct',
+  'financiamento_pct',
+])
+
+const PERIODICIDADES = ['semestral', 'anual', 'trimestral', 'mensal']
+
+/**
+ * Uma condicao de pagamento conferida campo a campo.
+ *
+ * Devolve null quando nao ha condicao nenhuma (objeto vazio, ou so nome): um
+ * fluxo em branco gravado numa unidade so atrapalha quem vai vender.
+ * Os problemas encontrados sao ACRESCENTADOS a lista recebida — e a mesma
+ * conversa da unidade, e a pessoa precisa ver tudo de uma vez.
+ */
+export function lerFluxoDaConstrutora(
+  cru: unknown,
+  onde: string,
+  problemas: string[],
+): FluxoDaConstrutora | null {
+  if (cru === undefined || cru === null) return null
+  if (!ehObjeto(cru)) {
+    problemas.push(`A condição de pagamento ${onde} precisa ser um objeto (ou null).`)
+    return null
+  }
+
+  const fluxo: FluxoDaConstrutora = {}
+  const numericos: Record<string, number | null> = {}
+
+  for (const campo of CAMPOS_FLUXO) {
+    const valor = cru[campo]
+    if (valor === undefined || valor === null || valor === '') {
+      numericos[campo] = null
+      continue
+    }
+    if (typeof valor !== 'number' && typeof valor !== 'string') {
+      problemas.push(`O campo "${campo}" da condição de pagamento ${onde} precisa ser número.`)
+      numericos[campo] = null
+      continue
+    }
+
+    let numero = lerNumeroBr(valor)
+    if (numero === null) {
+      problemas.push(
+        `O campo "${campo}" da condição de pagamento ${onde} não é um número válido ("${String(valor)}").`,
+      )
+    } else if (numero < 0) {
+      problemas.push(`O campo "${campo}" da condição de pagamento ${onde} não pode ser negativo.`)
+      numero = null
+    } else if (PERCENTUAIS_FLUXO.has(campo) && numero > 100) {
+      // 200% de entrada e sempre leitura errada de coluna — e viraria uma
+      // tabela que "passa do valor do imovel" sem ninguem entender por que.
+      problemas.push(
+        `O campo "${campo}" da condição de pagamento ${onde} é um percentual e veio ${numero} — use o número do percentual (20% → 20).`,
+      )
+      numero = null
+    } else if (QUANTIDADES_FLUXO.has(campo)) {
+      numero = Math.round(numero)
+      // Campo em branco vira null, nunca 0: "0 parcelas" nao existe.
+      if (numero === 0) numero = null
+    }
+
+    numericos[campo] = numero
+  }
+
+  Object.assign(fluxo, numericos)
+
+  fluxo.nome = typeof cru.nome === 'string' ? cru.nome.trim() || null : null
+  fluxo.descricao = typeof cru.descricao === 'string' ? cru.descricao.trim() || null : null
+
+  const periodicidade = typeof cru.reforcos_periodicidade === 'string' ? cru.reforcos_periodicidade.trim() : ''
+  if (periodicidade) {
+    const achatada = achatar(periodicidade)
+    if (PERIODICIDADES.includes(achatada)) fluxo.reforcos_periodicidade = achatada
+    else {
+      problemas.push(
+        `A periodicidade dos reforços ${onde} ("${periodicidade}") não é reconhecida — use semestral ou anual.`,
+      )
+      fluxo.reforcos_periodicidade = null
+    }
+  } else {
+    fluxo.reforcos_periodicidade = null
+  }
+
+  // So nome/descricao nao e condicao de pagamento: sem NENHUM numero, nao ha
+  // o que calcular nem o que gravar.
+  const temNumero = CAMPOS_FLUXO.some((campo) => numericos[campo] !== null)
+  return temNumero ? fluxo : null
+}
 
 /** A resposta do chat, do texto cru ao payload pronto para a prévia. */
 export function validarRespostaDaIa(texto: string): ResultadoValidacao {
@@ -178,7 +289,7 @@ export function validarRespostaDaIa(texto: string): ResultadoValidacao {
   }
 
   const problemas: string[] = []
-  const unidades: CamposImportados[] = []
+  const unidades: (CamposImportados & { fluxo?: FluxoDaConstrutora | null })[] = []
 
   bruto.unidades.forEach((cru: unknown, indice: number) => {
     if (!ehObjeto(cru)) {
@@ -193,6 +304,9 @@ export function validarRespostaDaIa(texto: string): ResultadoValidacao {
     const onde = `unidade ${nome}`
 
     for (const chave of Object.keys(cru)) {
+      // "fluxo" e a excecao: nao e coluna da unidade, e a condicao de
+      // pagamento SO dela, quando a tabela varia de uma unidade para outra.
+      if (chave === 'fluxo') continue
       if (!(CAMPOS_ACEITOS as readonly string[]).includes(chave)) {
         problemas.push(`Campo desconhecido "${chave}" na ${onde} — o prompt não pede esse campo.`)
       }
@@ -265,6 +379,9 @@ export function validarRespostaDaIa(texto: string): ResultadoValidacao {
       )
     }
 
+    const proprio = lerFluxoDaConstrutora(cru.fluxo, `da ${onde}`, problemas)
+    if (proprio) (unidade as CamposImportados & { fluxo?: FluxoDaConstrutora | null }).fluxo = proprio
+
     unidades.push(unidade)
   })
 
@@ -288,21 +405,7 @@ export function validarRespostaDaIa(texto: string): ResultadoValidacao {
     }
   }
 
-  let fluxo: FluxoDaConstrutora | null = null
-  if (bruto.fluxo_construtora !== undefined && bruto.fluxo_construtora !== null) {
-    if (!ehObjeto(bruto.fluxo_construtora)) {
-      problemas.push('O campo "fluxo_construtora" precisa ser um objeto (ou null).')
-    } else {
-      const cru = bruto.fluxo_construtora
-      fluxo = {}
-      for (const campo of CAMPOS_FLUXO) fluxo[campo] = lerNumeroBr(cru[campo])
-      fluxo.nome = typeof cru.nome === 'string' ? cru.nome.trim() || null : null
-      fluxo.descricao = typeof cru.descricao === 'string' ? cru.descricao.trim() || null : null
-
-      // Objeto todo vazio não é condição de pagamento nenhuma.
-      if (Object.values(fluxo).every((valor) => valor === null)) fluxo = null
-    }
-  }
+  const fluxo = lerFluxoDaConstrutora(bruto.fluxo_construtora, 'da tabela', problemas)
 
   return { ok: problemas.length === 0, problemas, unidades, duvidas, fluxo_construtora: fluxo }
 }

@@ -19,8 +19,10 @@ export type FormularioFluxo = Record<string, string>
  * (`precoDaUnidade`) e o valor do m².
  */
 export const CAMPOS_FLUXO = [
-  'nome', 'cub_valor_imovel', 'entrada_pct', 'entrada_valor', 'parcelas', 'parcela_valor',
+  'nome', 'cub_valor_imovel', 'entrada_pct', 'entrada_valor', 'entrada_parcelas',
+  'parcelas', 'parcela_valor',
   'reforcos_qtd', 'reforco_valor', 'chaves_pct', 'financiamento_pct', 'financiamento_valor',
+  'pos_parcelas', 'pos_parcela_valor', 'pos_reforcos_qtd', 'pos_reforco_valor',
   'descricao', 'observacoes',
 ]
 
@@ -72,6 +74,10 @@ export function numerosDoFormulario(form: FormularioFluxo): NumerosDoFluxo {
     reforcosQtd: numeroDoCampo(form.reforcos_qtd),
     reforcoValor: numeroDoCampo(form.reforco_valor),
     chavesPct: numeroDoCampo(form.chaves_pct),
+    posParcelas: numeroDoCampo(form.pos_parcelas),
+    posParcelaValor: numeroDoCampo(form.pos_parcela_valor),
+    posReforcosQtd: numeroDoCampo(form.pos_reforcos_qtd),
+    posReforcoValor: numeroDoCampo(form.pos_reforco_valor),
   }
 }
 
@@ -137,6 +143,9 @@ function recalcularFinanciamento(form: FormularioFluxo): FormularioFluxo {
 const CAMPOS_DA_CONTA = new Set([
   'cub_valor_imovel', 'entrada_pct', 'entrada_valor',
   'parcelas', 'parcela_valor', 'reforcos_qtd', 'reforco_valor', 'chaves_pct',
+  // O que a construtora parcela DEPOIS das chaves tambem sai do valor do
+  // imovel: sem entrar aqui, o saldo do banco viria inflado.
+  'pos_parcelas', 'pos_parcela_valor', 'pos_reforcos_qtd', 'pos_reforco_valor',
 ])
 
 /**
@@ -239,8 +248,19 @@ export function CamposFluxo({ form, mudar, daUnidade = false, autoFocus = false 
           inputMode="decimal"
         />
       </Campo>
+      {/* A entrada parcelada e a primeira pergunta de quem compra ("quanto
+          entro hoje?") e era o que mais faltava nas tabelas do cliente. */}
+      <Campo rotulo="Entrada em quantas vezes" className="col-inteira" dica="1 = à vista">
+        <input
+          className="entrada"
+          value={form.entrada_parcelas}
+          onChange={(e) => mudar('entrada_parcelas', e.target.value)}
+          placeholder="4"
+          inputMode="numeric"
+        />
+      </Campo>
 
-      <Campo rotulo="Parcelamento" dica="nº de parcelas">
+      <Campo rotulo="Parcelamento" dica="nº de parcelas durante a obra">
         <input
           className="entrada"
           value={form.parcelas}
@@ -307,7 +327,7 @@ export function CamposFluxo({ form, mudar, daUnidade = false, autoFocus = false 
         dica={calculado ? 'R$ — calculado' : 'R$'}
         erro={
           estouro !== null
-            ? `Entrada, parcelas, reforços e chaves já passam ${fmtMoeda(estouro, true)} do valor do imóvel`
+            ? `As partes cadastradas já passam ${fmtMoeda(estouro, true)} do valor do imóvel`
             : undefined
         }
       >
@@ -319,7 +339,52 @@ export function CamposFluxo({ form, mudar, daUnidade = false, autoFocus = false 
           inputMode="decimal"
           readOnly={calculado}
           tabIndex={calculado ? -1 : undefined}
-          title={calculado ? 'Valor total − entrada − parcelas − reforços − chaves' : undefined}
+          title={calculado ? 'Valor total − entrada − parcelas − reforços − chaves − pós-chaves' : undefined}
+        />
+      </Campo>
+
+      {/* Pós-chaves: o financiamento DIRETO com a construtora. Entra na
+          composição do preço, mas NUNCA no desembolso até a entrega — é o que
+          separa "quanto custa para chegar nas chaves" de "quanto custa o
+          apartamento". */}
+      <p className="campo__dica col-inteira" style={{ marginTop: 'var(--e2)' }}>
+        <Icone nome="chave" tamanho={12} />
+        Pós-chaves — o que a construtora parcela DEPOIS da entrega
+      </p>
+      <Campo rotulo="Mensais pós-chaves" dica="quantidade">
+        <input
+          className="entrada"
+          value={form.pos_parcelas}
+          onChange={(e) => mudar('pos_parcelas', e.target.value)}
+          placeholder="24"
+          inputMode="numeric"
+        />
+      </Campo>
+      <Campo rotulo="Valor da mensal pós-chaves" dica="R$">
+        <input
+          className="entrada"
+          value={form.pos_parcela_valor}
+          onChange={(e) => mudar('pos_parcela_valor', e.target.value)}
+          placeholder="2000"
+          inputMode="decimal"
+        />
+      </Campo>
+      <Campo rotulo="Semestrais pós-chaves" dica="quantidade">
+        <input
+          className="entrada"
+          value={form.pos_reforcos_qtd}
+          onChange={(e) => mudar('pos_reforcos_qtd', e.target.value)}
+          placeholder="4"
+          inputMode="numeric"
+        />
+      </Campo>
+      <Campo rotulo="Valor do semestral pós-chaves" dica="R$">
+        <input
+          className="entrada"
+          value={form.pos_reforco_valor}
+          onChange={(e) => mudar('pos_reforco_valor', e.target.value)}
+          placeholder="15000"
+          inputMode="decimal"
         />
       </Campo>
 

@@ -13,6 +13,7 @@ import { mensagemDoErro } from '../lib/http'
 import { fmtMoeda, fmtNumero, TRACO } from '../lib/format'
 import { rotuloStatusUnidade } from '../lib/opcoes'
 import { montarPromptDeImportacao } from '../lib/promptImportacao'
+import { descreverFluxoDaConstrutora, nomeDoFluxoImportado } from '../lib/fluxoImportado'
 import { validarRespostaDaIa } from '../lib/validarImportacao'
 import { Icone } from './Icones'
 import { Modal } from './ui'
@@ -148,6 +149,9 @@ export function ImportarTabela({ empreendimento, onImportou, avisar, onFechar }:
   const [ausentesMarcadas, setAusentesMarcadas] = useState<Set<number>>(new Set())
 
   const [resultado, setResultado] = useState<ResultadoImportacao | null>(null)
+  // Nasce MARCADO quando a tabela traz condição de pagamento: quem importou
+  // uma tabela com fluxo quer o fluxo. Quem só queria preços desmarca.
+  const [gravarFluxo, setGravarFluxo] = useState(true)
 
   const prompt = useMemo(
     () => montarPromptDeImportacao({ empreendimento: empreendimento.nome }),
@@ -156,6 +160,15 @@ export function ImportarTabela({ empreendimento, onImportou, avisar, onFechar }:
 
   const totalMarcado =
     criarMarcadas.size + atualizarMarcadas.size + ausentesMarcadas.size
+
+  // Só a condição de pagamento a gravar já é motivo para confirmar: é o caso
+  // de quem reimporta a MESMA tabela só para o fluxo entrar nas unidades.
+  const soOFluxo =
+    gravarFluxo && !!previa?.fluxo_construtora && (previa?.inalteradas.length ?? 0) > 0 && totalMarcado === 0
+
+  // Unidades que fogem da condição geral — a tabela varia de uma para a outra.
+  const unidadesComFluxoProprio =
+    (previa?.novas.filter((n) => n.fluxo).length ?? 0) + (previa?.alteradas.filter((a) => a.fluxo).length ?? 0)
 
   async function copiarPrompt() {
     const ok = await copiarTexto(prompt)
@@ -185,6 +198,7 @@ export function ImportarTabela({ empreendimento, onImportou, avisar, onFechar }:
       setCriarMarcadas(new Set(resposta.novas.map((_, indice) => indice)))
       setAtualizarMarcadas(new Set(resposta.alteradas.map((a) => a.id)))
       setAusentesMarcadas(new Set())
+      setGravarFluxo(true)
       setPasso(3)
     } catch (falha) {
       // O 400 da rota traz a lista de problemas: mostrar todos evita a viagem
@@ -198,19 +212,29 @@ export function ImportarTabela({ empreendimento, onImportou, avisar, onFechar }:
   }
 
   async function confirmar() {
-    if (!previa || totalMarcado === 0) return
+    if (!previa || (totalMarcado === 0 && !soOFluxo)) return
     setErro(null)
     setOcupado(true)
     try {
       const resposta = await api.confirmarImportacao(empreendimento.id, {
-        criar: previa.novas.filter((_, indice) => criarMarcadas.has(indice)).map((nova) => nova.campos),
-        atualizar: previa.alteradas
-          .filter((alterada) => atualizarMarcadas.has(alterada.id))
-          .map((alterada) => ({ id: alterada.id, campos: alterada.depois })),
+        criar: previa.novas
+          .filter((_, indice) => criarMarcadas.has(indice))
+          .map((nova) => ({ ...nova.campos, fluxo: nova.fluxo ?? null })),
+        atualizar: [
+          ...previa.alteradas
+            .filter((alterada) => atualizarMarcadas.has(alterada.id))
+            .map((alterada) => ({ id: alterada.id, campos: alterada.depois, fluxo: alterada.fluxo ?? null })),
+          // Unidade que não mudou nada entra SÓ para receber a condição de
+          // pagamento — sem campos, ela não é contada como atualizada.
+          ...(gravarFluxo && previa.fluxo_construtora
+            ? previa.inalteradas.map((u) => ({ id: u.id, campos: {}, fluxo: null }))
+            : []),
+        ],
         marcarIndisponiveis: previa.ausentes
           .filter((ausente) => ausentesMarcadas.has(ausente.id))
           .map((ausente) => ausente.id),
         fluxo_construtora: entrada?.fluxo_construtora ?? null,
+        gravarFluxo,
       })
       setResultado(resposta)
       onImportou(resposta.unidades)
@@ -273,14 +297,16 @@ export function ImportarTabela({ empreendimento, onImportou, avisar, onFechar }:
             type="button"
             className="btn btn--primario"
             onClick={() => void confirmar()}
-            disabled={ocupado || totalMarcado === 0}
+            disabled={ocupado || (totalMarcado === 0 && !soOFluxo)}
           >
             {ocupado ? <Icone nome="spinner" tamanho={14} className="girando" /> : <Icone nome="check" tamanho={14} />}
             {ocupado
               ? 'Importando…'
-              : totalMarcado === 0
-                ? 'Nada marcado'
-                : `Importar ${totalMarcado} ${totalMarcado === 1 ? 'unidade' : 'unidades'}`}
+              : soOFluxo
+                ? 'Gravar a condição de pagamento'
+                : totalMarcado === 0
+                  ? 'Nada marcado'
+                  : `Importar ${totalMarcado} ${totalMarcado === 1 ? 'unidade' : 'unidades'}`}
           </button>
         )}
         {passo === 4 && (
@@ -446,6 +472,11 @@ export function ImportarTabela({ empreendimento, onImportou, avisar, onFechar }:
                         onChange={() => alternar(criarMarcadas, setCriarMarcadas, indice)}
                       />
                       <span className="importacao__nome">{rotuloDaNova(nova.campos)}</span>
+                      {nova.fluxo && (
+                        <span className="importacao__selo" title="Esta unidade tem condição de pagamento própria">
+                          condição própria
+                        </span>
+                      )}
                     </label>
                     <span className="importacao__resumo">{resumoDaNova(nova.campos) || TRACO}</span>
                   </li>
@@ -475,7 +506,15 @@ export function ImportarTabela({ empreendimento, onImportou, avisar, onFechar }:
                         onChange={() => alternar(atualizarMarcadas, setAtualizarMarcadas, alterada.id)}
                       />
                       <span className="importacao__nome">{alterada.identificacao}</span>
+                      {alterada.fluxo && (
+                        <span className="importacao__selo" title="Esta unidade tem condição de pagamento própria">
+                          condição própria
+                        </span>
+                      )}
                     </label>
+                    {alterada.campos.length === 0 && (
+                      <span className="importacao__resumo">só a condição de pagamento muda</span>
+                    )}
                     <ul className="importacao__mudancas">
                       {alterada.campos.map((campo) => (
                         <li key={campo}>
@@ -529,23 +568,65 @@ export function ImportarTabela({ empreendimento, onImportou, avisar, onFechar }:
             )}
           </section>
 
-          {previa.fluxo_construtora && (
+          {(previa.fluxo_construtora || previa.novas.some((n) => n.fluxo) || previa.alteradas.some((a) => a.fluxo)) && (
             <section className="form-secao form-secao--chaves">
               <h4 className="form-secao__titulo">
                 <Icone nome="cartao" tamanho={16} />
                 Condição de pagamento lida
-                <span className="form-secao__complemento">apenas informativo — ainda não é gravada</span>
+                <span className="form-secao__complemento">{nomeDoFluxoImportado(previa.fluxo_construtora)}</span>
               </h4>
-              <ul className="importacao__mudancas importacao__mudancas--fluxo">
-                {Object.entries(previa.fluxo_construtora)
-                  .filter(([, valor]) => valor !== null && valor !== undefined && valor !== '')
-                  .map(([campo, valor]) => (
-                    <li key={campo}>
-                      <span className="importacao__campo">{campo.replace(/_/g, ' ')}</span>
-                      <span className="importacao__depois">{String(valor)}</span>
+
+              {previa.fluxo_construtora ? (
+                <ul className="importacao__mudancas importacao__mudancas--fluxo">
+                  {descreverFluxoDaConstrutora(previa.fluxo_construtora).map((parte) => (
+                    <li key={parte.rotulo}>
+                      <span className="importacao__campo">
+                        {parte.rotulo}
+                        {parte.posChaves && ' *'}
+                      </span>
+                      <span className="importacao__depois">{parte.texto}</span>
                     </li>
                   ))}
-              </ul>
+                </ul>
+              ) : (
+                <p className="importacao__vazio">
+                  A tabela não tem condição geral — só as unidades com condição própria recebem fluxo.
+                </p>
+              )}
+
+              {descreverFluxoDaConstrutora(previa.fluxo_construtora).some((p) => p.posChaves) && (
+                <p className="importacao__nota">
+                  * pago <strong>depois da entrega</strong> — não entra no desembolso até as chaves.
+                </p>
+              )}
+
+              {unidadesComFluxoProprio > 0 && (
+                <p className="importacao__nota">
+                  {unidadesComFluxoProprio === 1
+                    ? '1 unidade tem condição própria e recebe a dela, não esta.'
+                    : `${unidadesComFluxoProprio} unidades têm condição própria e recebem a delas, não esta.`}
+                </p>
+              )}
+
+              {/* O único ponto da prévia em que se decide GRAVAR o fluxo. Vem
+                  marcado porque é o que se espera de quem importou uma tabela
+                  com condição de pagamento — mas quem só queria atualizar
+                  preços não pode levar um fluxo novo em cada unidade junto. */}
+              <label className="importacao__marca">
+                <input type="checkbox" checked={gravarFluxo} onChange={() => setGravarFluxo(!gravarFluxo)} />
+                <span className="importacao__nome">Criar a condição de pagamento nas unidades importadas</span>
+              </label>
+              <p className="importacao__nota">
+                Cada unidade recebe a tabela de venda dela. Reimportar a mesma tabela ATUALIZA a que já existe com o
+                mesmo nome — não cria uma cópia.
+                {previa.inalteradas.length > 0 && previa.fluxo_construtora && (
+                  <>
+                    {' '}
+                    As <strong>{previa.inalteradas.length}</strong> unidades que não mudaram também recebem a condição —
+                    é a tabela do prédio, não só das que mudaram de preço.
+                  </>
+                )}
+              </p>
             </section>
           )}
         </>
@@ -570,6 +651,15 @@ export function ImportarTabela({ empreendimento, onImportou, avisar, onFechar }:
               <strong>{resultado.indisponiveis}</strong>{' '}
               {resultado.indisponiveis === 1 ? 'marcada indisponível' : 'marcadas indisponíveis'}
             </li>
+            {(resultado.fluxosCriados > 0 || resultado.fluxosAtualizados > 0) && (
+              <li>
+                <strong>{resultado.fluxosCriados + resultado.fluxosAtualizados}</strong>{' '}
+                {resultado.fluxosCriados + resultado.fluxosAtualizados === 1
+                  ? 'condição de pagamento gravada'
+                  : 'condições de pagamento gravadas'}
+                {resultado.fluxosAtualizados > 0 && ` (${resultado.fluxosAtualizados} já existiam e foram atualizadas)`}
+              </li>
+            )}
           </ul>
           <p className="importacao__nota">A lista de unidades da tela já está atualizada.</p>
         </section>

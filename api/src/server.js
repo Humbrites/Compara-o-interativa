@@ -26,7 +26,10 @@ import { registrarAutenticacao } from './rotas-auth.js'
 import { registrarPlataforma } from './rotas-plataforma.js'
 import {
   CAMPOS_IMPORTAVEIS,
+  fluxoParaColunas,
+  lerFluxoDaConstrutora,
   LIMITE_PAYLOAD,
+  mesmoNomeDeFluxo,
   montarDiff,
   normalizarCampo,
   normalizarUnidade,
@@ -401,18 +404,72 @@ app.post('/api/empreendimentos/:id/importacao/confirmar', (req, reply) => {
     return reply.code(400).send({ erro: 'Nada foi marcado para importar' })
   }
 
+  // A condição de pagamento é REVALIDADA aqui, como todo o resto: ela vai
+  // virar tabela de venda gravada em cada unidade, e um percentual lido errado
+  // é o tipo de número que ninguém desconfia depois.
+  const problemasDoFluxo = []
+  const fluxoGeral = lerFluxoDaConstrutora(corpo.fluxo_construtora, 'da tabela', problemasDoFluxo)
+  const fluxoDoItem = (item) => lerFluxoDaConstrutora(item?.fluxo, 'da unidade', problemasDoFluxo)
+
+  const fluxosPorItem = new Map()
+  for (const item of [...criar, ...atualizar_]) fluxosPorItem.set(item, fluxoDoItem(item))
+
+  if (problemasDoFluxo.length > 0) {
+    return reply.code(400).send({
+      erro:
+        problemasDoFluxo.length === 1
+          ? problemasDoFluxo[0]
+          : `A condição de pagamento tem ${problemasDoFluxo.length} problemas.`,
+      problemas: problemasDoFluxo,
+    })
+  }
+
+  // O padrão é gravar quando há condição de pagamento — mas quem confirma
+  // manda: a tela desmarca para quem só quer atualizar preços.
+  const gravarFluxo = corpo.gravarFluxo !== false
+
   // Só id de unidade DESTE empreendimento é aceito: um id de outra conta
   // enviado à mão não pode alterar nada.
   const daCasa = new Set(unidadesDoEmpreendimento.all(id).map((u) => u.id))
 
   const aplicar = db.transaction(() => {
-    const contagens = { criadas: 0, atualizadas: 0, indisponiveis: 0 }
+    const contagens = { criadas: 0, atualizadas: 0, indisponiveis: 0, fluxosCriados: 0, fluxosAtualizados: 0 }
+
+    /**
+     * A tabela de venda da unidade, criada ou ATUALIZADA.
+     *
+     * O fluxo é por unidade (a tabela geral, de `unidade_id` nulo, é legado).
+     * E o casamento é pelo NOME: a construtora manda a planilha de novo toda
+     * semana, e sem isso a mesma "Tabela da construtora" viraria uma cópia por
+     * importação até o cartão da unidade ficar ilegível.
+     */
+    const gravarFluxoDaUnidade = (unidadeId, fluxo, valorDaUnidade) => {
+      if (!gravarFluxo || !fluxo) return
+
+      const colunas = fluxoParaColunas(fluxo, valorDaUnidade)
+      const existente = fluxosDaUnidade.all(unidadeId).find((f) => mesmoNomeDeFluxo(f.nome, colunas.nome))
+
+      const dados = sanitizar(
+        { ...colunas, empreendimento_id: Number(id), unidade_id: unidadeId },
+        CAMPOS_FLUXO,
+      )
+
+      if (existente) {
+        atualizar('fluxos_pagamento', existente.id, dados)
+        contagens.fluxosAtualizados += 1
+        return
+      }
+
+      inserir('fluxos_pagamento', dados)
+      contagens.fluxosCriados += 1
+    }
 
     for (const bruta of criar) {
       const campos = normalizarUnidade(bruta)
       const dados = sanitizar({ ...campos, empreendimento_id: Number(id) }, CAMPOS_UNIDADE)
-      inserir('unidades', dados)
+      const novaId = Number(inserir('unidades', dados))
       contagens.criadas += 1
+      gravarFluxoDaUnidade(novaId, fluxosPorItem.get(bruta) ?? fluxoGeral, dados.valor ?? null)
     }
 
     for (const item of atualizar_) {
@@ -424,10 +481,16 @@ app.post('/api/empreendimentos/:id/importacao/confirmar', (req, reply) => {
         if (!CAMPOS_IMPORTAVEIS.includes(campo)) continue
         dados[campo] = normalizarCampo(campo, valor)
       }
-      if (Object.keys(dados).length === 0) continue
 
-      atualizar('unidades', alvo, dados)
-      contagens.atualizadas += 1
+      if (Object.keys(dados).length > 0) {
+        atualizar('unidades', alvo, dados)
+        contagens.atualizadas += 1
+      }
+
+      // O preço que a tabela acabou de trazer manda na conta do fluxo; sem ele,
+      // o que já estava gravado na unidade.
+      const preco = dados.valor ?? buscarUnidade.get(alvo, contaDe(req))?.valor ?? null
+      gravarFluxoDaUnidade(alvo, fluxosPorItem.get(item) ?? fluxoGeral, preco)
     }
 
     // A unidade que sumiu da tabela nova só muda de STATUS. Apagar seria
@@ -464,10 +527,9 @@ app.post('/api/empreendimentos/:id/importacao/confirmar', (req, reply) => {
     importacaoId,
     ...contagens,
     unidades: unidadesDoEmpreendimento.all(id).map(comFluxos),
-    // A condição de pagamento da construtora ainda NÃO é gravada: ela vira
-    // fluxo de pagamento na etapa 2 deste projeto. Devolvemos o que veio para
-    // a tela poder mostrar que foi lido.
-    fluxo_construtora: corpo.fluxo_construtora ?? null,
+    // A condição de pagamento JÁ virou tabela de venda nas unidades (uma por
+    // unidade); aqui ela volta só para a tela repetir o que foi lido.
+    fluxo_construtora: fluxoGeral,
   }
 })
 

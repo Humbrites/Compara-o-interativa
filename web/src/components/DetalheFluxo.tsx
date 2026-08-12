@@ -23,6 +23,8 @@ const ICONES: Record<ParteDoFluxo['chave'], NomeIcone> = {
   reforcos: 'seta_cima',
   chaves: 'chave',
   financiamento: 'banco',
+  pos_parcelas: 'calendario',
+  pos_reforcos: 'seta_cima',
 }
 
 function Linha({ parte }: { parte: ParteDoFluxo }) {
@@ -53,7 +55,7 @@ interface Props {
 export function DetalheFluxo({ fluxo, indice, valorDaUnidade = null, titulo = 'Fluxo', onFechar }: Props) {
   const detalhe = useMemo(() => detalharFluxo(fluxo, valorDaUnidade), [fluxo, valorDaUnidade])
   const nome = fluxo.nome?.trim() || `Fluxo ${indice + 1}`
-  const { base, partes, durante, alocado, diferenca, simulacao } = detalhe
+  const { base, partes, durante, posChaves, alocado, diferenca, simulacao } = detalhe
 
   // Barra de composição: só as partes com valor entram, na proporção do total.
   const comValor = partes.filter((p) => (p.valor ?? 0) > 0)
@@ -130,6 +132,19 @@ export function DetalheFluxo({ fluxo, indice, valorDaUnidade = null, titulo = 'F
                   {base > 0 && ` · ${fmtPct((durante / base) * 100)} do valor`}
                 </span>
               </div>
+              {/* Pós-chaves fica num bloco SEPARADO: é dinheiro que sai depois
+                  da entrega, e somá-lo ao "até a entrega" faria a obra parecer
+                  o dobro do que custa para quem ainda vai decidir a compra. */}
+              {posChaves > 0 && (
+                <div className="preco__bloco preco__bloco--secundario">
+                  <span className="preco__rotulo">Depois das chaves</span>
+                  <span className="preco__valor preco__valor--menor">{fmtMoeda(posChaves)}</span>
+                  <span className="preco__dica">
+                    mensais + semestrais pós-entrega
+                    {base > 0 && ` · ${fmtPct((posChaves / base) * 100)} do valor`}
+                  </span>
+                </div>
+              )}
             </div>
 
             {totalDaBarra > 0 && (

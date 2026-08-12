@@ -411,7 +411,13 @@ const COLUNAS_CUB = ['cub_percentual', 'cub_meses', 'cub_valor_imovel', 'cub_par
 // O saldo a financiar em R$ passou a ser gravado junto do percentual: ele e o
 // resto da tabela (valor do imovel menos entrada, parcelas, reforcos e
 // chaves), e guardar so a % obrigaria a refazer a conta em cada leitura.
-const COLUNAS_NOVAS = [...COLUNAS_CUB, 'financiamento_valor']
+// A tabela real da construtora tem mais blocos do que o fluxo sabia guardar:
+// a entrada costuma ser PARCELADA, e boa parte das tabelas parcela um pedaco
+// DEPOIS das chaves (financiamento direto). Sem estas colunas, a importacao
+// gravava a unidade e jogava a condicao de pagamento fora.
+const COLUNAS_POS_CHAVES = ['entrada_parcelas', 'pos_parcelas', 'pos_parcela_valor', 'pos_reforcos_qtd', 'pos_reforco_valor']
+
+const COLUNAS_NOVAS = [...COLUNAS_CUB, 'financiamento_valor', ...COLUNAS_POS_CHAVES]
 
 for (const coluna of COLUNAS_NOVAS) {
   const existentes = db.prepare('PRAGMA table_info(fluxos_pagamento)').all()
@@ -447,10 +453,11 @@ export const CAMPOS_EMPREENDIMENTO = [
 
 export const CAMPOS_FLUXO = [
   'empreendimento_id', 'unidade_id', 'nome',
-  'entrada_pct', 'entrada_valor',
+  'entrada_pct', 'entrada_valor', 'entrada_parcelas',
   'parcelas', 'parcela_valor',
   'reforcos_qtd', 'reforco_valor',
   'chaves_pct', 'financiamento_pct', 'financiamento_valor',
+  'pos_parcelas', 'pos_parcela_valor', 'pos_reforcos_qtd', 'pos_reforco_valor',
   'descricao', 'observacoes',
   'cub_percentual', 'cub_meses', 'cub_valor_imovel', 'cub_parcela_inicial', 'cub_entrada',
 ]
@@ -468,6 +475,7 @@ const NUMERICOS = new Set([
   'empreendimento_id', 'unidade_id', 'entrada_pct', 'entrada_valor', 'parcelas',
   'parcela_valor', 'reforcos_qtd', 'reforco_valor', 'chaves_pct',
   'financiamento_pct', 'financiamento_valor',
+  'entrada_parcelas', 'pos_parcelas', 'pos_parcela_valor', 'pos_reforcos_qtd', 'pos_reforco_valor',
   'andar', 'metragem', 'metragem_total', 'valor',
   'cub_percentual', 'cub_meses', 'cub_valor_imovel', 'cub_parcela_inicial', 'cub_entrada',
 ])

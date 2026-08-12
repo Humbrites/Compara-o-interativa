@@ -6,6 +6,8 @@ export interface FluxoPagamento {
   nome: string | null
   entrada_pct: number | null
   entrada_valor: number | null
+  /** Entrada em N vezes (null = à vista, e nunca 0). */
+  entrada_parcelas: number | null
   parcelas: number | null
   parcela_valor: number | null
   reforcos_qtd: number | null
@@ -14,6 +16,12 @@ export interface FluxoPagamento {
   financiamento_pct: number | null
   /** Saldo do banco em R$: o que sobra depois de entrada, parcelas, reforços e chaves. */
   financiamento_valor: number | null
+  /** Mensais DEPOIS das chaves — financiamento direto com a construtora. */
+  pos_parcelas: number | null
+  pos_parcela_valor: number | null
+  /** Semestrais/balões depois das chaves. */
+  pos_reforcos_qtd: number | null
+  pos_reforco_valor: number | null
   descricao: string | null
   observacoes: string | null
   /** Parametros da simulacao do CUB que gerou o fluxo (null se veio da mao). */
@@ -91,6 +99,8 @@ export type CampoImportado = keyof CamposImportados
 export interface UnidadeNova {
   chave: string | null
   campos: CamposImportados
+  /** Condicao de pagamento SO daquela unidade; sem ela vale a geral da tabela. */
+  fluxo?: FluxoDaConstrutora | null
 }
 
 export interface UnidadeAlterada {
@@ -99,6 +109,7 @@ export interface UnidadeAlterada {
   antes: Partial<CamposImportados>
   depois: Partial<CamposImportados>
   campos: CampoImportado[]
+  fluxo?: FluxoDaConstrutora | null
 }
 
 export interface UnidadeAusente {
@@ -114,18 +125,35 @@ export interface DuvidaImportacao {
   texto: string
 }
 
-/** A condicao de pagamento que veio na tabela, quando houver. */
+/**
+ * A condicao de pagamento que veio na tabela, quando houver.
+ *
+ * A tabela da construtora quase nunca tem TODOS os blocos: uma traz entrada
+ * parcelada + mensais + semestrais + pos-chaves, outra so entrada + mensais +
+ * balao + financiamento. O que nao existe vem null — nunca 0, e nunca
+ * inventado.
+ */
 export interface FluxoDaConstrutora {
   nome?: string | null
   entrada_pct?: number | null
   entrada_valor?: number | null
+  /** Entrada em N vezes ("sinal + 3 parcelas" = 4). */
+  entrada_parcelas?: number | null
   parcelas?: number | null
   parcela_valor?: number | null
   reforcos_qtd?: number | null
   reforco_valor?: number | null
+  /** 'semestral' | 'anual' — so quando a tabela DIZ; balao sem periodo assume semestral. */
+  reforcos_periodicidade?: string | null
   chaves_pct?: number | null
+  /** Chaves em R$, quando a tabela nao da o percentual. */
+  chaves_valor?: number | null
   financiamento_pct?: number | null
   financiamento_valor?: number | null
+  pos_parcelas?: number | null
+  pos_parcela_valor?: number | null
+  pos_reforcos_qtd?: number | null
+  pos_reforco_valor?: number | null
   descricao?: string | null
 }
 
@@ -136,7 +164,7 @@ export interface FluxoDaConstrutora {
  * proposito: qualquer campo a mais aqui e recusado la com "campo desconhecido".
  */
 export interface EntradaImportacao {
-  unidades: CamposImportados[]
+  unidades: (CamposImportados & { fluxo?: FluxoDaConstrutora | null })[]
   duvidas: DuvidaImportacao[]
   fluxo_construtora: FluxoDaConstrutora | null
 }
@@ -145,6 +173,11 @@ export interface EntradaImportacao {
 export interface PreviaImportacao {
   novas: UnidadeNova[]
   alteradas: UnidadeAlterada[]
+  /**
+   * Casaram e nao mudaram nada. Nao viram linha de mudanca na tela — mas sao
+   * elas que tambem recebem a condicao de pagamento quando a tabela traz uma.
+   */
+  inalteradas: { id: number; identificacao: string }[]
   ausentes: UnidadeAusente[]
   duvidas: DuvidaImportacao[]
   fluxo_construtora: FluxoDaConstrutora | null
@@ -152,10 +185,16 @@ export interface PreviaImportacao {
 }
 
 export interface ConfirmacaoImportacao {
-  criar: Partial<CamposImportados>[]
-  atualizar: { id: number; campos: Partial<CamposImportados> }[]
+  criar: (Partial<CamposImportados> & { fluxo?: FluxoDaConstrutora | null })[]
+  atualizar: { id: number; campos: Partial<CamposImportados>; fluxo?: FluxoDaConstrutora | null }[]
   marcarIndisponiveis: number[]
   fluxo_construtora?: FluxoDaConstrutora | null
+  /**
+   * Gravar a condicao de pagamento como fluxo NAS UNIDADES importadas. Vem
+   * marcado quando ha fluxo, mas e escolha de quem confirma: quem so quer
+   * atualizar precos desmarca.
+   */
+  gravarFluxo?: boolean
 }
 
 export interface ResultadoImportacao {
@@ -163,6 +202,9 @@ export interface ResultadoImportacao {
   criadas: number
   atualizadas: number
   indisponiveis: number
+  /** Fluxos de pagamento criados e atualizados nas unidades desta importacao. */
+  fluxosCriados: number
+  fluxosAtualizados: number
   unidades: Unidade[]
   fluxo_construtora: FluxoDaConstrutora | null
 }

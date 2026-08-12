@@ -1505,6 +1505,18 @@ select.entrada {
   cursor: pointer;
 }
 
+/* "condição própria": a unidade que foge da condição geral da tabela. Sem a
+   marca, a prévia mostraria o fluxo geral e gravaria outro na unidade. */
+.importacao__selo {
+  padding: 2px 8px;
+  border-radius: var(--raio-pill);
+  background: var(--tom-pagamentos-fundo);
+  color: var(--tom-pagamentos);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
 .importacao__marca input {
   width: 16px;
   height: 16px;

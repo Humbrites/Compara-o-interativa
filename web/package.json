@@ -8,7 +8,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --import ./testes/resolvedor.mjs --test testes/*.test.ts"
   },
   "dependencies": {
     "leaflet": "^1.9.4",
