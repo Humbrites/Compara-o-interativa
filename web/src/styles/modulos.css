@@ -3640,3 +3640,134 @@
   padding-top: var(--e3);
   border-top: 1px solid var(--borda);
 }
+
+
+/* --------------------------------------------------------------------------
+   Comparar unidades (nível 3)
+   -------------------------------------------------------------------------- */
+
+.comparar-escolha {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e3);
+}
+
+.comparar-grupo__nome {
+  display: block;
+  margin-bottom: var(--e1);
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--texto-3);
+}
+
+.comparar-grupo__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e2);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e1);
+  padding: 5px var(--e3);
+  border: 1px solid var(--borda-forte);
+  border-radius: var(--raio-pill);
+  background: var(--superficie);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--texto-2);
+  cursor: pointer;
+  transition: border-color var(--transicao), background var(--transicao), color var(--transicao);
+}
+
+.chip:hover:not(:disabled) {
+  border-color: var(--marca-400);
+  color: var(--marca-700);
+}
+
+.chip--ativo {
+  border-color: var(--marca-600);
+  background: var(--marca-50);
+  color: var(--marca-700);
+}
+
+.chip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* A tabela rola SOZINHA na horizontal: quatro colunas não cabem em tela
+   estreita, e deixar a página inteira rolar de lado quebra o resto. */
+.comparar-area {
+  overflow-x: auto;
+}
+
+.comparar {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 520px;
+}
+
+.comparar th,
+.comparar td {
+  padding: var(--e2) var(--e3);
+  border-bottom: 1px solid var(--borda);
+  text-align: right;
+  vertical-align: top;
+}
+
+.comparar thead th {
+  border-bottom: 2px solid var(--borda-forte);
+}
+
+.comparar tbody th {
+  text-align: left;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--texto-2);
+  white-space: nowrap;
+}
+
+.comparar__coluna {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.comparar__unidade {
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.comparar__empreendimento {
+  font-size: 11px;
+  color: var(--texto-3);
+}
+
+.comparar__valor {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--e1);
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.comparar__detalhe {
+  display: block;
+  font-size: 11px;
+  color: var(--texto-3);
+}
+
+/* O verde é reservado ao "melhor indicador" — aqui e no comparativo A × B. */
+.comparar__vence .comparar__valor {
+  color: var(--vitoria);
+}
+
+.comparar__vence {
+  background: var(--vitoria-fundo);
+}

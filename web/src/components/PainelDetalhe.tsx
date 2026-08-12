@@ -20,6 +20,7 @@ import { Icone, type NomeIcone } from './Icones'
 import { CartaoFluxo } from './CartaoFluxo'
 import { CartaoUnidade } from './CartaoUnidade'
 import { AnaliseEmpreendimento } from './AnaliseEmpreendimento'
+import { CompararUnidades } from './CompararUnidades'
 import { AnaliseUnidade } from './AnaliseUnidade'
 import { FluxosDoEmpreendimento, fluxoParaEnvio, fluxoParaFormulario } from './FormFluxos'
 import { Galeria } from './Galeria'
@@ -91,6 +92,8 @@ function Bloco({
 
 interface Props {
   empreendimento: Empreendimento
+  /** A base inteira: a comparação de unidades cruza empreendimentos. */
+  lista: Empreendimento[]
   podeComparar: boolean
   onEditar: () => void
   onExcluir: () => void
@@ -108,6 +111,7 @@ interface Props {
 
 export function PainelDetalhe({
   empreendimento: e,
+  lista,
   podeComparar,
   onEditar,
   onExcluir,
@@ -137,7 +141,11 @@ export function PainelDetalhe({
   const [fluxosAbertos, setFluxosAbertos] = useState<number | null>(null)
   // Qual unidade esta com a analise de oportunidade aberta.
   const [analisando, setAnalisando] = useState<number | null>(null)
-  useEffect(() => setAnalisando(null), [e.id])
+  const [comparandoUnidades, setComparandoUnidades] = useState(false)
+  useEffect(() => {
+    setAnalisando(null)
+    setComparandoUnidades(false)
+  }, [e.id])
   useEffect(() => setFluxosAbertos(null), [e.id])
   // Para qual unidade cada tabela antiga vai ser copiada.
   const [destino, setDestino] = useState<Record<number, string>>({})
@@ -412,12 +420,26 @@ export function PainelDetalhe({
             aberto={blocos.unidades}
             onAlternar={() => alternar('unidades')}
             acao={
-              podeEditar ? (
-                <button type="button" className="btn btn--fantasma btn--pequeno" onClick={onAdicionarUnidade}>
-                  <Icone nome="mais" tamanho={13} />
-                  Adicionar
-                </button>
-              ) : undefined
+              <>
+                {/* Nível 3: com duas ou mais unidades, "qual é melhor?" passa a
+                    ser uma pergunta de verdade. */}
+                {resumo.total > 1 && (
+                  <button
+                    type="button"
+                    className="btn btn--fantasma btn--pequeno"
+                    onClick={() => setComparandoUnidades(true)}
+                  >
+                    <Icone nome="balanca" tamanho={13} />
+                    Comparar
+                  </button>
+                )}
+                {podeEditar && (
+                  <button type="button" className="btn btn--fantasma btn--pequeno" onClick={onAdicionarUnidade}>
+                    <Icone nome="mais" tamanho={13} />
+                    Adicionar
+                  </button>
+                )}
+              </>
             }
           >
             {!temUnidades ? (
@@ -595,6 +617,10 @@ export function PainelDetalhe({
           )}
         </div>
       </div>
+
+      {comparandoUnidades && (
+        <CompararUnidades lista={lista} empreendimentoInicial={e} onFechar={() => setComparandoUnidades(false)} />
+      )}
 
       {analisando !== null &&
         (() => {

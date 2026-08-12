@@ -378,6 +378,7 @@ export default function App({ sessao, aoMudarSessao, aoSair }: AppProps) {
           <aside className="coluna-painel">
             <PainelDetalhe
               empreendimento={empreendimentoA}
+              lista={lista}
               podeComparar={lista.length > 1}
               onEditar={() => setForm({ empreendimento: empreendimentoA })}
               onExcluir={() => void excluirEmpreendimento(empreendimentoA)}
