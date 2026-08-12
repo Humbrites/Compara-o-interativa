@@ -786,6 +786,14 @@ que mora no CSS — nenhuma tela precisa reinventar:
   o contém.
 - Campos curtos (percentual, juro, prazo) vão em `.grade--compacta`, com largura de campo e
   não de banner.
+- Seção com muitos campos ganha **subtítulos** (`.subgrupo__titulo`): o cadastro de unidade
+  tem 15 campos, e em grade única eles se leem como uma lista de coisas a preencher em vez
+  de três perguntas — *qual é a unidade*, *o que ela tem*, *quanto custa*.
+
+O **painel do imóvel** segue a mesma gramática: o cabeçalho fixo mostra o nome do
+empreendimento (é ele que responde "de quem é esta ficha" com o painel rolado), há **um**
+CTA primário — *Comparar*, ou *Simular investimento* quando não existe um segundo imóvel —
+e os blocos recolhíveis usam o mesmo ícone-em-pastilha das seções de formulário.
 
 ---
 

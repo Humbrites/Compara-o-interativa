@@ -355,6 +355,7 @@ export function UnidadesDoEmpreendimento({ empreendimentoId, unidades, onMudou, 
             {editandoId !== null ? 'Editar unidade' : 'Nova unidade'}
           </h3>
 
+          <p className="subgrupo__titulo">Qual é a unidade</p>
           <div className="grade">
             <Campo rotulo="Identificação" className="col-span-2" dica="como o corretor chama">
               {entrada('identificacao', { placeholder: 'Ex.: Tipo A, Cobertura, Apto 1204', autoFocus: true })}
@@ -373,7 +374,8 @@ export function UnidadesDoEmpreendimento({ empreendimentoId, unidades, onMudou, 
             </Campo>
           </div>
 
-          <div className="grade" style={{ marginTop: 'var(--e4)' }}>
+          <p className="subgrupo__titulo">O que ela tem</p>
+          <div className="grade">
             <Campo rotulo="Metragem privativa" dica="m²">
               {entrada('metragem', { placeholder: '78', inputMode: 'decimal' })}
             </Campo>
@@ -385,6 +387,10 @@ export function UnidadesDoEmpreendimento({ empreendimentoId, unidades, onMudou, 
             <Campo rotulo="Banheiros">{entrada('banheiros', { placeholder: '2', inputMode: 'numeric' })}</Campo>
             <Campo rotulo="Vagas">{entrada('vagas', { placeholder: '2', inputMode: 'numeric' })}</Campo>
 
+          </div>
+
+          <p className="subgrupo__titulo">Quanto custa</p>
+          <div className="grade">
             <Campo rotulo="Valor da unidade" dica="R$">
               {entrada('valor', { placeholder: '842000', inputMode: 'decimal' })}
             </Campo>

@@ -959,6 +959,30 @@ select.entrada {
   }
 }
 
+/* Subtítulo dentro de uma seção: separa grupos de campos sem virar mais um
+   cartão. O formulário da unidade tem 15 campos — em grade única eles se leem
+   como uma lista de coisas a preencher, não como três perguntas. */
+.subgrupo__titulo {
+  display: flex;
+  align-items: center;
+  gap: var(--e3);
+  margin: var(--e5) 0 var(--e3);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--texto-2);
+}
+
+.subgrupo__titulo:first-child {
+  margin-top: 0;
+}
+
+.subgrupo__titulo::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--borda);
+}
+
 /* Opcao marcavel dentro de uma grade de campos (ex.: ligar o CUB). */
 .opcao {
   display: flex;
