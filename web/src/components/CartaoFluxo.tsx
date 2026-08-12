@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { FluxoPagamento } from '../types'
+import { detalharFluxo } from '../lib/fluxos'
 import { fmtMoeda, fmtPct, TRACO } from '../lib/format'
 import { Icone } from './Icones'
 import { DetalheFluxo } from './DetalheFluxo'
@@ -66,7 +67,15 @@ interface Props {
   titulo?: string
 }
 
+/** "40% do valor" — o peso de cada parte, quando há valor de imóvel. */
+function fmtPercentualDaBase(valor: number, base: number | null): string {
+  if (base === null || base <= 0) return ''
+  return `${fmtPct((valor / base) * 100)} do valor`
+}
+
 export function CartaoFluxo({ fluxo, indice, onEditar, onExcluir, valorDaUnidade = null, titulo }: Props) {
+  // A mesma conta do detalhe — aqui só para o resumo de três números.
+  const resumo = useMemo(() => detalharFluxo(fluxo, valorDaUnidade), [fluxo, valorDaUnidade])
   // O cartão inteiro abre as condições calculadas — é o que o corretor quer
   // ver ao clicar numa tabela de venda, não só o que foi digitado.
   const [abertoNoDetalhe, setAbertoNoDetalhe] = useState(false)
@@ -116,6 +125,34 @@ export function CartaoFluxo({ fluxo, indice, onEditar, onExcluir, valorDaUnidade
           <CelulaFluxo rotulo="Chaves" celula={{ principal: fmtPct(fluxo.chaves_pct), complemento: null }} />
           <CelulaFluxo rotulo="Financ." celula={celulaFinanciamento(fluxo)} />
         </div>
+
+        {/* Preço NOMINAL × custo EFETIVO. "R$ 500.000" não diz nada a quem vai
+            pagar 200 mil até as chaves e financiar os outros 300 mil — e é
+            essa leitura que o corretor precisa ter na ponta da língua. */}
+        {resumo.base !== null && resumo.alocado > 0 && (
+          <div className="custo">
+            <div className="custo__parte">
+              <span className="custo__rotulo">Valor da unidade</span>
+              <span className="custo__valor">{fmtMoeda(resumo.base)}</span>
+            </div>
+            <span className="custo__sinal" aria-hidden="true">
+              =
+            </span>
+            <div className="custo__parte custo__parte--obra">
+              <span className="custo__rotulo">Pago até as chaves</span>
+              <span className="custo__valor">{fmtMoeda(resumo.durante)}</span>
+              <span className="custo__dica">{fmtPercentualDaBase(resumo.durante, resumo.base)}</span>
+            </div>
+            <span className="custo__sinal" aria-hidden="true">
+              +
+            </span>
+            <div className="custo__parte custo__parte--entrega">
+              <span className="custo__rotulo">Saldo na entrega</span>
+              <span className="custo__valor">{fmtMoeda(resumo.naEntrega)}</span>
+              <span className="custo__dica">{fmtPercentualDaBase(resumo.naEntrega, resumo.base)}</span>
+            </div>
+          </div>
+        )}
 
         <span className="fluxo__chamada">
           <Icone nome="grafico" tamanho={13} />

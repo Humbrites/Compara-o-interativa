@@ -3227,3 +3227,69 @@
   font-size: 11px;
   color: var(--texto-3);
 }
+
+
+/* ==========================================================================
+   Preço nominal × custo efetivo
+
+   "R$ 500.000" é o preço; o que o cliente pergunta é quanto sai do bolso até
+   as chaves e quanto vai para o banco. Os três números juntos, e na mesma
+   linha, respondem isso de relance.
+   ========================================================================== */
+
+.custo {
+  display: flex;
+  align-items: stretch;
+  flex-wrap: wrap;
+  gap: var(--e2);
+  margin-top: var(--e3);
+  padding: var(--e3);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-sm);
+  background: var(--superficie-2);
+}
+
+.custo__parte {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1 1 120px;
+  min-width: 0;
+}
+
+.custo__rotulo {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--texto-3);
+}
+
+.custo__valor {
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.custo__dica {
+  font-size: 10.5px;
+  color: var(--texto-3);
+}
+
+/* O sinal separa as parcelas da conta sem virar mais um número na leitura. */
+.custo__sinal {
+  align-self: center;
+  flex: none;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--texto-3);
+}
+
+.custo__parte--obra .custo__valor {
+  color: var(--marca-700);
+}
+
+.custo__parte--entrega .custo__valor {
+  color: var(--tom-chaves);
+}

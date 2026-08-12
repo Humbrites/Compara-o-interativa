@@ -32,6 +32,14 @@ export interface DetalheFluxo {
   partes: ParteDoFluxo[]
   /** Entrada + parcelas + reforços: o que sai do bolso até a entrega. */
   durante: number
+  /**
+   * Chaves + financiamento: o que ainda se deve QUANDO A OBRA ENTREGA.
+   *
+   * Junto com `base` e `durante`, é a leitura que separa o preço NOMINAL do
+   * custo EFETIVO: "R$ 500.000" não diz nada a quem vai pagar 200 mil até as
+   * chaves e financiar os outros 300 mil.
+   */
+  naEntrega: number
   /** Tudo que foi alocado, inclusive chaves e financiamento. */
   alocado: number
   /**
@@ -208,7 +216,8 @@ export function detalharFluxo(fluxo: FluxoPagamento, valorDaUnidade: number | nu
     partes.filter((p) => chaves_.includes(p.chave)).reduce((total, p) => total + (p.valor ?? 0), 0)
 
   const durante = soma(['entrada', 'parcelas', 'reforcos'])
-  const alocado = durante + soma(['chaves', 'financiamento'])
+  const naEntrega = soma(['chaves', 'financiamento'])
+  const alocado = durante + naEntrega
 
   // A simulação só existe quando o fluxo saiu da calculadora do CUB — é ela
   // que grava percentual, meses e parcela inicial.
@@ -222,6 +231,7 @@ export function detalharFluxo(fluxo: FluxoPagamento, valorDaUnidade: number | nu
     baseDoFluxo: doFluxo !== null,
     partes,
     durante,
+    naEntrega,
     alocado,
     diferenca: base === null ? null : base - alocado,
     cub: temCub ? { percentual, meses, parcelaInicial } : null,
