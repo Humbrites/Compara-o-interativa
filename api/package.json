@@ -11,7 +11,8 @@
     "seed": "node src/seed.js",
     "seed:limpar": "node src/seed.js --limpar",
     "provisionar": "node src/provisionar.js",
-    "teste": "node --test testes/*.test.js"
+    "teste": "node --test testes/*.test.js",
+    "seed:analise": "node src/seed-analise.js"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.2",

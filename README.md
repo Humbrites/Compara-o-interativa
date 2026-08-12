@@ -38,7 +38,17 @@ A base nasce **vazia**. Para conhecer a ferramenta com dados fictícios:
 ```bash
 npm run seed          # insere 3 empreendimentos de exemplo (prefixados com "[exemplo]")
 npm run seed:limpar   # remove só os exemplos, preservando o que você cadastrou
+
+npm run seed:analise  # cenário COMPLETO de análise: 2 empreendimentos, 9 unidades
+                      # com tabela de venda (prefixados com "[demo]")
 ```
+
+O `seed:analise` existe porque a análise de oportunidade só tem o que mostrar quando há
+**unidades com tabela de venda** — e os números dele não são aleatórios: o *Residencial
+Aurora* tem uma cobertura que separa o ticket médio da mediana, um studio de entrada leve
+que pontua alto e um garden de entrada pesada que pontua baixo; o *Praia Brava Residence*
+serve para comparar unidades entre empreendimentos diferentes. Ele usa a conta de
+demonstração (ou `-- --conta <id>`), e `-- --limpar` remove só o que ele criou.
 
 ### Outros comandos
 

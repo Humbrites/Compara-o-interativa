@@ -18,7 +18,8 @@
     "seed": "npm run seed --workspace api",
     "seed:limpar": "npm run seed:limpar --workspace api",
     "provisionar": "npm run provisionar --workspace api --",
-    "teste": "npm run teste --workspace api"
+    "teste": "npm run teste --workspace api",
+    "seed:analise": "npm run seed:analise --workspace api --"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
