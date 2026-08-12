@@ -24,6 +24,12 @@ interface Props {
   lista: Empreendimento[]
   /** Empreendimento de onde a tela abriu — as unidades dele vem marcadas. */
   empreendimentoInicial: Empreendimento
+  /**
+   * Aberta pelo painel de um imovel, a pergunta e sobre AQUELE predio: a lista
+   * comeca so com as unidades dele, e um link traz o resto da base. Aberta
+   * pelo topo, ja nasce com tudo a mostra.
+   */
+  soDoEmpreendimento?: boolean
   onFechar: () => void
 }
 
@@ -45,7 +51,13 @@ interface Linha {
   detalhe?: (item: Escolhida) => string | null
 }
 
-export function CompararUnidades({ lista, empreendimentoInicial, onFechar }: Props) {
+export function CompararUnidades({
+  lista,
+  empreendimentoInicial,
+  soDoEmpreendimento = false,
+  onFechar,
+}: Props) {
+  const [soEste, setSoEste] = useState(soDoEmpreendimento)
   /**
    * Abre com DUAS unidades marcadas, não com as quatro.
    *
@@ -73,6 +85,7 @@ export function CompararUnidades({ lista, empreendimentoInicial, onFechar }: Pro
     const termo = busca.trim().toLowerCase()
     return lista
       .filter((e) => e.unidades.length > 0)
+      .filter((e) => !soEste || e.id === empreendimentoInicial.id)
       .map((e) => {
         if (!termo) return e
         // O termo casa com o nome do empreendimento OU com o da unidade: quem
@@ -86,7 +99,7 @@ export function CompararUnidades({ lista, empreendimentoInicial, onFechar }: Pro
         return { ...e, unidades }
       })
       .filter((e) => e.unidades.length > 0)
-  }, [lista, busca])
+  }, [lista, busca, soEste, empreendimentoInicial.id])
 
   const selecionadas = useMemo(
     () =>
@@ -221,7 +234,11 @@ export function CompararUnidades({ lista, empreendimentoInicial, onFechar }: Pro
   return (
     <Modal
       titulo="Comparar unidades"
-      subtitulo={`Qual oportunidade é melhor — até ${MAXIMO} unidades lado a lado, de qualquer empreendimento`}
+      subtitulo={
+        soEste
+          ? `Qual unidade de ${empreendimentoInicial.nome} é melhor — até ${MAXIMO} lado a lado`
+          : `Qual oportunidade é melhor — até ${MAXIMO} unidades lado a lado, de qualquer empreendimento`
+      }
       largo
       onFechar={onFechar}
       rodape={
@@ -250,12 +267,27 @@ export function CompararUnidades({ lista, empreendimentoInicial, onFechar }: Pro
         ) : (
           <div className="comparar-escolha">
             <p className="instrucao-do-grupo">
-              Marque as unidades que quer comparar — elas podem ser de <strong>empreendimentos
-              diferentes</strong>.
+              {soEste ? (
+                <>
+                  Marque as unidades de <strong>{empreendimentoInicial.nome}</strong> que quer comparar.
+                </>
+              ) : (
+                <>
+                  Marque as unidades que quer comparar — elas podem ser de{' '}
+                  <strong>empreendimentos diferentes</strong>.
+                </>
+              )}
             </p>
 
+            {soEste && lista.filter((e) => e.unidades.length > 0).length > 1 && (
+              <button type="button" className="link-acao" onClick={() => setSoEste(false)}>
+                <Icone nome="mais" tamanho={12} />
+                Incluir unidades de outros empreendimentos
+              </button>
+            )}
+
             {/* Com muitas unidades na base, achar a certa vira o trabalho. */}
-            {disponiveis.length > 10 && (
+            {!soEste && disponiveis.length > 10 && (
               <div className="busca">
                 <span className="busca__icone">
                   <Icone nome="busca" tamanho={15} />

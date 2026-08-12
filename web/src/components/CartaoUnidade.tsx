@@ -69,13 +69,15 @@ export function CartaoUnidade({ unidade, indice, onEditar, onExcluir, rodape }: 
         )}
       </header>
 
+      {/* Quatro dados, não seis: metragem total, suítes e banheiros saíram para
+          a análise e para a edição. Numa lista de seis unidades, 36 números
+          empilhados no painel viram ruído — e o que decide a conversa é
+          metragem, dormitórios, vagas e preço. */}
       <div className="unidade__grade">
         <Dado icone="regua" rotulo="Privativa" valor={fmtArea(unidade.metragem)} />
-        <Dado icone="grafico" rotulo="Total" valor={fmtArea(unidade.metragem_total)} />
         <Dado icone="cama" rotulo="Dorm." valor={fmtInteiro(unidade.dormitorios)} />
-        <Dado icone="predio" rotulo="Suítes" valor={fmtInteiro(unidade.suites)} />
-        <Dado icone="banheira" rotulo="Banh." valor={fmtInteiro(unidade.banheiros)} />
         <Dado icone="carro" rotulo="Vagas" valor={fmtInteiro(unidade.vagas)} />
+        <Dado icone="predio" rotulo="Tipologia" valor={unidade.tipologia || TRACO} />
       </div>
 
       {(preco !== null || valorM2 !== null) && (

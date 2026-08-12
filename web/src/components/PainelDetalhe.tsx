@@ -152,8 +152,11 @@ export function PainelDetalhe({
   const [copiando, setCopiando] = useState<number | null>(null)
 
   // O que abre por padrao: o que o corretor olha em toda visita.
+  // A ficha nasce FECHADA: metragem, dormitórios e vagas já aparecem no cartão
+  // de cada unidade — abrir os seis números do prédio junto com a lista das
+  // unidades era mostrar duas vezes a mesma coisa, ao mesmo tempo.
   const [blocos, setBlocos] = useState({
-    ficha: true,
+    ficha: false,
     analise: false,
     unidades: true,
     tabelas: false,
@@ -161,7 +164,7 @@ export function PainelDetalhe({
     local: false,
   })
   useEffect(
-    () => setBlocos({ ficha: true, analise: false, unidades: true, tabelas: false, notas: false, local: false }),
+    () => setBlocos({ ficha: false, analise: false, unidades: true, tabelas: false, notas: false, local: false }),
     [e.id],
   )
   const alternar = (chave: keyof typeof blocos) =>
@@ -333,7 +336,7 @@ export function PainelDetalhe({
               <>
                 <button type="button" className="btn btn--primario" onClick={onCompararCom}>
                   <Icone nome="balanca" tamanho={15} />
-                  Comparar
+                  Comparar empreendimentos
                 </button>
                 <button type="button" className="btn btn--secundario" onClick={onSimularInvestimento}>
                   <Icone nome="grafico" tamanho={15} />
@@ -428,9 +431,10 @@ export function PainelDetalhe({
                     type="button"
                     className="btn btn--fantasma btn--pequeno"
                     onClick={() => setComparandoUnidades(true)}
+                    title="Comparar as unidades deste empreendimento lado a lado"
                   >
                     <Icone nome="balanca" tamanho={13} />
-                    Comparar
+                    Comparar unidades
                   </button>
                 )}
                 {podeEditar && (
@@ -619,7 +623,14 @@ export function PainelDetalhe({
       </div>
 
       {comparandoUnidades && (
-        <CompararUnidades lista={lista} empreendimentoInicial={e} onFechar={() => setComparandoUnidades(false)} />
+        <CompararUnidades
+          lista={lista}
+          empreendimentoInicial={e}
+          // Aberta daqui, a pergunta é sobre ESTE prédio; o botão do topo abre
+          // a mesma tela já com a base inteira à mostra.
+          soDoEmpreendimento
+          onFechar={() => setComparandoUnidades(false)}
+        />
       )}
 
       {analisando !== null &&
