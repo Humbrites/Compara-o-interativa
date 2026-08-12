@@ -51,7 +51,7 @@ export default function App({ sessao, aoMudarSessao, aoSair }: AppProps) {
   const [comparando, setComparando] = useState(false)
   const [comparandoUnidades, setComparandoUnidades] = useState(false)
   const [vendoLista, setVendoLista] = useState(false)
-  const [calculandoCub, setCalculandoCub] = useState<Empreendimento | null>(null)
+  const [calculandoCub, setCalculandoCub] = useState(false)
   // false = fechado; null = aberto sem imovel; id = aberto com aquele imovel.
   const [simulandoInvestimento, setSimulandoInvestimento] = useState<false | number | null>(false)
 
@@ -232,6 +232,32 @@ export default function App({ sessao, aoMudarSessao, aoSair }: AppProps) {
               </button>
             )}
 
+            {/* Investimento e CUB atravessam a base (escolhem o imovel por
+                dentro) — moravam no painel de UM empreendimento, disputando
+                atencao com o "Comparar". Aqui em cima sao ferramenta, nao
+                acao daquele imovel. */}
+            {lista.length > 0 && (
+              <button
+                type="button"
+                className="btn btn--secundario"
+                onClick={() => setSimulandoInvestimento(empreendimentoA?.id ?? null)}
+                title="Simular o investimento de uma unidade"
+              >
+                <Icone nome="grafico" tamanho={15} />
+                <span>Investimento</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              className="btn btn--secundario"
+              onClick={() => setCalculandoCub(true)}
+              title="Calculadora do CUB"
+            >
+              <Icone nome="cartao" tamanho={15} />
+              <span>CUB</span>
+            </button>
+
             {podeEditar && (
               <button
                 type="button"
@@ -402,8 +428,6 @@ export default function App({ sessao, aoMudarSessao, aoSair }: AppProps) {
               onEditar={() => setForm({ empreendimento: empreendimentoA })}
               onExcluir={() => void excluirEmpreendimento(empreendimentoA)}
               onAdicionarUnidade={() => setForm({ empreendimento: empreendimentoA, iniciarEmUnidades: true })}
-              onCalcularCub={() => setCalculandoCub(empreendimentoA)}
-              onSimularInvestimento={() => setSimulandoInvestimento(empreendimentoA.id)}
               onCompararCom={() => setComparando(true)}
               onMudouUnidades={(unidades) => atualizarUnidades(empreendimentoA.id, unidades)}
               onMudouFluxosGerais={(fluxos) =>
@@ -490,7 +514,7 @@ export default function App({ sessao, aoMudarSessao, aoSair }: AppProps) {
       {/* Calculadora do empreendimento: so simula. Virar fluxo de pagamento e
           coisa da unidade — o CUB de dentro dela e que grava. */}
       {calculandoCub && (
-        <CalculadoraCub titulo={calculandoCub.nome} onFechar={() => setCalculandoCub(null)} avisar={avisar} />
+        <CalculadoraCub titulo={empreendimentoA?.nome ?? 'Simulação de CUB'} onFechar={() => setCalculandoCub(false)} avisar={avisar} />
       )}
 
       {painelConta !== false && sessaoDeCliente && (

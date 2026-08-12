@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { Empreendimento, FluxoPagamento, Unidade } from '../types'
 import { api } from '../lib/api'
 import {
-  fmtArea,
   fmtEntrega,
   fmtFaixaInteiro,
   fmtFaixaMetragem,
@@ -82,7 +81,7 @@ function Bloco({
             <Icone nome={aberto ? 'seta_cima' : 'seta_baixo'} tamanho={14} />
           </span>
         </button>
-        {acao}
+        {acao && <div className="bloco__acoes">{acao}</div>}
       </div>
 
       {aberto && <div className="bloco__corpo">{children}</div>}
@@ -98,8 +97,6 @@ interface Props {
   onEditar: () => void
   onExcluir: () => void
   onAdicionarUnidade: () => void
-  onCalcularCub: () => void
-  onSimularInvestimento: () => void
   onCompararCom: () => void
   /** O painel edita os fluxos das unidades: a lista de fora acompanha. */
   onMudouUnidades: (unidades: Unidade[]) => void
@@ -116,8 +113,6 @@ export function PainelDetalhe({
   onEditar,
   onExcluir,
   onAdicionarUnidade,
-  onCalcularCub,
-  onSimularInvestimento,
   onCompararCom,
   onMudouUnidades,
   onMudouFluxosGerais,
@@ -327,33 +322,20 @@ export function PainelDetalhe({
             </div>
           )}
 
-          {/* 3. O que fazer com ele. Três botões iguais não diziam por onde
-              começar: comparar é a razão de existir da ferramenta, então é ele
-              quem fica em destaque — e vira "Simular investimento" quando não
-              há um segundo imóvel para comparar. */}
-          <div className="painel__ferramentas">
-            {podeComparar ? (
-              <>
-                <button type="button" className="btn btn--primario" onClick={onCompararCom}>
-                  <Icone nome="balanca" tamanho={15} />
-                  Comparar empreendimentos
-                </button>
-                <button type="button" className="btn btn--secundario" onClick={onSimularInvestimento}>
-                  <Icone nome="grafico" tamanho={15} />
-                  Investimento
-                </button>
-              </>
-            ) : (
-              <button type="button" className="btn btn--primario" onClick={onSimularInvestimento}>
-                <Icone nome="grafico" tamanho={15} />
-                Simular investimento
+          {/* 3. O que fazer com ele. UM botão só: comparar é a razão de existir
+              da ferramenta e o único trabalho que começa NESTE imóvel. O
+              simulador de investimento e a calculadora do CUB atravessam a base
+              inteira (escolhem o empreendimento por dentro), então moram na
+              barra do topo — aqui embaixo eles só disputavam atenção com o
+              comparar e faziam o painel parecer uma caixa de ferramentas. */}
+          {podeComparar && (
+            <div className="painel__ferramentas">
+              <button type="button" className="btn btn--primario" onClick={onCompararCom}>
+                <Icone nome="balanca" tamanho={15} />
+                Comparar empreendimentos
               </button>
-            )}
-            <button type="button" className="btn btn--secundario" onClick={onCalcularCub}>
-              <Icone nome="cartao" tamanho={15} />
-              CUB
-            </button>
-          </div>
+            </div>
+          )}
 
           {/* 4. A ficha. */}
           <Bloco
@@ -387,11 +369,6 @@ export function PainelDetalhe({
                     ? fmtFaixaMetragem(resumo.metragem.min, resumo.metragem.max)
                     : fmtFaixaMetragem(e.metragem_min, e.metragem_max)
                 }
-              />
-              <ItemFicha
-                icone="grafico"
-                rotulo="Metragem máx."
-                valor={temUnidades ? fmtArea(resumo.metragem.max) : fmtArea(e.metragem_max)}
               />
             </div>
 
@@ -453,25 +430,11 @@ export function PainelDetalhe({
               </div>
             ) : (
               <>
-                <div className="resumo-unidades">
-                  <div className="resumo-unidades__item">
-                    <span className="resumo-unidades__rotulo">Disponíveis</span>
-                    <span className="resumo-unidades__valor">
-                      {resumo.disponiveis} de {resumo.total}
-                    </span>
-                  </div>
-                  <div className="resumo-unidades__item">
-                    <span className="resumo-unidades__rotulo">Valores</span>
-                    <span className="resumo-unidades__valor">{fmtFaixaMoeda(resumo.valor.min, resumo.valor.max)}</span>
-                  </div>
-                  <div className="resumo-unidades__item">
-                    <span className="resumo-unidades__rotulo">Valor do m²</span>
-                    <span className="resumo-unidades__valor">
-                      {fmtFaixaMoeda(resumo.valorM2.min, resumo.valorM2.max)}
-                    </span>
-                  </div>
-                </div>
-
+                {/* O resumo daqui (disponíveis, faixa de valores, faixa do m²)
+                    repetia TRÊS números que já estão logo acima na mesma tela:
+                    o selo "6 unidades · 5 disponíveis" e o cartão de preço. Ler
+                    duas vezes o mesmo dado é o que fazia o painel parecer
+                    cheio sem dizer mais nada. */}
                 {e.unidades.map((unidade, indice) => (
                   <CartaoUnidade
                     key={unidade.id}
