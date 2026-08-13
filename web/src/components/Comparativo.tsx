@@ -7,6 +7,11 @@ import {
   textosDoFluxo,
   type LinhaComparativo,
 } from '../lib/comparar'
+import {
+  exportarPdfComparativo,
+  type SecaoDoComparativo,
+  type TextoLivreDoComparativo,
+} from '../lib/exportarComparativo'
 import { fmtMoeda, fmtTexto } from '../lib/format'
 import { capaDe } from '../lib/imagens'
 import { localizacaoUnidade, rotuloUnidade } from '../lib/unidades'
@@ -311,10 +316,11 @@ interface Props {
   onEscolherA: (id: number) => void
   onEscolherB: (id: number) => void
   onTrocarLados: () => void
+  avisar: (texto: string, tipo?: 'sucesso' | 'erro') => void
   onFechar: () => void
 }
 
-export function Comparativo({ a, b, lista, onEscolherA, onEscolherB, onTrocarLados, onFechar }: Props) {
+export function Comparativo({ a, b, lista, onEscolherA, onEscolherB, onTrocarLados, avisar, onFechar }: Props) {
   // Unidade escolhida de cada lado (null = comparar so o empreendimento).
   const [unidadeAId, setUnidadeAId] = useState<number | null>(null)
   const [unidadeBId, setUnidadeBId] = useState<number | null>(null)
@@ -368,6 +374,36 @@ export function Comparativo({ a, b, lista, onEscolherA, onEscolherB, onTrocarLad
   const textosB = textosDoFluxo(escolhidoB?.fluxo ?? null)
   const temTextoLivre = textosA.descricao || textosB.descricao || textosA.observacoes || textosB.observacoes
 
+  const nomeUnidadeA = unidadeA ? rotuloUnidade(unidadeA) : a.nome
+  const nomeUnidadeB = unidadeB ? rotuloUnidade(unidadeB) : b.nome
+
+  /**
+   * Leva ao papel exatamente o que esta na tela — as mesmas linhas ja
+   * calculadas, na mesma ordem, com o mesmo vencedor.
+   */
+  const aoExportarPdf = () => {
+    const local = (e: Empreendimento) => [e.construtora, e.bairro, e.cidade].filter(Boolean).join(' · ')
+
+    const secoes: SecaoDoComparativo[] = [
+      { titulo: 'Unidade escolhida', nomeA: nomeUnidadeA, nomeB: nomeUnidadeB, linhas: linhasUnidade },
+      { titulo: 'Características do empreendimento', nomeA: a.nome, nomeB: b.nome, linhas: linhasGerais },
+      { titulo: 'Fluxo de pagamento', nomeA: a.nome, nomeB: b.nome, linhas: linhasFluxo },
+    ]
+
+    const textos: TextoLivreDoComparativo[] = [
+      { nome: a.nome, ...textosA },
+      { nome: b.nome, ...textosB },
+    ]
+
+    const abriu = exportarPdfComparativo({
+      a: { etiqueta: 'Empreendimento A', nome: a.nome, subtitulo: local(a), vitorias: placar.a },
+      b: { etiqueta: 'Empreendimento B', nome: b.nome, subtitulo: local(b), vitorias: placar.b },
+      secoes,
+      textos,
+    })
+    if (!abriu) avisar('O navegador bloqueou a janela de impressão — libere os pop-ups do site', 'erro')
+  }
+
   return (
     <Modal
       titulo="Comparativo"
@@ -379,6 +415,15 @@ export function Comparativo({ a, b, lista, onEscolherA, onEscolherB, onTrocarLad
           <button type="button" className="btn btn--fantasma" onClick={onTrocarLados}>
             <Icone nome="seta_direita" tamanho={15} />
             Inverter A e B
+          </button>
+          <button
+            type="button"
+            className="btn btn--secundario"
+            onClick={aoExportarPdf}
+            title="Abre a folha de impressão para salvar em PDF"
+          >
+            <Icone nome="lista" tamanho={15} />
+            Exportar PDF
           </button>
           <div className="direita">
             <button type="button" className="btn btn--primario" onClick={onFechar}>
@@ -419,8 +464,8 @@ export function Comparativo({ a, b, lista, onEscolherA, onEscolherB, onTrocarLad
             <TabelaComparativa
               legenda="Unidade escolhida"
               linhas={linhasUnidade}
-              nomeA={unidadeA ? rotuloUnidade(unidadeA) : a.nome}
-              nomeB={unidadeB ? rotuloUnidade(unidadeB) : b.nome}
+              nomeA={nomeUnidadeA}
+              nomeB={nomeUnidadeB}
             />
           ) : (
             <p className="campo__dica">

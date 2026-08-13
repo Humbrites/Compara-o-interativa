@@ -35,7 +35,7 @@ function numero(valor: number, casas = 2): string {
 }
 
 /** Texto do usuario dentro do HTML da folha impressa. */
-function esc(texto: string): string {
+export function esc(texto: string): string {
   return texto
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -218,7 +218,7 @@ export function exportarPdf(simulacao: Simulacao, titulo: string) {
 }
 
 /** Abre a folha em outra aba e chama a impressao. false = pop-up bloqueado. */
-function imprimir(html: string): boolean {
+export function imprimir(html: string): boolean {
   const janela = window.open('', '_blank')
   if (!janela) return false
 

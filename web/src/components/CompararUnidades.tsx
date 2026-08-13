@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 
 import { analisarUnidade, textoDoParcelamento } from '../lib/analise'
+import { exportarPdfUnidades, type LinhaDeUnidades } from '../lib/exportarComparativo'
 import { fmtArea, fmtInteiro, fmtMoeda, TRACO } from '../lib/format'
 import { fmtPercentual } from '../lib/cub'
 import { rotuloUnidade } from '../lib/unidades'
@@ -30,6 +31,7 @@ interface Props {
    * pelo topo, ja nasce com tudo a mostra.
    */
   soDoEmpreendimento?: boolean
+  avisar: (texto: string, tipo?: 'sucesso' | 'erro') => void
   onFechar: () => void
 }
 
@@ -55,6 +57,7 @@ export function CompararUnidades({
   lista,
   empreendimentoInicial,
   soDoEmpreendimento = false,
+  avisar,
   onFechar,
 }: Props) {
   const [soEste, setSoEste] = useState(soDoEmpreendimento)
@@ -231,22 +234,63 @@ export function CompararUnidades({
     return new Set(valores.filter((v) => v.valor === melhor).map((v) => v.id))
   }
 
+  const subtitulo = soEste
+    ? `Qual unidade de ${empreendimentoInicial.nome} é melhor — até ${MAXIMO} lado a lado`
+    : `Qual oportunidade é melhor — até ${MAXIMO} unidades lado a lado, de qualquer empreendimento`
+
+  /** O papel recebe as mesmas colunas e o mesmo destaque da tabela da tela. */
+  function aoExportarPdf() {
+    const linhasDoPdf: LinhaDeUnidades[] = linhas.map((linha) => {
+      const ganhadores = vencedores(linha)
+      return {
+        rotulo: linha.rotulo,
+        celulas: analises.map((item) => ({
+          texto: linha.texto(item),
+          detalhe: linha.detalhe?.(item) ?? null,
+          vence: ganhadores.has(item.unidade.id),
+        })),
+      }
+    })
+
+    const abriu = exportarPdfUnidades({
+      subtitulo,
+      colunas: analises.map((item, indice) => ({
+        unidade: rotuloUnidade(item.unidade, indice),
+        empreendimento: item.empreendimento.nome,
+      })),
+      linhas: linhasDoPdf,
+    })
+    if (!abriu) avisar('O navegador bloqueou a janela de impressão — libere os pop-ups do site', 'erro')
+  }
+
   return (
     <Modal
       titulo="Comparar unidades"
-      subtitulo={
-        soEste
-          ? `Qual unidade de ${empreendimentoInicial.nome} é melhor — até ${MAXIMO} lado a lado`
-          : `Qual oportunidade é melhor — até ${MAXIMO} unidades lado a lado, de qualquer empreendimento`
-      }
+      subtitulo={subtitulo}
       largo
       onFechar={onFechar}
       rodape={
-        <div className="direita">
-          <button type="button" className="btn btn--primario" onClick={onFechar}>
-            Fechar
+        <>
+          <button
+            type="button"
+            className="btn btn--secundario"
+            onClick={aoExportarPdf}
+            disabled={analises.length === 0}
+            title={
+              analises.length === 0
+                ? 'Marque as unidades primeiro'
+                : 'Abre a folha de impressão para salvar em PDF'
+            }
+          >
+            <Icone nome="lista" tamanho={15} />
+            Exportar PDF
           </button>
-        </div>
+          <div className="direita">
+            <button type="button" className="btn btn--primario" onClick={onFechar}>
+              Fechar
+            </button>
+          </div>
+        </>
       }
     >
       <section className="form-secao form-secao--dados">

@@ -570,6 +570,7 @@ export function PainelDetalhe({
           // Aberta daqui, a pergunta é sobre ESTE prédio; o botão do topo abre
           // a mesma tela já com a base inteira à mostra.
           soDoEmpreendimento
+          avisar={avisar}
           onFechar={() => setComparandoUnidades(false)}
         />
       )}

@@ -475,6 +475,7 @@ export default function App({ sessao, aoMudarSessao, aoSair }: AppProps) {
             setSelecionadoA(selecionadoB)
             setSelecionadoB(selecionadoA)
           }}
+          avisar={avisar}
           onFechar={() => setComparando(false)}
         />
       )}
@@ -483,6 +484,7 @@ export default function App({ sessao, aoMudarSessao, aoSair }: AppProps) {
         <CompararUnidades
           lista={lista}
           empreendimentoInicial={empreendimentoA ?? lista.find((e) => e.unidades.length > 0) ?? lista[0]}
+          avisar={avisar}
           onFechar={() => setComparandoUnidades(false)}
         />
       )}
