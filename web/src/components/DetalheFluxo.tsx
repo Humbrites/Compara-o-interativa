@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import type { FluxoPagamento } from '../types'
 import { fmtMoeda, fmtPct, TRACO } from '../lib/format'
 import { fmtPercentual } from '../lib/cub'
-import { detalharFluxo, type ParteDoFluxo } from '../lib/fluxos'
+import { detalharFluxo, nomeDoFluxo, ROTULO_TIPO_FLUXO, type ParteDoFluxo } from '../lib/fluxos'
 import { exportarCsv, exportarPdf } from '../lib/exportarSimulacao'
 import { Icone, type NomeIcone } from './Icones'
 import { GraficoLinha } from './GraficoSvg'
@@ -49,12 +49,21 @@ interface Props {
   valorDaUnidade?: number | null
   /** Nome do imóvel/unidade, para o cabeçalho e os arquivos exportados. */
   titulo?: string
+  /** Abre uma PROPOSTA copiada desta tabela (escrita — some no modo leitura). */
+  onPersonalizar?: () => void
   onFechar: () => void
 }
 
-export function DetalheFluxo({ fluxo, indice, valorDaUnidade = null, titulo = 'Fluxo', onFechar }: Props) {
+export function DetalheFluxo({
+  fluxo,
+  indice,
+  valorDaUnidade = null,
+  titulo = 'Fluxo',
+  onPersonalizar,
+  onFechar,
+}: Props) {
   const detalhe = useMemo(() => detalharFluxo(fluxo, valorDaUnidade), [fluxo, valorDaUnidade])
-  const nome = fluxo.nome?.trim() || `Fluxo ${indice + 1}`
+  const nome = nomeDoFluxo(fluxo, indice)
   const { base, partes, durante, posChaves, alocado, diferenca, simulacao } = detalhe
 
   // Barra de composição: só as partes com valor entram, na proporção do total.
@@ -76,7 +85,11 @@ export function DetalheFluxo({ fluxo, indice, valorDaUnidade = null, titulo = 'F
   return (
     <Modal
       titulo={nome}
-      subtitulo={`Condições calculadas · ${titulo}`}
+      // O tipo entra no subtítulo quando existir: a mesma unidade passa a ter
+      // duas tabelas parecidas, e o nome sozinho não diz qual é qual.
+      subtitulo={[fluxo.tipo ? ROTULO_TIPO_FLUXO[fluxo.tipo] : null, 'Condições calculadas', titulo]
+        .filter(Boolean)
+        .join(' · ')}
       largo
       onFechar={onFechar}
       rodape={
@@ -84,6 +97,14 @@ export function DetalheFluxo({ fluxo, indice, valorDaUnidade = null, titulo = 'F
           <button type="button" className="btn btn--fantasma" onClick={onFechar}>
             Fechar
           </button>
+          {/* A proposta sai daqui porque é olhando as contas desta tabela que o
+              corretor decide o que vai mudar para o cliente. */}
+          {onPersonalizar && (
+            <button type="button" className="btn btn--secundario" onClick={onPersonalizar}>
+              <Icone nome="copiar" tamanho={15} />
+              Criar fluxo personalizado
+            </button>
+          )}
           {simulacao && (
             <div className="direita">
               <button

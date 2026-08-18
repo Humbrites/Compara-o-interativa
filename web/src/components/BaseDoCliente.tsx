@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import { fmtArea, fmtInteiro, fmtMoeda, fmtPct, fmtTexto, TRACO } from '../lib/format'
-import { detalharFluxo } from '../lib/fluxos'
+import { detalharFluxo, ROTULO_TIPO_FLUXO } from '../lib/fluxos'
 import { mensagemDoErro } from '../lib/http'
 import { plataforma, type BaseDoClienteResposta } from '../lib/plataforma'
 import { capaDe } from '../lib/imagens'
@@ -324,6 +324,11 @@ function CartaoFluxoLeitura({ fluxo, valorDaUnidade }: { fluxo: FluxoPagamento; 
     <div className="suporte-fluxo">
       <div className="suporte-fluxo__topo">
         <span className="suporte-fluxo__nome">{fluxo.nome || 'Tabela de venda'}</span>
+        {/* Tabela da construtora × proposta do corretor: quem dá suporte
+            precisa saber qual das duas está olhando. */}
+        {fluxo.tipo !== null && (
+          <span className={`fluxo__selo-tipo fluxo__selo-tipo--${fluxo.tipo}`}>{ROTULO_TIPO_FLUXO[fluxo.tipo]}</span>
+        )}
         <span className="suporte-fluxo__base">
           {detalhe.base === null ? 'sem valor do imóvel' : fmtMoeda(detalhe.base)}
           {detalhe.base !== null && !detalhe.baseDoFluxo && (

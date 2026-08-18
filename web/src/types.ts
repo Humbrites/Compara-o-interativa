@@ -1,8 +1,19 @@
+/**
+ * A tabela que a construtora entregou × a proposta que o corretor montou em
+ * cima dela. Fluxo cadastrado antes desta separacao fica sem tipo — ele pode
+ * ser um ou outro, e classificar no chute mentiria no comparativo.
+ */
+export type TipoFluxo = 'construtora' | 'personalizado'
+
 export interface FluxoPagamento {
   id: number
   empreendimento_id: number
   /** null = tabela geral do empreendimento; preenchido = fluxo daquela unidade. */
   unidade_id: number | null
+  /** null = fluxo antigo, sem classificacao. */
+  tipo: TipoFluxo | null
+  /** A tabela de onde a proposta personalizada saiu (null = nao veio de outra). */
+  fluxo_base_id: number | null
   nome: string | null
   entrada_pct: number | null
   entrada_valor: number | null

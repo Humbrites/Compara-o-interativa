@@ -10,8 +10,15 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { detalharFluxo, totalizarFluxo } from '../src/lib/fluxos.ts'
+import {
+  compararFluxosDetalhado,
+  detalharFluxo,
+  ladosPadraoDaComparacao,
+  totalizarFluxo,
+} from '../src/lib/fluxos.ts'
 import { analisarUnidade } from '../src/lib/analise.ts'
+import { exportarPdfFluxos } from '../src/lib/exportarComparativo.ts'
+import { TRACO } from '../src/lib/format.ts'
 import type { FluxoPagamento, Unidade } from '../src/types.ts'
 
 /** Um fluxo com todas as colunas em branco, para preencher só o que importa. */
@@ -20,6 +27,8 @@ function fluxo(campos: Partial<FluxoPagamento> = {}): FluxoPagamento {
     id: 1,
     empreendimento_id: 1,
     unidade_id: 1,
+    tipo: null,
+    fluxo_base_id: null,
     nome: 'Tabela da construtora',
     entrada_pct: null,
     entrada_valor: null,
@@ -211,4 +220,201 @@ test('o pós-chaves não infla o "durante a obra" da análise', () => {
 
   assert.equal(analise.durante, 30 * 3500)
   assert.equal(analise.ateAEntrega, 80000 + 30 * 3500)
+})
+
+/* -------------------------------------------------------------------- */
+/* Tabela da construtora × proposta personalizada                        */
+/* -------------------------------------------------------------------- */
+
+/**
+ * A tabela da construtora dos testes: 1.000.000 com 20% de entrada. O saldo
+ * vem gravado como o formulário grava — ele é o RESTO da tabela.
+ */
+const daConstrutora = fluxo({
+  id: 10,
+  tipo: 'construtora',
+  nome: 'Tabela da construtora',
+  cub_valor_imovel: 1000000,
+  entrada_pct: 20,
+  entrada_valor: 200000,
+  parcelas: 48,
+  parcela_valor: 2500,
+  reforcos_qtd: 8,
+  reforco_valor: 25000,
+  chaves_pct: 5,
+  financiamento_valor: 1000000 - 200000 - 48 * 2500 - 8 * 25000 - 50000,
+})
+
+/** A proposta do corretor: entrada maior, parcela menor e sem reforço. */
+const personalizado = fluxo({
+  id: 11,
+  tipo: 'personalizado',
+  fluxo_base_id: 10,
+  nome: 'Personalizado — Tabela da construtora',
+  cub_valor_imovel: 1000000,
+  entrada_pct: 30,
+  entrada_valor: 300000,
+  parcelas: 48,
+  parcela_valor: 2000,
+  chaves_pct: 5,
+  financiamento_valor: 1000000 - 300000 - 48 * 2000 - 50000,
+})
+
+const linhaDe = (comparacao: ReturnType<typeof compararFluxosDetalhado>, chave: string) => {
+  const linha = comparacao.linhas.find((l) => l.chave === chave)
+  assert.ok(linha, `a comparação não tem a linha "${chave}"`)
+  return linha
+}
+
+test('a diferença entre as duas tabelas sai com o sinal certo — B menos A', () => {
+  const comparacao = compararFluxosDetalhado(daConstrutora, personalizado)
+
+  // A proposta pede 100 mil a MAIS de entrada.
+  const entrada = linhaDe(comparacao, 'entrada')
+  assert.equal(entrada.a, 200000)
+  assert.equal(entrada.b, 300000)
+  assert.equal(entrada.diferenca, 100000)
+  assert.ok(entrada.textoDiferenca.startsWith('+'), entrada.textoDiferenca)
+
+  // E 24 mil a MENOS nas parcelas (48 × 2.500 contra 48 × 2.000).
+  const parcelas = linhaDe(comparacao, 'parcelas')
+  assert.equal(parcelas.diferenca, 48 * 2000 - 48 * 2500)
+  assert.ok(parcelas.textoDiferenca.startsWith('−'), parcelas.textoDiferenca)
+  assert.match(parcelas.detalheA ?? '', /48 ×/)
+
+  // Chaves iguais dos dois lados: diferença zero é "igual", não um valor.
+  assert.equal(linhaDe(comparacao, 'chaves').diferenca, 0)
+  assert.equal(linhaDe(comparacao, 'chaves').textoDiferenca, 'igual')
+})
+
+test('lado sem o dado não vira zero: a linha fica sem diferença', () => {
+  const comparacao = compararFluxosDetalhado(daConstrutora, personalizado)
+
+  // A proposta não tem reforços — e "sem reforço" não é "reforço de R$ 0".
+  const reforcos = linhaDe(comparacao, 'reforcos')
+  assert.equal(reforcos.a, 8 * 25000)
+  assert.equal(reforcos.b, null)
+  assert.equal(reforcos.diferenca, null)
+  assert.equal(reforcos.textoB, TRACO)
+  assert.equal(reforcos.textoDiferenca, TRACO)
+
+  // Nenhum dos dois tem pós-chaves: a linha inteira fica em branco.
+  const pos = linhaDe(comparacao, 'pos_chaves')
+  assert.equal(pos.a, null)
+  assert.equal(pos.b, null)
+  assert.equal(pos.diferenca, null)
+})
+
+test('os totais da comparação são os mesmos que o detalhe de cada fluxo', () => {
+  const comparacao = compararFluxosDetalhado(daConstrutora, personalizado)
+  const detalheA = detalharFluxo(daConstrutora)
+  const detalheB = detalharFluxo(personalizado)
+
+  const durante = linhaDe(comparacao, 'durante')
+  assert.equal(durante.a, detalheA.durante)
+  assert.equal(durante.b, detalheB.durante)
+  assert.equal(durante.diferenca, detalheB.durante - detalheA.durante)
+
+  const saldo = linhaDe(comparacao, 'saldo')
+  assert.equal(saldo.a, detalheA.partes.find((p) => p.chave === 'financiamento')?.valor ?? null)
+
+  const total = linhaDe(comparacao, 'total')
+  assert.equal(total.a, detalheA.alocado)
+  assert.equal(total.b, detalheB.alocado)
+  // As duas tabelas fecham o mesmo imóvel: o total do negócio não muda, só a
+  // hora em que o dinheiro sai.
+  assert.equal(total.diferenca, 0)
+})
+
+test('o pós-chaves fica fora do "durante a obra" e dentro do total do negócio', () => {
+  // A MESMA tabela da construtora, só que com 24 mensais depois da entrega —
+  // e o saldo do banco encolhendo na medida do que a construtora parcelou.
+  const comPos = fluxo({
+    id: 12,
+    tipo: 'personalizado',
+    cub_valor_imovel: 1000000,
+    entrada_pct: 20,
+    entrada_valor: 200000,
+    parcelas: 48,
+    parcela_valor: 2500,
+    reforcos_qtd: 8,
+    reforco_valor: 25000,
+    chaves_pct: 5,
+    pos_parcelas: 24,
+    pos_parcela_valor: 2000,
+    financiamento_valor: 1000000 - 200000 - 48 * 2500 - 8 * 25000 - 50000 - 24 * 2000,
+  })
+
+  const comparacao = compararFluxosDetalhado(daConstrutora, comPos)
+  const durante = linhaDe(comparacao, 'durante')
+  const pos = linhaDe(comparacao, 'pos_chaves')
+  const total = linhaDe(comparacao, 'total')
+
+  // O desembolso até a entrega é idêntico: o pós-chaves não entra nele.
+  assert.equal(durante.diferenca, 0)
+  assert.equal(pos.b, 24 * 2000)
+  assert.equal(pos.a, null, 'a tabela da construtora não tem pós-chaves')
+
+  // Mas o pós-chaves compõe o preço: com ele, o saldo do banco encolhe na
+  // mesma medida e o total do negócio continua fechando o imóvel.
+  const saldo = linhaDe(comparacao, 'saldo')
+  assert.equal(saldo.diferenca, -(24 * 2000))
+  assert.equal(total.a, total.b)
+})
+
+test('a comparação abre com a tabela da construtora contra o personalizado mais recente', () => {
+  const antigo = fluxo({ id: 5, tipo: 'personalizado', nome: 'Proposta Ana' })
+  const recente = fluxo({ id: 21, tipo: 'personalizado', nome: 'Proposta Bruno' })
+
+  assert.deepEqual(ladosPadraoDaComparacao([recente, daConstrutora, antigo]), { a: 10, b: 21 })
+
+  // Base antiga, sem tipo gravado: as duas ÚLTIMAS cadastradas.
+  const semTipo = [fluxo({ id: 1 }), fluxo({ id: 2 }), fluxo({ id: 3 })]
+  assert.deepEqual(ladosPadraoDaComparacao(semTipo), { a: 2, b: 3 })
+
+  // Com uma tabela só não há o que comparar.
+  assert.equal(ladosPadraoDaComparacao([daConstrutora]), null)
+})
+
+test('a folha de impressão recebe as linhas prontas e escapa o que o usuário digitou', () => {
+  // Dublê de janela: `imprimir` só quer um `window.open` que aceite HTML.
+  let html = ''
+  const janela = {
+    document: {
+      write: (texto: string) => {
+        html += texto
+      },
+      close: () => {},
+    },
+    addEventListener: () => {},
+    focus: () => {},
+    print: () => {},
+  }
+  ;(globalThis as unknown as { window: unknown }).window = { open: () => janela }
+
+  const comparacao = compararFluxosDetalhado(daConstrutora, personalizado)
+  const abriu = exportarPdfFluxos({
+    titulo: 'Apto 101',
+    // O nome da tabela é texto do usuário: ele nunca pode virar marcação.
+    nomeA: 'Tabela <b>oficial</b>',
+    nomeB: 'Proposta Ana & Bruno',
+    linhas: comparacao.linhas.map((linha) => ({
+      rotulo: linha.rotulo,
+      textoA: linha.textoA,
+      textoB: linha.textoB,
+      textoDiferenca: linha.textoDiferenca,
+      detalheA: linha.detalheA,
+      detalheB: linha.detalheB,
+      diferenca: linha.diferenca,
+    })),
+  })
+
+  assert.equal(abriu, true)
+  assert.match(html, /Tabela &lt;b&gt;oficial&lt;\/b&gt;/)
+  assert.match(html, /Proposta Ana &amp; Bruno/)
+  assert.doesNotMatch(html, /<b>oficial<\/b>/)
+  // As linhas vão prontas da tela: nada é recalculado no papel.
+  assert.match(html, /Total durante a obra/)
+  assert.match(html, /Pós-chaves/)
+  assert.match(html, /Diferença/)
 })

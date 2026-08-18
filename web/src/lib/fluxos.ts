@@ -9,8 +9,9 @@
  * Módulo puro: recebe o fluxo e o preço de referência, devolve números.
  */
 
-import type { FluxoPagamento } from '../types'
+import type { FluxoPagamento, TipoFluxo } from '../types'
 import { indiceFixo, simular, type Simulacao } from './cub'
+import { fmtMoeda, TRACO } from './format'
 
 /** Uma parte da composição do preço. */
 export interface ParteDoFluxo {
@@ -157,6 +158,43 @@ export function totalizarFluxo(n: NumerosDoFluxo): TotaisDoFluxo {
   }
 }
 
+/** Os totais de uma tabela agrupados pelo MOMENTO em que o dinheiro sai. */
+export interface AgregadosDoFluxo {
+  /** Entrada + parcelas + reforços: o que sai do bolso até a entrega. */
+  durante: number
+  /** Chaves + saldo: o que ainda se deve quando a obra entrega. */
+  naEntrega: number
+  /** Mensais e semestrais DEPOIS das chaves. */
+  posChaves: number
+  alocado: number
+  /** base − alocado. null quando não há valor do imóvel. */
+  diferenca: number | null
+}
+
+/**
+ * Os três momentos do desembolso, a partir dos totais já calculados.
+ *
+ * Existe separada de `detalharFluxo` porque o FORMULÁRIO precisa da mesma
+ * conferência enquanto a tabela está sendo digitada — e duas somas escritas em
+ * lugares diferentes divergiriam no primeiro campo novo.
+ *
+ * @param financiamento o saldo que sobra na entrega (o resto da tabela).
+ */
+export function agregarFluxo(
+  base: number | null,
+  totais: TotaisDoFluxo,
+  financiamento: number | null,
+): AgregadosDoFluxo {
+  const durante = (totais.entrada ?? 0) + (totais.parcelas ?? 0) + (totais.reforcos ?? 0)
+  const naEntrega = (totais.chaves ?? 0) + (financiamento ?? 0)
+  // Pós-chaves entra na CONFERÊNCIA da soma (é dinheiro que compõe o preço),
+  // mas nunca no desembolso até a entrega.
+  const posChaves = (totais.posParcelas ?? 0) + (totais.posReforcos ?? 0)
+  const alocado = durante + naEntrega + posChaves
+
+  return { durante, naEntrega, posChaves, alocado, diferenca: base === null ? null : base - alocado }
+}
+
 /**
  * @param valorDaUnidade preço da unidade, usado quando a tabela não guardou o
  *   valor do imóvel — sem isso metade das contas ficaria em branco.
@@ -299,15 +337,7 @@ export function detalharFluxo(fluxo: FluxoPagamento, valorDaUnidade: number | nu
     },
   ]
 
-  const soma = (chaves_: ParteDoFluxo['chave'][]) =>
-    partes.filter((p) => chaves_.includes(p.chave)).reduce((total, p) => total + (p.valor ?? 0), 0)
-
-  const durante = soma(['entrada', 'parcelas', 'reforcos'])
-  const naEntrega = soma(['chaves', 'financiamento'])
-  // Pós-chaves entra na CONFERÊNCIA da soma (é dinheiro que compõe o preço),
-  // mas nunca no desembolso até a entrega.
-  const posChaves = soma(['pos_parcelas', 'pos_reforcos'])
-  const alocado = durante + naEntrega + posChaves
+  const { durante, naEntrega, posChaves, alocado, diferenca } = agregarFluxo(base, totais, financiamento)
 
   // A simulação só existe quando o fluxo saiu da calculadora do CUB — é ela
   // que grava percentual, meses e parcela inicial.
@@ -324,7 +354,7 @@ export function detalharFluxo(fluxo: FluxoPagamento, valorDaUnidade: number | nu
     naEntrega,
     posChaves,
     alocado,
-    diferenca: base === null ? null : base - alocado,
+    diferenca,
     cub: temCub ? { percentual, meses, parcelaInicial } : null,
     simulacao: temCub
       ? simular({
@@ -336,4 +366,182 @@ export function detalharFluxo(fluxo: FluxoPagamento, valorDaUnidade: number | nu
         })
       : null,
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* Tabela da construtora × proposta personalizada                      */
+/* ------------------------------------------------------------------ */
+
+/** Como cada tipo de fluxo se chama na tela e no papel. */
+export const ROTULO_TIPO_FLUXO: Record<TipoFluxo, string> = {
+  construtora: 'Tabela da construtora',
+  personalizado: 'Personalizado',
+}
+
+export type ChaveDaComparacao =
+  | 'entrada'
+  | 'parcelas'
+  | 'reforcos'
+  | 'durante'
+  | 'chaves'
+  | 'saldo'
+  | 'pos_chaves'
+  | 'total'
+
+export interface LinhaDaComparacao {
+  chave: ChaveDaComparacao
+  rotulo: string
+  /** Lado A (a tabela da construtora, no uso normal). null = não informado. */
+  a: number | null
+  b: number | null
+  /**
+   * B − A: quanto a proposta custa a MAIS (+) ou a MENOS (−) naquela linha.
+   * null quando um dos lados não tem o dado — comparar contra o vazio faria a
+   * ausência virar zero, e "zero de entrada" é uma condição comercial, não uma
+   * informação que falta.
+   */
+  diferenca: number | null
+  /** "36 × R$ 2.500" — como aquela parte foi cadastrada de cada lado. */
+  detalheA: string | null
+  detalheB: string | null
+  textoA: string
+  textoB: string
+  textoDiferenca: string
+}
+
+export interface ComparacaoDeFluxos {
+  linhas: LinhaDaComparacao[]
+  /** O valor do imóvel de cada lado — a tela avisa quando os dois divergem. */
+  baseA: number | null
+  baseB: number | null
+}
+
+/** Diferença em R$ com sinal explícito; sem os dois lados não há diferença. */
+function textoDaDiferenca(diferenca: number | null): string {
+  if (diferenca === null) return TRACO
+  if (Math.abs(diferenca) < 0.005) return 'igual'
+  return diferenca > 0 ? `+ ${fmtMoeda(diferenca)}` : `− ${fmtMoeda(-diferenca)}`
+}
+
+/**
+ * As duas tabelas de venda da mesma unidade, linha a linha.
+ *
+ * A pergunta que ela responde é a do atendimento: "o que muda se o cliente
+ * aceitar a minha proposta em vez da tabela da construtora?". Por isso a
+ * diferença é sempre B − A: positivo é a proposta pesando mais naquele bloco.
+ *
+ * Nada é recalculado aqui — cada lado passa por `detalharFluxo`, que é quem
+ * sabe transformar percentual em reais e onde cada parte entra.
+ */
+export function compararFluxosDetalhado(
+  a: FluxoPagamento,
+  b: FluxoPagamento,
+  valorImovel: number | null = null,
+): ComparacaoDeFluxos {
+  const ladoA = detalharFluxo(a, valorImovel)
+  const ladoB = detalharFluxo(b, valorImovel)
+
+  const parte = (detalhe: DetalheFluxo, chave: ParteDoFluxo['chave']) =>
+    detalhe.partes.find((p) => p.chave === chave) ?? null
+
+  /**
+   * Um agregado só é informado quando ALGUMA das partes dele foi cadastrada.
+   * Sem isso, o lado que nada declarou entraria como R$ 0 e a diferença viraria
+   * o total inteiro do outro lado — uma economia que não existe.
+   */
+  const agregado = (detalhe: DetalheFluxo, chaves: ParteDoFluxo['chave'][], total: number) =>
+    chaves.some((chave) => (parte(detalhe, chave)?.valor ?? null) !== null) ? total : null
+
+  const DURANTE: ParteDoFluxo['chave'][] = ['entrada', 'parcelas', 'reforcos']
+  const POS: ParteDoFluxo['chave'][] = ['pos_parcelas', 'pos_reforcos']
+  const TUDO: ParteDoFluxo['chave'][] = [...DURANTE, 'chaves', 'financiamento', ...POS]
+
+  const daParte = (chave: ParteDoFluxo['chave'], rotulo: string, saida: ChaveDaComparacao) => ({
+    chave: saida,
+    rotulo,
+    a: parte(ladoA, chave)?.valor ?? null,
+    b: parte(ladoB, chave)?.valor ?? null,
+    detalheA: parte(ladoA, chave)?.detalhe ?? null,
+    detalheB: parte(ladoB, chave)?.detalhe ?? null,
+  })
+
+  const cruas = [
+    daParte('entrada', 'Entrada', 'entrada'),
+    daParte('parcelas', 'Parcelas', 'parcelas'),
+    daParte('reforcos', 'Reforços', 'reforcos'),
+    // Os agregados não repetem detalhe nas duas colunas: a mesma frase escrita
+    // dos dois lados só ocupa a linha sem dizer nada de cada tabela.
+    {
+      chave: 'durante' as const,
+      rotulo: 'Total durante a obra',
+      a: agregado(ladoA, DURANTE, ladoA.durante),
+      b: agregado(ladoB, DURANTE, ladoB.durante),
+      detalheA: null,
+      detalheB: null,
+    },
+    daParte('chaves', 'Parcela na entrega (chaves)', 'chaves'),
+    daParte('financiamento', 'Saldo na entrega (financiamento)', 'saldo'),
+    {
+      chave: 'pos_chaves' as const,
+      rotulo: 'Pós-chaves (depois da entrega)',
+      a: agregado(ladoA, POS, ladoA.posChaves),
+      b: agregado(ladoB, POS, ladoB.posChaves),
+      detalheA: null,
+      detalheB: null,
+    },
+    {
+      chave: 'total' as const,
+      rotulo: 'Total do negócio',
+      a: agregado(ladoA, TUDO, ladoA.alocado),
+      b: agregado(ladoB, TUDO, ladoB.alocado),
+      detalheA: null,
+      detalheB: null,
+    },
+  ]
+
+  const linhas: LinhaDaComparacao[] = cruas.map((linha) => {
+    const diferenca = linha.a !== null && linha.b !== null ? linha.b - linha.a : null
+    return {
+      ...linha,
+      diferenca,
+      textoA: linha.a === null ? TRACO : fmtMoeda(linha.a),
+      textoB: linha.b === null ? TRACO : fmtMoeda(linha.b),
+      textoDiferenca: textoDaDiferenca(diferenca),
+    }
+  })
+
+  return { linhas, baseA: ladoA.base, baseB: ladoB.base }
+}
+
+/**
+ * Quais duas tabelas a comparação abre comparando.
+ *
+ * O caso do dia a dia é tabela da construtora × proposta do corretor, então é
+ * ele que vem pronto. Sem os tipos gravados (base antiga), a leitura mais
+ * provável são as duas ÚLTIMAS cadastradas — quem acabou de montar a segunda
+ * quer justamente vê-la contra a primeira.
+ */
+export function ladosPadraoDaComparacao(fluxos: FluxoPagamento[]): { a: number; b: number } | null {
+  if (fluxos.length < 2) return null
+
+  const ordenados = [...fluxos].sort((x, y) => x.id - y.id)
+  const ultimoDoTipo = (tipo: TipoFluxo) =>
+    [...ordenados].reverse().find((fluxo) => fluxo.tipo === tipo) ?? null
+
+  const construtora = ultimoDoTipo('construtora')
+  const personalizado = ultimoDoTipo('personalizado')
+  if (construtora && personalizado) return { a: construtora.id, b: personalizado.id }
+
+  const [penultimo, ultimo] = ordenados.slice(-2)
+  return { a: penultimo.id, b: ultimo.id }
+}
+
+/** Como a tabela se chama na tela quando ninguém deu nome a ela. */
+export function nomeDoFluxo(fluxo: FluxoPagamento, indice: number): string {
+  return fluxo.nome?.trim() || `Fluxo ${indice + 1}`
+}
+
+/** O nome sugerido para a proposta montada em cima de uma tabela existente. */
+export function nomeDoPersonalizado(nomeDaOrigem: string): string {
+  return `Personalizado — ${nomeDaOrigem}`
 }

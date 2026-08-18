@@ -234,6 +234,10 @@ app.delete('/api/empreendimentos/:id', async (req, reply) => {
 /* Fluxos de pagamento                                                 */
 /* ------------------------------------------------------------------ */
 
+// Tabela da construtora × proposta montada em cima dela. NULL segue valendo:
+// e o fluxo cadastrado antes da separacao, que ninguem classificou.
+const TIPOS_FLUXO = new Set(['construtora', 'personalizado'])
+
 app.post('/api/fluxos', (req, reply) => {
   const conta = contaDe(req)
   const dados = sanitizar(req.body || {}, CAMPOS_FLUXO)
@@ -250,6 +254,15 @@ app.post('/api/fluxos', (req, reply) => {
     return reply.code(404).send({ erro: 'Empreendimento nao encontrado' })
   }
 
+  if (dados.tipo && !TIPOS_FLUXO.has(dados.tipo)) {
+    return reply.code(400).send({ erro: 'Tipo de fluxo invalido' })
+  }
+  // A origem tem de ser um fluxo DESTA conta: id de fora apontaria a proposta
+  // para uma tabela que o dono nem consegue abrir.
+  if (dados.fluxo_base_id && !buscarFluxo.get(dados.fluxo_base_id, conta)) {
+    return reply.code(404).send({ erro: 'Fluxo de origem nao encontrado' })
+  }
+
   const id = inserir('fluxos_pagamento', dados)
   // A tabela de venda carrega o "valor total do imóvel", que é o preço da
   // unidade quando ela não tem valor próprio — e o m² médio depende dele.
@@ -262,11 +275,16 @@ app.put('/api/fluxos/:id', (req, reply) => {
   const fluxo = buscarFluxo.get(id, contaDe(req))
   if (!fluxo) return reply.code(404).send({ erro: 'Fluxo nao encontrado' })
 
-  // Os vinculos (empreendimento e unidade) nao mudam por edicao.
+  // Os vinculos (empreendimento, unidade e o fluxo de origem) nao mudam por
+  // edicao: eles dizem de ONDE a tabela saiu, e isso nao muda quando alguem
+  // corrige um percentual.
   const dados = sanitizar(
     req.body || {},
-    CAMPOS_FLUXO.filter((c) => c !== 'empreendimento_id' && c !== 'unidade_id'),
+    CAMPOS_FLUXO.filter((c) => c !== 'empreendimento_id' && c !== 'unidade_id' && c !== 'fluxo_base_id'),
   )
+  if (dados.tipo && !TIPOS_FLUXO.has(dados.tipo)) {
+    return reply.code(400).send({ erro: 'Tipo de fluxo invalido' })
+  }
   atualizar('fluxos_pagamento', id, dados)
   recalcularResumo(fluxo.empreendimento_id)
   return db.prepare('SELECT * FROM fluxos_pagamento WHERE id = ?').get(id)
@@ -455,7 +473,12 @@ app.post('/api/empreendimentos/:id/importacao/confirmar', (req, reply) => {
       if (!gravarFluxo || !fluxo) return
 
       const colunas = fluxoParaColunas(fluxo, valorDaUnidade)
-      const existente = fluxosDaUnidade.all(unidadeId).find((f) => mesmoNomeDeFluxo(f.nome, colunas.nome))
+      // A proposta que o corretor montou fica FORA do casamento por nome: ela
+      // e trabalho dele em cima da tabela, e a planilha da semana seguinte nao
+      // pode sobrescrever o que ele ja apresentou ao cliente.
+      const existente = fluxosDaUnidade
+        .all(unidadeId)
+        .find((f) => f.tipo !== 'personalizado' && mesmoNomeDeFluxo(f.nome, colunas.nome))
 
       const dados = sanitizar(
         { ...colunas, empreendimento_id: Number(id), unidade_id: unidadeId },

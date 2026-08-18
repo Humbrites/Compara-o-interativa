@@ -464,6 +464,30 @@ for (const coluna of COLUNAS_NOVAS) {
   }
 }
 
+/**
+ * A mesma unidade tem duas leituras da venda: a tabela que a construtora
+ * entregou e a proposta que o corretor montou em cima dela. `tipo` diz qual e
+ * qual, e `fluxo_base_id` guarda de qual tabela a proposta saiu — sem esse
+ * vinculo o comparativo "construtora × personalizado" teria de adivinhar os
+ * lados pelo nome.
+ *
+ * Fluxo que ja existia fica com `tipo` NULL: ele pode ser tabela ou proposta, e
+ * carimbar todo mundo de construtora inventaria uma origem que ninguem
+ * declarou. `ON DELETE SET NULL` na origem: apagar a tabela da construtora nao
+ * pode levar junto a proposta que o corretor ja apresentou ao cliente.
+ */
+const COLUNAS_TIPO_FLUXO = [
+  ['tipo', 'TEXT'],
+  ['fluxo_base_id', 'INTEGER REFERENCES fluxos_pagamento(id) ON DELETE SET NULL'],
+]
+
+for (const [coluna, tipo] of COLUNAS_TIPO_FLUXO) {
+  const existentes = db.prepare('PRAGMA table_info(fluxos_pagamento)').all()
+  if (!existentes.some((c) => c.name === coluna)) {
+    db.exec(`ALTER TABLE fluxos_pagamento ADD COLUMN ${coluna} ${tipo};`)
+  }
+}
+
 // Historico de importacao de tabela de unidades (a etapa da IA). Guardamos o
 // RESUMO do que foi aplicado — quantas unidades nasceram, quantas mudaram e o
 // diff confirmado — porque quem recebe uma tabela nova da construtora toda
@@ -490,7 +514,7 @@ export const CAMPOS_EMPREENDIMENTO = [
 ]
 
 export const CAMPOS_FLUXO = [
-  'empreendimento_id', 'unidade_id', 'nome',
+  'empreendimento_id', 'unidade_id', 'tipo', 'fluxo_base_id', 'nome',
   'entrada_pct', 'entrada_valor', 'entrada_parcelas',
   'parcelas', 'parcela_valor',
   'reforcos_qtd', 'reforco_valor',
@@ -511,7 +535,7 @@ const NUMERICOS = new Set([
   'latitude', 'longitude', 'valor_m2', 'metragem_min', 'metragem_max',
   'dormitorios', 'suites', 'banheiros', 'vagas', 'torres',
   'area_comum', 'area_terraco',
-  'empreendimento_id', 'unidade_id', 'entrada_pct', 'entrada_valor', 'parcelas',
+  'empreendimento_id', 'unidade_id', 'fluxo_base_id', 'entrada_pct', 'entrada_valor', 'parcelas',
   'parcela_valor', 'reforcos_qtd', 'reforco_valor', 'chaves_pct',
   'financiamento_pct', 'financiamento_valor',
   'entrada_parcelas', 'pos_parcelas', 'pos_parcela_valor', 'pos_reforcos_qtd', 'pos_reforco_valor',

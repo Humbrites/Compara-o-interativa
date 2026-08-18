@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { FluxoPagamento } from '../types'
-import { detalharFluxo } from '../lib/fluxos'
+import { detalharFluxo, nomeDoFluxo, ROTULO_TIPO_FLUXO } from '../lib/fluxos'
 import { fmtMoeda, fmtPct, TRACO } from '../lib/format'
 import { Icone } from './Icones'
 import { DetalheFluxo } from './DetalheFluxo'
@@ -75,6 +75,8 @@ interface Props {
   indice: number
   onEditar?: () => void
   onExcluir?: () => void
+  /** Abre uma PROPOSTA copiada desta tabela (escrita — some no modo leitura). */
+  onPersonalizar?: () => void
   /** Preço da unidade — entra nas contas quando a tabela não tem valor próprio. */
   valorDaUnidade?: number | null
   /** Nome do imóvel/unidade, para o cabeçalho do detalhe e os arquivos. */
@@ -87,7 +89,15 @@ function fmtPercentualDaBase(valor: number, base: number | null): string {
   return `${fmtPct((valor / base) * 100)} do valor`
 }
 
-export function CartaoFluxo({ fluxo, indice, onEditar, onExcluir, valorDaUnidade = null, titulo }: Props) {
+export function CartaoFluxo({
+  fluxo,
+  indice,
+  onEditar,
+  onExcluir,
+  onPersonalizar,
+  valorDaUnidade = null,
+  titulo,
+}: Props) {
   // A mesma conta do detalhe — aqui só para o resumo de três números.
   const resumo = useMemo(() => detalharFluxo(fluxo, valorDaUnidade), [fluxo, valorDaUnidade])
   // O cartão inteiro abre as condições calculadas — é o que o corretor quer
@@ -98,11 +108,26 @@ export function CartaoFluxo({ fluxo, indice, onEditar, onExcluir, valorDaUnidade
     <article className="fluxo fluxo--clicavel">
       <header className="fluxo__topo">
         <Icone nome="cartao" tamanho={14} />
-        <span className="fluxo__nome">{fluxo.nome?.trim() || `Fluxo ${indice + 1}`}</span>
+        <span className="fluxo__nome">{nomeDoFluxo(fluxo, indice)}</span>
+        {/* Tabela da construtora × proposta do corretor. Fluxo antigo não tem
+            tipo gravado e continua sem selo — nenhum dos dois é chute. */}
+        {fluxo.tipo !== null && (
+          <span className={`fluxo__selo-tipo fluxo__selo-tipo--${fluxo.tipo}`}>{ROTULO_TIPO_FLUXO[fluxo.tipo]}</span>
+        )}
         {/* Sinaliza que as parcelas saíram da calculadora do CUB. */}
         {fluxo.cub_percentual !== null && <span className="fluxo__selo-cub">CUB</span>}
-        {(onEditar || onExcluir) && (
+        {(onEditar || onExcluir || onPersonalizar) && (
           <div className="fluxo__acoes">
+            {onPersonalizar && (
+              <button
+                type="button"
+                className="btn btn--fantasma btn--icone"
+                onClick={onPersonalizar}
+                title="Criar fluxo personalizado a partir desta tabela"
+              >
+                <Icone nome="copiar" tamanho={14} />
+              </button>
+            )}
             {onEditar && (
               <button type="button" className="btn btn--fantasma btn--icone" onClick={onEditar} title="Editar fluxo">
                 <Icone nome="lapis" tamanho={14} />
@@ -217,6 +242,16 @@ export function CartaoFluxo({ fluxo, indice, onEditar, onExcluir, valorDaUnidade
           indice={indice}
           valorDaUnidade={valorDaUnidade}
           titulo={titulo}
+          // Fecha o detalhe antes de abrir o formulário: a proposta é editada
+          // na unidade, atrás deste modal.
+          onPersonalizar={
+            onPersonalizar
+              ? () => {
+                  setAbertoNoDetalhe(false)
+                  onPersonalizar()
+                }
+              : undefined
+          }
           onFechar={() => setAbertoNoDetalhe(false)}
         />
       )}

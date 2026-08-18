@@ -2,13 +2,21 @@ import { useEffect, useState } from 'react'
 import type { FluxoInput, FluxoPagamento } from '../types'
 import { api } from '../lib/api'
 import { lerNumero } from '../lib/cub'
-import { totalizarFluxo, type NumerosDoFluxo } from '../lib/fluxos'
+import {
+  agregarFluxo,
+  nomeDoFluxo,
+  nomeDoPersonalizado,
+  totalizarFluxo,
+  type AgregadosDoFluxo,
+  type NumerosDoFluxo,
+} from '../lib/fluxos'
 import { fmtMoeda } from '../lib/format'
 import { usePodeEditar } from '../lib/permissao'
 import { Campo, Estado } from './ui'
 import { Icone } from './Icones'
 import { CartaoFluxo } from './CartaoFluxo'
 import { CalculadoraCub } from './CalculadoraCub'
+import { CompararFluxos } from './CompararFluxos'
 
 export type FormularioFluxo = Record<string, string>
 
@@ -162,14 +170,25 @@ export function mudarCampoFluxo(form: FormularioFluxo, campo: string, valor: str
   return proximo
 }
 
-/** Monta o corpo do POST/PUT a partir do formulario. */
+/**
+ * Monta o corpo do POST/PUT a partir do formulario.
+ *
+ * @param origem a tabela de onde uma proposta PERSONALIZADA saiu. So entra na
+ *   criacao: o vinculo diz de onde a proposta veio, e editar um percentual nao
+ *   muda essa origem (a API tambem recusa mexer nela por PUT).
+ */
 export function fluxoParaEnvio(
   form: FormularioFluxo,
   empreendimentoId: number,
   unidadeId: number | null,
+  origem: FluxoPagamento | null = null,
 ): FluxoInput {
   const dados: FluxoInput = { empreendimento_id: empreendimentoId }
   if (unidadeId !== null) dados.unidade_id = unidadeId
+  if (origem !== null) {
+    dados.tipo = 'personalizado'
+    dados.fluxo_base_id = origem.id
+  }
   for (const campo of CAMPOS_FLUXO) {
     dados[campo as keyof FluxoInput] = (form[campo] || '').trim() || null
   }
@@ -191,9 +210,16 @@ interface CamposProps {
 export function CamposFluxo({ form, mudar, daUnidade = false, autoFocus = false }: CamposProps) {
   // Com valor total do imovel o financiamento vira conta, nao campo: e o que
   // sobra depois de entrada, parcelas, reforcos e chaves.
-  const { saldo } = totalizarFluxo(numerosDoFormulario(form))
+  const numeros = numerosDoFormulario(form)
+  const totais = totalizarFluxo(numeros)
+  const { saldo } = totais
   const calculado = saldo !== null
   const estouro = saldo !== null && saldo < -0.005 ? -saldo : null
+
+  // A MESMA conferencia do detalhe do fluxo, so que enquanto a tabela esta
+  // sendo digitada: quem monta uma proposta mexendo em parcela e reforco
+  // precisa ver na hora o que aquilo fez com o desembolso ate a entrega.
+  const conferencia = agregarFluxo(numeros.base, totais, saldo === null ? null : Math.max(0, saldo))
 
   return (
     <div className="grade">
@@ -407,6 +433,55 @@ export function CamposFluxo({ form, mudar, daUnidade = false, autoFocus = false 
           rows={2}
         />
       </Campo>
+
+      {numeros.base !== null && <Conferencia base={numeros.base} agregados={conferencia} />}
+    </div>
+  )
+}
+
+/**
+ * O impacto do que acabou de ser digitado, em três números: o que sai até a
+ * entrega, o que fica para a entrega e o que a construtora parcela depois
+ * dela. O pós-chaves aparece SEPARADO — somá-lo ao desembolso de obra faria a
+ * proposta parecer o dobro do que custa para chegar nas chaves.
+ */
+function Conferencia({ base, agregados }: { base: number; agregados: AgregadosDoFluxo }) {
+  const { durante, naEntrega, posChaves, alocado, diferenca } = agregados
+  const sobra = diferenca ?? 0
+  const fecha = Math.abs(sobra) <= 1
+
+  return (
+    <div className="conferencia col-inteira">
+      <div className="conferencia__numeros">
+        <span className="conferencia__parte">
+          Até a entrega <strong>{fmtMoeda(durante)}</strong>
+        </span>
+        <span className="conferencia__parte">
+          Na entrega <strong>{fmtMoeda(naEntrega)}</strong>
+        </span>
+        {posChaves > 0 && (
+          <span className="conferencia__parte">
+            Depois das chaves <strong>{fmtMoeda(posChaves)}</strong>
+          </span>
+        )}
+      </div>
+      <p className={`campo__dica linha-calculo${fecha ? '' : ' linha-calculo--alerta'}`}>
+        <Icone nome={fecha ? 'check' : 'alerta'} tamanho={12} />
+        {fecha ? (
+          <>
+            As partes somam {fmtMoeda(alocado)} — a proposta fecha o valor do imóvel ({fmtMoeda(base)}).
+          </>
+        ) : sobra > 0 ? (
+          <>
+            As partes somam {fmtMoeda(alocado)}: faltam <strong>{fmtMoeda(sobra)}</strong> para fechar o valor do
+            imóvel.
+          </>
+        ) : (
+          <>
+            As partes somam {fmtMoeda(alocado)}, <strong>{fmtMoeda(-sobra)} acima</strong> do valor do imóvel.
+          </>
+        )}
+      </p>
     </div>
   )
 }
@@ -446,8 +521,15 @@ export function FluxosDoEmpreendimento({
   const daUnidade = unidadeId !== null
   const [form, setForm] = useState<FormularioFluxo | null>(null)
   const [editandoId, setEditandoId] = useState<number | null>(null)
+  /**
+   * A tabela que a proposta aberta está copiando. Preenchida, o formulário
+   * grava um fluxo NOVO: a tabela da construtora nunca é alterada por este
+   * caminho — é ela que o corretor volta a mostrar quando a proposta não cola.
+   */
+  const [origemDoPersonalizado, setOrigemDoPersonalizado] = useState<FluxoPagamento | null>(null)
   const [salvando, setSalvando] = useState(false)
   const [calculando, setCalculando] = useState(false)
+  const [comparando, setComparando] = useState(false)
 
   // Formulario fechado nao tem valor digitado: quem ouve volta para o fluxo salvo.
   const valorDigitado = form?.cub_valor_imovel ?? ''
@@ -475,12 +557,31 @@ export function FluxosDoEmpreendimento({
 
   function abrirNovo() {
     setEditandoId(null)
+    setOrigemDoPersonalizado(null)
     setForm({ ...FLUXO_VAZIO, nome: `Fluxo ${fluxos.length + 1}` })
   }
 
   function abrirEdicao(fluxo: FluxoPagamento) {
     setEditandoId(fluxo.id)
+    setOrigemDoPersonalizado(null)
     setForm(fluxoParaFormulario(fluxo))
+  }
+
+  /**
+   * A proposta nasce como CÓPIA da tabela escolhida: o corretor mexe no que o
+   * cliente pediu (entrada maior, parcela menor, reforço a menos) e a
+   * conferência da soma mostra o efeito na hora.
+   */
+  function abrirPersonalizado(fluxo: FluxoPagamento, indice: number) {
+    setEditandoId(null)
+    setOrigemDoPersonalizado(fluxo)
+    setForm({ ...fluxoParaFormulario(fluxo), nome: nomeDoPersonalizado(nomeDoFluxo(fluxo, indice)) })
+  }
+
+  function fecharFormulario() {
+    setForm(null)
+    setEditandoId(null)
+    setOrigemDoPersonalizado(null)
   }
 
   function mudar(campo: string, valor: string) {
@@ -491,7 +592,7 @@ export function FluxosDoEmpreendimento({
     if (!form) return
     setSalvando(true)
     try {
-      const dados = fluxoParaEnvio(form, empreendimentoId, daUnidade ? unidadeId : null)
+      const dados = fluxoParaEnvio(form, empreendimentoId, daUnidade ? unidadeId : null, origemDoPersonalizado)
 
       if (editandoId !== null) {
         const atualizado = await api.editarFluxo(editandoId, dados)
@@ -500,10 +601,9 @@ export function FluxosDoEmpreendimento({
       } else {
         const criado = await api.criarFluxo(dados)
         onMudou([...fluxos, criado])
-        avisar('Fluxo adicionado')
+        avisar(origemDoPersonalizado ? 'Fluxo personalizado criado' : 'Fluxo adicionado')
       }
-      setForm(null)
-      setEditandoId(null)
+      fecharFormulario()
     } catch (erro) {
       avisar(erro instanceof Error ? erro.message : 'Falha ao salvar o fluxo', 'erro')
     } finally {
@@ -565,8 +665,22 @@ export function FluxosDoEmpreendimento({
               titulo={titulo}
               onEditar={podeEditar ? () => abrirEdicao(fluxo) : undefined}
               onExcluir={podeEditar ? () => excluir(fluxo) : undefined}
+              // A proposta e sempre de uma UNIDADE: a tabela geral do
+              // empreendimento nao tem cliente do outro lado da mesa.
+              onPersonalizar={podeEditar && daUnidade ? () => abrirPersonalizado(fluxo, indice) : undefined}
             />
           ))}
+        </div>
+      )}
+
+      {/* Comparar e LEITURA: quem so apresenta a base tambem precisa mostrar
+          ao cliente o que muda de uma tabela para a outra. */}
+      {daUnidade && fluxos.length >= 2 && !form && (
+        <div className="acoes-fluxo" style={{ marginBottom: 'var(--e3)' }}>
+          <button type="button" className="btn btn--secundario btn--bloco" onClick={() => setComparando(true)}>
+            <Icone nome="balanca" tamanho={15} />
+            Comparar fluxos
+          </button>
         </div>
       )}
 
@@ -579,6 +693,16 @@ export function FluxosDoEmpreendimento({
           </button>
           {botaoCub}
         </div>
+      )}
+
+      {comparando && (
+        <CompararFluxos
+          fluxos={fluxos}
+          valorDaUnidade={valorSugerido}
+          titulo={titulo}
+          avisar={avisar}
+          onFechar={() => setComparando(false)}
+        />
       )}
 
       {calculando && (
@@ -595,8 +719,20 @@ export function FluxosDoEmpreendimento({
         <section className="form-secao form-secao--aninhada">
           <h3 className="form-secao__titulo">
             <Icone nome="cartao" tamanho={13} />
-            {editandoId !== null ? 'Editar fluxo' : 'Novo fluxo de pagamento'}
+            {editandoId !== null
+              ? 'Editar fluxo'
+              : origemDoPersonalizado
+                ? 'Novo fluxo personalizado'
+                : 'Novo fluxo de pagamento'}
           </h3>
+
+          {origemDoPersonalizado && (
+            <p className="campo__dica" style={{ marginBottom: 'var(--e3)' }}>
+              <Icone nome="copiar" tamanho={12} />
+              Cópia de <strong>{origemDoPersonalizado.nome?.trim() || 'a tabela escolhida'}</strong> — mude o que o
+              cliente pediu. A tabela original continua como está.
+            </p>
+          )}
 
           <CamposFluxo form={form} mudar={mudar} daUnidade={daUnidade} autoFocus />
 
@@ -610,18 +746,15 @@ export function FluxosDoEmpreendimento({
               ) : (
                 <>
                   <Icone nome="check" tamanho={15} />
-                  {editandoId !== null ? 'Salvar alterações' : 'Adicionar fluxo'}
+                  {editandoId !== null
+                    ? 'Salvar alterações'
+                    : origemDoPersonalizado
+                      ? 'Criar fluxo personalizado'
+                      : 'Adicionar fluxo'}
                 </>
               )}
             </button>
-            <button
-              type="button"
-              className="btn btn--fantasma"
-              onClick={() => {
-                setForm(null)
-                setEditandoId(null)
-              }}
-            >
+            <button type="button" className="btn btn--fantasma" onClick={fecharFormulario}>
               Cancelar
             </button>
           </div>

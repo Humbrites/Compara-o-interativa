@@ -359,6 +359,92 @@ export function exportarPdfComparativo(dados: {
 }
 
 /* ------------------------------------------------------------------ */
+/* Tabela da construtora x proposta personalizada                      */
+/* ------------------------------------------------------------------ */
+
+export interface LinhaDeFluxos {
+  rotulo: string
+  textoA: string
+  textoB: string
+  /** Ja formatada com o sinal pela tela; "—" quando um dos lados nao tem dado. */
+  textoDiferenca: string
+  detalheA?: string | null
+  detalheB?: string | null
+  /** Positiva = a proposta pesa mais naquela linha; null = sem comparacao. */
+  diferenca: number | null
+}
+
+/**
+ * A folha do "Comparar fluxos": as duas tabelas da MESMA unidade lado a lado.
+ *
+ * Aqui ninguem vence: mais entrada e pior para um cliente e melhor para outro,
+ * e eleger vencedor seria opinar sobre o caixa de quem compra. O que o papel
+ * mostra e a DIFERENCA, com sinal — e o numero que o corretor aponta na mesa.
+ */
+export function exportarPdfFluxos(dados: {
+  titulo: string
+  subtitulo?: string | null
+  nomeA: string
+  nomeB: string
+  linhas: LinhaDeFluxos[]
+}): boolean {
+  const { titulo, subtitulo, nomeA, nomeB, linhas } = dados
+  if (linhas.length === 0) return false
+
+  const corpoTabela = linhas
+    .map((linha) => {
+      const celula_ = (texto: string, detalhe?: string | null) =>
+        `<td class="${texto === TRACO_TELA ? 'vazio' : ''}">${esc(texto)}${
+          detalhe ? `<span class="detalhe">${esc(detalhe)}</span>` : ''
+        }</td>`
+
+      return `<tr>
+      <th scope="row">${esc(linha.rotulo)}</th>
+      ${celula_(linha.textoA, linha.detalheA)}
+      ${celula_(linha.textoB, linha.detalheB)}
+      <td class="${linha.diferenca === null ? 'vazio' : ''}">${esc(linha.textoDiferenca)}</td>
+    </tr>`
+    })
+    .join('')
+
+  const corpo = `
+    <section class="secao">
+      <h2 class="secao__titulo">Condições lado a lado</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Bloco</th>
+            <th><span class="coluna__nome">${esc(nomeA)}</span><span class="coluna__meta">lado A</span></th>
+            <th><span class="coluna__nome">${esc(nomeB)}</span><span class="coluna__meta">lado B</span></th>
+            <th><span class="coluna__nome">Diferença</span><span class="coluna__meta">B − A</span></th>
+          </tr>
+        </thead>
+        <tbody>${corpoTabela}</tbody>
+      </table>
+    </section>
+
+    <div class="nota">
+      <div class="nota__titulo">Como ler este comparativo</div>
+      A coluna <strong>Diferença</strong> é o lado B menos o lado A: valor com <strong>+</strong> é o que a segunda
+      tabela cobra a mais naquele bloco, e com <strong>−</strong> o que ela cobra a menos. Linhas em que um dos lados
+      não tem o dado ficam sem diferença — campo em branco é informação que falta, não zero.
+      O <strong>pós-chaves</strong> não entra no total durante a obra: ele é parcelado depois da entrega, e somá-lo ali
+      faria o imóvel parecer o dobro do que custa até as chaves. O <strong>saldo na entrega</strong> é o que resta para
+      o financiamento. Os valores refletem as tabelas cadastradas na data de emissão e não constituem proposta
+      comercial.
+    </div>`
+
+  return folha({
+    titulo: `${titulo} — fluxos de pagamento`,
+    chapeu: 'Fluxos de pagamento',
+    tituloNaCapa: `${esc(nomeA)} <b>×</b> ${esc(nomeB)}`,
+    subtitulo: subtitulo || `Condições de ${titulo}, bloco a bloco, com a diferença entre as duas tabelas.`,
+    corpo,
+    rodape: titulo,
+  })
+}
+
+/* ------------------------------------------------------------------ */
 /* Unidades lado a lado (ate quatro colunas)                           */
 /* ------------------------------------------------------------------ */
 

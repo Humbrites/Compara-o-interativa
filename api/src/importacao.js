@@ -463,6 +463,9 @@ export function fluxoParaColunas(fluxo, valorDaUnidade) {
 
   return {
     nome: fluxo.nome || NOME_FLUXO_PADRAO,
+    // O que veio da planilha e, por definicao, a tabela da CONSTRUTORA: e o
+    // lado fixo do comparativo contra a proposta que o corretor monta depois.
+    tipo: 'construtora',
     entrada_pct: entradaPct ?? (base !== null && entradaValor !== null ? (entradaValor / base) * 100 : null),
     entrada_valor: entradaValor,
     entrada_parcelas: fluxo.entrada_parcelas,
