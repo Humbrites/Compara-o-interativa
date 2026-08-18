@@ -12,9 +12,10 @@ import {
   type SecaoDoComparativo,
   type TextoLivreDoComparativo,
 } from '../lib/exportarComparativo'
+import { useBaseM2 } from '../lib/baseM2'
 import { fmtMoeda, fmtTexto } from '../lib/format'
 import { capaDe } from '../lib/imagens'
-import { localizacaoUnidade, rotuloUnidade } from '../lib/unidades'
+import { localizacaoUnidade, rotuloUnidade, ROTULO_BASE_M2 } from '../lib/unidades'
 import { Icone } from './Icones'
 import { Modal, Estado } from './ui'
 
@@ -321,6 +322,7 @@ interface Props {
 }
 
 export function Comparativo({ a, b, lista, onEscolherA, onEscolherB, onTrocarLados, avisar, onFechar }: Props) {
+  const base = useBaseM2()
   // Unidade escolhida de cada lado (null = comparar so o empreendimento).
   const [unidadeAId, setUnidadeAId] = useState<number | null>(null)
   const [unidadeBId, setUnidadeBId] = useState<number | null>(null)
@@ -340,10 +342,25 @@ export function Comparativo({ a, b, lista, onEscolherA, onEscolherB, onTrocarLad
   const escolhidoA = opcoesA.find((o) => o.fluxo.id === fluxoAId) ?? opcoesA[0] ?? null
   const escolhidoB = opcoesB.find((o) => o.fluxo.id === fluxoBId) ?? opcoesB[0] ?? null
 
-  const linhasGerais = useMemo(() => (b ? compararEmpreendimentos(a, b) : []), [a, b])
+  /**
+   * Os indicadores gerais saem das UNIDADES de cada lado — e elas ja vieram na
+   * carga da base (a API devolve empreendimento, unidades e fluxos de uma vez),
+   * entao trocar de lado nao dispara busca nenhuma.
+   */
+  const linhasGerais = useMemo(
+    () =>
+      b
+        ? compararEmpreendimentos(
+            { empreendimento: a, unidades: a.unidades },
+            { empreendimento: b, unidades: b.unidades },
+            base,
+          )
+        : [],
+    [a, b, base],
+  )
   const linhasUnidade = useMemo(
-    () => (unidadeA || unidadeB ? compararUnidades(unidadeA, unidadeB) : []),
-    [unidadeA, unidadeB],
+    () => (unidadeA || unidadeB ? compararUnidades(unidadeA, unidadeB, base) : []),
+    [unidadeA, unidadeB, base],
   )
   const linhasFluxo = useMemo(
     () => compararFluxos(escolhidoA?.fluxo ?? null, escolhidoB?.fluxo ?? null),
@@ -477,7 +494,8 @@ export function Comparativo({ a, b, lista, onEscolherA, onEscolherB, onTrocarLad
           {(unidadeA || unidadeB) && !(unidadeA && unidadeB) && (
             <p className="campo__dica" style={{ marginTop: 'var(--e3)' }}>
               <Icone nome="info" tamanho={12} /> Só um lado tem unidade escolhida — sem os dois valores, nenhuma linha
-              é destacada.
+              é destacada. A unidade de um lado nunca disputa com os números gerais do outro: a tabela abaixo compara
+              os empreendimentos inteiros.
             </p>
           )}
         </div>
@@ -490,6 +508,16 @@ export function Comparativo({ a, b, lista, onEscolherA, onEscolherB, onTrocarLad
           nomeA={a.nome}
           nomeB={b.nome}
         />
+
+        {/* Os dois lados são lidos do MESMO jeito — dizer qual jeito é esse
+            evita a leitura errada de comparar a faixa de um com a média do
+            outro, que é o que uma linha de "valor médio" sozinha provocava. */}
+        <p className="campo__dica" style={{ marginTop: 'var(--e3)' }}>
+          <Icone nome="info" tamanho={12} /> Valor do m², preço e metragem saem das{' '}
+          <strong>unidades disponíveis</strong> de cada empreendimento — o m² é calculado unidade a unidade pela{' '}
+          {ROTULO_BASE_M2[base]}. Onde aparece <em>todas as unidades</em>, nenhuma disponível tinha o dado; onde aparece{' '}
+          <em>dados gerais</em>, o empreendimento ainda não tem unidades cadastradas e vale o cadastro.
+        </p>
       </div>
 
 

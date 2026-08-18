@@ -124,6 +124,45 @@ function faixa(valores: (number | null)[]): Faixa {
   return { min: Math.min(...numeros), max: Math.max(...numeros) }
 }
 
+/** Uma faixa tirada das unidades, com o aviso de QUAIS unidades entraram nela. */
+export interface FaixaDeUnidades extends Faixa {
+  /** true = so as unidades DISPONIVEIS; false = todas (ou nenhuma tinha o dado). */
+  soDisponiveis: boolean
+}
+
+/**
+ * A faixa de um numero entre as unidades, preferindo as que estao A VENDA.
+ *
+ * Quem pergunta "a partir de quanto" quer o que ainda da para comprar: a
+ * unidade mais barata do predio pode ter sido vendida no lancamento, e anunciar
+ * o preco dela como piso e prometer o que nao existe.
+ *
+ * Sem nenhuma disponivel com o dado (base sem status preenchido, predio
+ * esgotado), a faixa sai de TODAS as unidades e marca isso — a tela precisa
+ * dizer a diferenca em vez de fingir que o numero e o mesmo.
+ */
+export function faixaEntreUnidades(
+  unidades: Unidade[],
+  valorDe: (unidade: Unidade) => number | null,
+): FaixaDeUnidades {
+  const aVenda = unidades.filter((u) => normalizarStatusUnidade(u.status) === 'disponivel')
+  const daVenda = faixa(aVenda.map(valorDe))
+  if (daVenda.min !== null) return { ...daVenda, soDisponiveis: true }
+
+  return { ...faixa(unidades.map(valorDe)), soDisponiveis: false }
+}
+
+/**
+ * A faixa de valor do m² do conjunto: de quanto sai o metro mais barato ao mais
+ * caro, calculado unidade a unidade pela base da conta.
+ *
+ * E o numero que o comparativo mostra no lugar de uma media unica: a media
+ * esconde que o mesmo predio tem studio a R$ 12 mil/m² e cobertura a R$ 9 mil/m².
+ */
+export function faixaM2(unidades: Unidade[], base: BaseM2 = BASE_M2_PADRAO): FaixaDeUnidades {
+  return faixaEntreUnidades(unidades, (u) => valorM2Da(u, base))
+}
+
 /**
  * Resumo do conjunto de unidades — e o que o painel mostra no lugar dos
  * campos gerais quando o empreendimento ja tem unidades cadastradas.

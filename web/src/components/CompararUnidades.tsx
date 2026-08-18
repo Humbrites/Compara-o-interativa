@@ -5,7 +5,7 @@ import { useBaseM2 } from '../lib/baseM2'
 import { exportarPdfUnidades, type LinhaDeUnidades } from '../lib/exportarComparativo'
 import { fmtArea, fmtInteiro, fmtMoeda, TRACO } from '../lib/format'
 import { fmtPercentual } from '../lib/cub'
-import { rotuloUnidade } from '../lib/unidades'
+import { rotuloUnidade, ROTULO_BASE_M2 } from '../lib/unidades'
 import type { Empreendimento, Unidade } from '../types'
 import { Icone } from './Icones'
 import { Estado, Modal } from './ui'
@@ -140,7 +140,11 @@ export function CompararUnidades({
       texto: (i) => moeda(analiseDe(i)?.valor),
     },
     {
-      rotulo: 'Valor por m²',
+      // O m² sai DA unidade (preço dela ÷ metragem dela) e a disputa é entre as
+      // escolhidas. A média do prédio entra só como referência no detalhe: ela
+      // diz se a unidade é barata DENTRO do empreendimento dela, o que é outra
+      // pergunta — e elegeria vencedor pelo prédio, não pela unidade.
+      rotulo: `Valor por m² (${ROTULO_BASE_M2[base]})`,
       direcao: 'menor',
       valor: (i) => analiseDe(i)?.valorM2 ?? null,
       texto: (i) => moeda(analiseDe(i)?.valorM2),
@@ -148,15 +152,17 @@ export function CompararUnidades({
         const a = analiseDe(i)
         if (!a || a.diferencaParaMedia === null) return null
         return a.diferencaParaMedia < 0
-          ? `${fmtPercentual(Math.abs(a.diferencaParaMedia), 1)} abaixo da média do prédio`
-          : `${fmtPercentual(a.diferencaParaMedia, 1)} acima da média do prédio`
+          ? `referência · ${fmtPercentual(Math.abs(a.diferencaParaMedia), 1)} abaixo da média do prédio`
+          : `referência · ${fmtPercentual(a.diferencaParaMedia, 1)} acima da média do prédio`
       },
     },
     {
-      rotulo: 'Metragem',
+      // A metragem mostrada é a MESMA que dividiu o preço no m² acima; exibir
+      // outra faria as duas linhas não fecharem conta.
+      rotulo: `Metragem (${ROTULO_BASE_M2[base]})`,
       direcao: 'maior',
-      valor: (i) => i.unidade.metragem ?? i.unidade.metragem_total,
-      texto: (i) => fmtArea(i.unidade.metragem ?? i.unidade.metragem_total),
+      valor: (i) => analiseDe(i)?.metragem ?? null,
+      texto: (i) => fmtArea(analiseDe(i)?.metragem ?? null),
     },
     {
       rotulo: 'Dormitórios',
@@ -445,9 +451,11 @@ export function CompararUnidades({
           </div>
 
           <p className="campo__dica linha-calculo">
-            <Icone nome="info" tamanho={12} /> O destaque marca o melhor de cada linha — <strong>menor</strong> para
-            preço, entrada e capital; <strong>maior</strong> para metragem, dormitórios e vagas. O saldo na entrega não
-            entra na disputa: mais saldo é pior para quem tem capital e melhor para quem depende de financiamento.
+            <Icone nome="info" tamanho={12} /> O destaque marca o melhor de cada linha <strong>entre as unidades
+            escolhidas</strong> — <strong>menor</strong> para preço, entrada e capital; <strong>maior</strong> para
+            metragem, dormitórios e vagas. A média do prédio aparece só como referência da unidade, e não elege
+            vencedor. O saldo na entrega não entra na disputa: mais saldo é pior para quem tem capital e melhor para
+            quem depende de financiamento.
           </p>
         </section>
       )}

@@ -341,6 +341,9 @@ export function exportarPdfComparativo(dados: {
       linha — <strong>menor</strong> para preço, valor do m² e entrada; <strong>maior</strong> para metragem,
       dormitórios, suítes e vagas; entrega mais próxima e obra mais avançada também contam a favor.
       Linhas em que um dos lados não tem o dado ficam sem vencedor: sem os dois números não há comparação.
+      Valor do m², preço e metragem do empreendimento saem das unidades <strong>disponíveis</strong> de cada lado;
+      <em>todas as unidades</em> ao lado do valor avisa que nenhuma disponível tinha o dado, e <em>dados gerais</em>
+      que aquele empreendimento ainda não tem unidades cadastradas.
       Posição solar, face e situação da unidade não entram na disputa — dependem da preferência do cliente.
       Os valores refletem as tabelas cadastradas na data de emissão e não constituem proposta comercial.
     </div>`
