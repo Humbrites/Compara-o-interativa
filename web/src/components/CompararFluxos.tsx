@@ -9,6 +9,7 @@ import {
 } from '../lib/fluxos'
 import { fmtMoeda, TRACO } from '../lib/format'
 import type { FluxoPagamento } from '../types'
+import { usePedirApresentacao } from './DadosApresentacao'
 import { Icone } from './Icones'
 import { Campo, Modal } from './ui'
 
@@ -34,6 +35,7 @@ interface Props {
 }
 
 export function CompararFluxos({ fluxos, valorDaUnidade = null, titulo = 'Unidade', avisar, onFechar }: Props) {
+  const { pedir, modal } = usePedirApresentacao()
   const padrao = useMemo(() => ladosPadraoDaComparacao(fluxos), [fluxos])
   const [idA, setIdA] = useState<number | null>(padrao?.a ?? null)
   const [idB, setIdB] = useState<number | null>(padrao?.b ?? null)
@@ -84,13 +86,17 @@ export function CompararFluxos({ fluxos, valorDaUnidade = null, titulo = 'Unidad
       diferenca: linha.diferenca,
     }))
 
-    const abriu = exportarPdfFluxos({
-      titulo,
-      nomeA: rotuloDoLado(fluxoA),
-      nomeB: rotuloDoLado(fluxoB),
-      linhas,
+    // Quem assina e para quem: o cabeçalho do PDF sai igual em toda exportação.
+    pedir((apresentacao) => {
+      const abriu = exportarPdfFluxos({
+        titulo,
+        nomeA: rotuloDoLado(fluxoA),
+        nomeB: rotuloDoLado(fluxoB),
+        linhas,
+        apresentacao,
+      })
+      if (!abriu) avisar('O navegador bloqueou a janela de impressão — libere os pop-ups do site', 'erro')
     })
-    if (!abriu) avisar('O navegador bloqueou a janela de impressão — libere os pop-ups do site', 'erro')
   }
 
   // Duas tabelas montadas sobre valores de imóvel diferentes comparam preços
@@ -223,6 +229,8 @@ export function CompararFluxos({ fluxos, valorDaUnidade = null, titulo = 'Unidad
           </p>
         </section>
       )}
+
+      {modal}
     </Modal>
   )
 }

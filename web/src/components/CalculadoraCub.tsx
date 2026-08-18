@@ -3,6 +3,7 @@ import type { FluxoInput } from '../types'
 import { indiceFixo, lerNumero, simular, fmtPercentual, MAX_MESES, type Simulacao } from '../lib/cub'
 import { exportarCsv, exportarPdf } from '../lib/exportarSimulacao'
 import { fmtMoeda, fmtMoedaCurta } from '../lib/format'
+import { usePedirApresentacao } from './DadosApresentacao'
 import { Campo, Modal } from './ui'
 import { Icone } from './Icones'
 import { GraficoBarras, GraficoLinha } from './GraficoSvg'
@@ -116,6 +117,7 @@ export function CalculadoraCub({ titulo, valorSugerido, onFechar, onGerarFluxo, 
   const [erros, setErros] = useState<Record<string, string>>({})
   const [simulacao, setSimulacao] = useState<Simulacao | null>(null)
   const [gerando, setGerando] = useState(false)
+  const { pedir, modal } = usePedirApresentacao()
 
   function mudar(campo: keyof Formulario, valor: string) {
     setForm((atual) => ({ ...atual, [campo]: valor }))
@@ -163,8 +165,11 @@ export function CalculadoraCub({ titulo, valorSugerido, onFechar, onGerarFluxo, 
 
   function baixarPdf() {
     if (!simulacao) return
-    const abriu = exportarPdf(simulacao, titulo)
-    if (!abriu) avisar('O navegador bloqueou a janela de impressão — libere os pop-ups do site', 'erro')
+    // Quem assina e para quem: o cabeçalho do PDF sai igual em toda exportação.
+    pedir((apresentacao) => {
+      const abriu = exportarPdf(simulacao, titulo, apresentacao)
+      if (!abriu) avisar('O navegador bloqueou a janela de impressão — libere os pop-ups do site', 'erro')
+    })
   }
 
   async function gerarFluxo() {
@@ -512,6 +517,8 @@ export function CalculadoraCub({ titulo, valorSugerido, onFechar, onGerarFluxo, 
           </section>
         </>
       )}
+
+      {modal}
     </Modal>
   )
 }

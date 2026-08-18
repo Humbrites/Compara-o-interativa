@@ -27,6 +27,7 @@ import {
   ehMaster,
   encerrarTodasAsSessoes,
   gerarCodigosRecuperacao,
+  lerConfigDaLogo,
   lerSessao,
   lerTokenSenha,
   limparExpirados,
@@ -34,6 +35,7 @@ import {
   listarConvitesDaConta,
   listarSessoesDoUsuario,
   listarUsuariosDaConta,
+  logoDaConta,
   marcarTokenSenhaUsado,
   motivoParaNaoConvidar,
   podeGravar,
@@ -147,6 +149,8 @@ function usuarioPublico(usuario) {
     email: usuario.email,
     usuario: usuario.usuario,
     papel: usuario.papel,
+    // Vai impresso no material entregue ao cliente, exatamente como cadastrado.
+    creci: usuario.creci ?? null,
     totpAtivo: Boolean(usuario.totp_ativo),
     // É o que faz a área do operador aparecer no menu — e ela só existe para
     // quem recebeu a marca pela linha de comando.
@@ -167,6 +171,9 @@ function contaPublica(conta) {
     // precisa dela — e buscá-la em cada uma daria números diferentes na mesma
     // tela enquanto a resposta não chegasse.
     base_m2: normalizarBaseM2(conta.base_m2),
+    // A marca da imobiliária viaja junto porque TODA exportação em PDF a usa —
+    // e o PDF é montado no navegador, sem passar de volta pela API.
+    logo: logoDaConta(conta),
     plano: descreverPlano(conta),
     cobranca: descreverCobranca(conta),
     assentos: resumoAssentos(conta),
@@ -479,8 +486,36 @@ export function registrarAutenticacao(app) {
   })
 
   /* ---------------------------------------------------------------- */
-  /* Seguranca do proprio usuario                                       */
+  /* O proprio usuario: perfil e seguranca                              */
   /* ---------------------------------------------------------------- */
+
+  /** Quanto cabe num numero de CRECI — o resto e engano de digitacao. */
+  const MAXIMO_CRECI = 60
+
+  /**
+   * O cadastro do proprio usuario. Hoje so o CRECI, que e o que vai impresso
+   * no material entregue ao cliente: gravado EXATAMENTE como digitado, sem
+   * mascara nem maiusculizacao. Cada conselho regional escreve o numero de um
+   * jeito, e "corrigir" aqui deixaria a folha diferente do carimbo dele.
+   */
+  app.put('/api/seguranca/perfil', (req, reply) => {
+    const { usuario } = req.contexto
+
+    if (req.body?.creci !== undefined) {
+      const creci = String(req.body.creci).trim()
+      if (creci.length > MAXIMO_CRECI) {
+        return reply.code(400).send({ erro: `O CRECI aceita até ${MAXIMO_CRECI} caracteres` })
+      }
+      // Campo apagado volta a ser NULL — string vazia impressa viraria um
+      // "CRECI:" solto no papel, dizendo menos do que nao dizer nada.
+      db.prepare("UPDATE usuarios SET creci = ?, atualizado_em = datetime('now') WHERE id = ?").run(
+        creci || null,
+        usuario.id,
+      )
+    }
+
+    return usuarioPublico(buscarUsuario.get(usuario.id))
+  })
 
   app.post('/api/seguranca/senha', async (req, reply) => {
     const { usuario } = req.contexto
@@ -630,9 +665,18 @@ export function registrarAutenticacao(app) {
       }
     }
 
+    // Posição, tamanho e opacidade da logo no PDF. O arquivo em si entra pela
+    // rota de upload; aqui só muda COMO ele aparece na folha.
+    const { valores: logo, erro: erroDaLogo } = lerConfigDaLogo(req.body, conta)
+    if (erroDaLogo) return reply.code(400).send({ erro: erroDaLogo })
+
     db.prepare(
-      "UPDATE contas SET nome = ?, exigir_2fa = ?, base_m2 = ?, atualizado_em = datetime('now') WHERE id = ?",
-    ).run(nome, exigir, base, conta.id)
+      `UPDATE contas
+          SET nome = ?, exigir_2fa = ?, base_m2 = ?,
+              logo_posicao = ?, logo_tamanho = ?, logo_opacidade = ?,
+              atualizado_em = datetime('now')
+        WHERE id = ?`,
+    ).run(nome, exigir, base, logo.posicao, logo.tamanho, logo.opacidade, conta.id)
 
     // A base muda o m² de TODO empreendimento da conta — e ele fica GRAVADO
     // nas colunas que o filtro, o mapa e o comparativo leem. O recálculo roda

@@ -1,5 +1,5 @@
 import type { LinhaComparativo } from './comparar'
-import { esc, imprimir } from './exportarSimulacao'
+import { esc, montarFolha, type Apresentacao } from './exportarSimulacao'
 
 /**
  * PDF das telas de comparacao — mesma mecanica das outras exportacoes: uma
@@ -14,9 +14,13 @@ import { esc, imprimir } from './exportarSimulacao'
  */
 
 /**
- * Folha premium: petroleo escuro no cabecalho, cinzas quentes no corpo e um
- * verde discreto so no vencedor. Sem fonte externa — a folha e autocontida e
- * uma fonte que nao carrega estraga o papel inteiro.
+ * Folha premium: petroleo nos titulos, cinzas quentes no corpo e um verde
+ * discreto so no vencedor. Sem fonte externa — a folha e autocontida e uma
+ * fonte que nao carrega estraga o papel inteiro.
+ *
+ * O cabecalho NAO mora aqui: ele e o mesmo de todas as exportacoes (identidade
+ * da imobiliaria, cliente, corretor e data), e duplicar o desenho faria a folha
+ * do comparativo envelhecer sozinha na primeira mudanca.
  */
 const ESTILO_RELATORIO = `
   * { box-sizing: border-box; }
@@ -45,21 +49,10 @@ const ESTILO_RELATORIO = `
 
   .folha { padding: 0 26px; }
 
-  /* ---- Capa / cabecalho -------------------------------------------- */
-
-  .topo { background: var(--petroleo); color: #fff; padding: 22px 26px 20px;
-          margin-bottom: 22px; border-bottom: 3px solid var(--ouro); }
-  .topo__marca { font-size: 8.5px; text-transform: uppercase; letter-spacing: .22em;
-                 color: rgba(255,255,255,.62); font-weight: 700; }
-  .topo__titulo { font-size: 26px; font-weight: 300; letter-spacing: -.015em;
-                  margin: 6px 0 0; line-height: 1.1; }
-  .topo__titulo b { font-weight: 700; }
-  .topo__linha { display: flex; justify-content: space-between; align-items: flex-end;
-                 gap: 16px; margin-top: 10px; padding-top: 9px;
-                 border-top: 1px solid rgba(255,255,255,.16); }
-  .topo__sub { font-size: 10.5px; color: rgba(255,255,255,.78); max-width: 74%; }
-  .topo__data { font-size: 8.5px; text-transform: uppercase; letter-spacing: .12em;
-                color: rgba(255,255,255,.62); white-space: nowrap; }
+  /* O cabecalho vem do esqueleto comum e nasce colado nas bordas da folha;
+     aqui ele ganha a mesma margem lateral do corpo. */
+  .pdf-cabecalho { margin: 0 26px 22px; }
+  .pdf-assinatura { margin: 22px 26px 0; }
 
   /* ---- Duelo A vs B ------------------------------------------------ */
 
@@ -156,52 +149,45 @@ const ESTILO_RELATORIO = `
   .rodape b { color: var(--petroleo); letter-spacing: .16em; }
 
   @page { margin: 12mm 0; }
-  @media print {
-    thead { display: table-header-group; }
-    .topo { margin-top: -12mm; }
-  }
+  @media print { thead { display: table-header-group; } }
 `
 
-/** Data de geracao no cabecalho — relatorio sem data envelhece sem avisar. */
-function dataDeHoje(): string {
-  return new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
-}
-
+/**
+ * A folha do relatorio: o esqueleto (cabecalho, marca e data) vem do helper
+ * comum a todas as exportacoes; daqui saem so o corpo e a faixa do rodape.
+ */
 function folha(dados: {
-  titulo: string
+  documento: string
   chapeu: string
-  tituloNaCapa: string
+  titulo: string
+  contra?: string | null
+  empreendimento?: string | null
+  unidade?: string | null
   subtitulo: string
   corpo: string
   rodape: string
+  apresentacao?: Apresentacao | null
 }): boolean {
-  return imprimir(`<!doctype html>
-<html lang="pt-BR">
-<head>
-  <meta charset="utf-8">
-  <title>${esc(dados.titulo)}</title>
-  <style>${ESTILO_RELATORIO}</style>
-</head>
-<body>
-  <header class="topo">
-    <div class="topo__marca">${esc(dados.chapeu)}</div>
-    <h1 class="topo__titulo">${dados.tituloNaCapa}</h1>
-    <div class="topo__linha">
-      <div class="topo__sub">${esc(dados.subtitulo)}</div>
-      <div class="topo__data">${esc(dataDeHoje())}</div>
-    </div>
-  </header>
-
-  <main class="folha">
+  return montarFolha({
+    documento: dados.documento,
+    estilo: ESTILO_RELATORIO,
+    cabecalho: {
+      chapeu: dados.chapeu,
+      titulo: dados.titulo,
+      contra: dados.contra ?? null,
+      empreendimento: dados.empreendimento ?? null,
+      unidade: dados.unidade ?? null,
+      subtitulo: dados.subtitulo,
+      apresentacao: dados.apresentacao ?? null,
+    },
+    corpo: `  <main class="folha">
 ${dados.corpo}
-  </main>
-
-  <footer class="rodape">
+  </main>`,
+    rodapeFixo: `<footer class="rodape">
     <span><b>Compara Interativa</b></span>
     <span>${esc(dados.rodape)}</span>
-  </footer>
-</body>
-</html>`)
+  </footer>`,
+  })
 }
 
 /** Selo do vencedor: cor + peso + simbolo, para sobreviver ao P&B. */
@@ -320,8 +306,9 @@ export function exportarPdfComparativo(dados: {
   b: LadoDoComparativo
   secoes: SecaoDoComparativo[]
   textos?: TextoLivreDoComparativo[]
+  apresentacao?: Apresentacao | null
 }): boolean {
-  const { a, b, secoes, textos = [] } = dados
+  const { a, b, secoes, textos = [], apresentacao = null } = dados
   const titulo = `${a.nome} × ${b.nome}`
 
   const corpo = `
@@ -349,12 +336,14 @@ export function exportarPdfComparativo(dados: {
     </div>`
 
   return folha({
-    titulo: `${titulo} — comparativo`,
+    documento: `${titulo} — comparativo`,
     chapeu: 'Relatório comparativo',
-    tituloNaCapa: `${esc(a.nome)} <b>×</b> ${esc(b.nome)}`,
+    titulo: a.nome,
+    contra: b.nome,
     subtitulo: 'Indicadores, unidades e fluxo de pagamento lado a lado. O melhor de cada linha vem marcado.',
     corpo,
     rodape: titulo,
+    apresentacao,
   })
 }
 
@@ -387,8 +376,11 @@ export function exportarPdfFluxos(dados: {
   nomeA: string
   nomeB: string
   linhas: LinhaDeFluxos[]
+  /** Empreendimento da unidade, quando a tela souber dizer. */
+  empreendimento?: string | null
+  apresentacao?: Apresentacao | null
 }): boolean {
-  const { titulo, subtitulo, nomeA, nomeB, linhas } = dados
+  const { titulo, subtitulo, nomeA, nomeB, linhas, empreendimento = null, apresentacao = null } = dados
   if (linhas.length === 0) return false
 
   const corpoTabela = linhas
@@ -435,12 +427,16 @@ export function exportarPdfFluxos(dados: {
     </div>`
 
   return folha({
-    titulo: `${titulo} — fluxos de pagamento`,
+    documento: `${titulo} — fluxos de pagamento`,
     chapeu: 'Fluxos de pagamento',
-    tituloNaCapa: `${esc(nomeA)} <b>×</b> ${esc(nomeB)}`,
+    titulo: nomeA,
+    contra: nomeB,
+    empreendimento,
+    unidade: titulo,
     subtitulo: subtitulo || `Condições de ${titulo}, bloco a bloco, com a diferença entre as duas tabelas.`,
     corpo,
     rodape: titulo,
+    apresentacao,
   })
 }
 
@@ -473,8 +469,9 @@ export function exportarPdfUnidades(dados: {
   subtitulo?: string | null
   colunas: ColunaDeUnidade[]
   linhas: LinhaDeUnidades[]
+  apresentacao?: Apresentacao | null
 }): boolean {
-  const { subtitulo, colunas, linhas } = dados
+  const { subtitulo, colunas, linhas, apresentacao = null } = dados
   if (colunas.length === 0 || linhas.length === 0) return false
 
   const cabecalho = colunas
@@ -520,11 +517,16 @@ export function exportarPdfUnidades(dados: {
     </div>`
 
   return folha({
-    titulo: 'Comparativo de unidades',
+    documento: 'Comparativo de unidades',
     chapeu: 'Relatório comparativo',
-    tituloNaCapa: 'Comparativo de <b>unidades</b>',
+    titulo: 'Comparativo de unidades',
+    // Uma coluna só de um prédio: o nome dele vira a identificação da folha.
+    empreendimento: colunas.every((coluna) => coluna.empreendimento === colunas[0].empreendimento)
+      ? colunas[0].empreendimento
+      : null,
     subtitulo: subtitulo || `${quantas} lado a lado. O melhor de cada linha vem marcado.`,
     corpo,
     rodape: quantas,
+    apresentacao,
   })
 }

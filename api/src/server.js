@@ -4,7 +4,7 @@ import multipart from '@fastify/multipart'
 import estatico from '@fastify/static'
 import { randomUUID } from 'node:crypto'
 import { createWriteStream } from 'node:fs'
-import { unlink } from 'node:fs/promises'
+import { unlink, writeFile } from 'node:fs/promises'
 import { pipeline } from 'node:stream/promises'
 import { extname, join } from 'node:path'
 import {
@@ -19,7 +19,7 @@ import {
 } from './db.js'
 import { listarBaseDaConta, comUrl } from './base.js'
 import { recalcularResumo } from './resumo.js'
-import { ehMaster } from './contas.js'
+import { buscarConta, ehMaster, logoDaConta } from './contas.js'
 import { criarServicoIndicadores } from './indicadores.js'
 import { criarServicoDeEndereco } from './geocodificar.js'
 import { registrarAutenticacao } from './rotas-auth.js'
@@ -614,14 +614,104 @@ async function descartarUpload(req) {
  * "aberto para sempre", que é o oposto de material de venda de um cliente.
  */
 app.get('/uploads/:arquivo', (req, reply) => {
+  const { arquivo } = req.params
   // O master não tem conta: na visão de suporte ele vê a foto de qualquer
   // cliente, e é a marca dele — não o link — que abre a porta.
-  const imagem = ehMaster(req.contexto.usuario)
-    ? buscarImagemDoMaster.get(req.params.arquivo)
-    : buscarImagemPorArquivo.get(req.params.arquivo, contaDe(req))
-  if (!imagem) return reply.code(404).send({ erro: 'Imagem nao encontrada' })
+  const master = ehMaster(req.contexto.usuario)
 
-  return reply.sendFile(imagem.arquivo)
+  const imagem = master ? buscarImagemDoMaster.get(arquivo) : buscarImagemPorArquivo.get(arquivo, contaDe(req))
+  if (imagem) return reply.sendFile(imagem.arquivo)
+
+  // A logo entra pelo MESMO portão. Ela é da conta (e não de um
+  // empreendimento), então a pergunta muda de tabela mas continua a mesma:
+  // de quem é este arquivo. Toda a equipe da conta precisa vê-la — é ela que
+  // aparece no PDF que qualquer corretor exporta.
+  const dona = master ? buscarContaPelaLogo.get(arquivo) : buscarLogoDaConta.get(arquivo, contaDe(req))
+  if (dona) return reply.sendFile(dona.logo_arquivo)
+
+  return reply.code(404).send({ erro: 'Imagem nao encontrada' })
+})
+
+/* ------------------------------------------------------------------ */
+/* Logo da conta                                                       */
+/* ------------------------------------------------------------------ */
+
+/** Formatos que navegador e impressora tratam igual — e que aceitam fundo transparente. */
+const TIPOS_LOGO = new Map([
+  ['image/png', '.png'],
+  ['image/jpeg', '.jpg'],
+  ['image/webp', '.webp'],
+])
+
+/** É uma marca, não a foto do prédio: 2 MB sobra para qualquer logo. */
+const TAMANHO_MAX_LOGO = 2 * 1024 * 1024
+
+const buscarContaPelaLogo = db.prepare('SELECT * FROM contas WHERE logo_arquivo = ?')
+const buscarLogoDaConta = db.prepare('SELECT * FROM contas WHERE logo_arquivo = ? AND id = ?')
+
+/**
+ * A marca da imobiliária no material impresso.
+ *
+ * Mesma mecânica da galeria: o arquivo nasce com nome de UUID em data/uploads
+ * (o nome enviado pelo cliente nunca toca o disco) e quem entrega confere a
+ * dona. O que muda é o teto — e a TROCA: o arquivo novo é gravado antes de o
+ * antigo sair do disco, senão uma falha no meio deixaria a conta sem logo
+ * nenhuma no meio de uma apresentação.
+ */
+app.post('/api/conta/logo', async (req, reply) => {
+  const { conta, usuario } = req.contexto
+  if (usuario.papel !== 'dono') {
+    await descartarUpload(req)
+    return reply.code(403).send({ erro: 'Somente o dono da conta pode alterar a logo' })
+  }
+  if (!req.isMultipart()) return reply.code(400).send({ erro: 'Envie o arquivo da logo' })
+
+  const parte = await req.file()
+  if (!parte) return reply.code(400).send({ erro: 'Envie o arquivo da logo' })
+
+  const extensao = TIPOS_LOGO.get(parte.mimetype)
+  if (!extensao) {
+    // Precisa drenar o stream, senão a conexão fica pendurada.
+    await parte.toBuffer().catch(() => {})
+    return reply.code(400).send({ erro: 'A logo precisa ser PNG, JPG ou WEBP' })
+  }
+
+  const conteudo = await parte.toBuffer()
+  // `throwFileSizeLimit: false` TRUNCA em vez de recusar — o tamanho do que
+  // chegou é o único número confiável aqui, e o arquivo só vai ao disco depois.
+  if (parte.file.truncated || conteudo.length > TAMANHO_MAX_LOGO) {
+    return reply.code(400).send({ erro: 'A logo precisa ter até 2 MB' })
+  }
+
+  const anterior = buscarConta.get(conta.id)?.logo_arquivo ?? null
+  const arquivo = `${randomUUID()}${extensao}`
+
+  try {
+    await writeFile(join(UPLOAD_DIR, arquivo), conteudo)
+  } catch (erro) {
+    app.log.error({ erro }, 'falha ao gravar a logo da conta')
+    return reply.code(500).send({ erro: 'Não foi possível gravar a logo agora' })
+  }
+
+  db.prepare("UPDATE contas SET logo_arquivo = ?, atualizado_em = datetime('now') WHERE id = ?").run(arquivo, conta.id)
+  if (anterior && anterior !== arquivo) await apagarArquivo(anterior)
+
+  return reply.code(201).send({ logo: logoDaConta(buscarConta.get(conta.id)) })
+})
+
+app.delete('/api/conta/logo', async (req, reply) => {
+  const { conta, usuario } = req.contexto
+  if (usuario.papel !== 'dono') {
+    return reply.code(403).send({ erro: 'Somente o dono da conta pode remover a logo' })
+  }
+
+  const atual = buscarConta.get(conta.id)?.logo_arquivo ?? null
+  // A configuração de posição/tamanho fica: quem remove a logo hoje costuma
+  // mandar a nova amanhã, e refazer os ajustes seria trabalho repetido.
+  db.prepare("UPDATE contas SET logo_arquivo = NULL, atualizado_em = datetime('now') WHERE id = ?").run(conta.id)
+  if (atual) await apagarArquivo(atual)
+
+  return { logo: logoDaConta(buscarConta.get(conta.id)) }
 })
 
 app.post('/api/empreendimentos/:id/imagens', async (req, reply) => {

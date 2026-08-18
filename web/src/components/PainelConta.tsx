@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 
 import {
   acesso,
@@ -12,6 +12,7 @@ import {
 import { mensagemDoErro } from '../lib/http'
 import { usePodeEditar } from '../lib/permissao'
 import { BASE_M2_PADRAO, type BaseM2 } from '../lib/unidades'
+import type { LogoDaConta, PosicaoLogo } from '../types'
 import { conferirSenha } from './TelaAcesso'
 import { Icone } from './Icones'
 import { Campo, Carregando, Estado, Modal, Selo } from './ui'
@@ -233,6 +234,9 @@ function AbaEquipe({
 
       {/* --- Dados da conta --------------------------------------------- */}
       {ehDono && <DadosDaContaForm dados={dados} aoSalvar={carregar} aoMudarSessao={aoMudarSessao} avisar={avisar} sessao={sessao} />}
+
+      {/* --- Marca no material impresso ---------------------------------- */}
+      {ehDono && <LogoDaContaForm dados={dados} sessao={sessao} aoMudarSessao={aoMudarSessao} avisar={avisar} />}
 
       {/* --- Equipe ------------------------------------------------------ */}
       <section className="conta__bloco">
@@ -510,6 +514,295 @@ function DadosDaContaForm({
   )
 }
 
+/* --- Logo da conta no material impresso -------------------------------- */
+
+/** Espelha o que a API aceita — recusar aqui evita uma ida ao servidor. */
+const TIPOS_LOGO = ['image/png', 'image/jpeg', 'image/webp']
+const TAMANHO_MAX_LOGO = 2 * 1024 * 1024
+
+const NOME_DA_POSICAO: Record<PosicaoLogo, string> = {
+  'marca-dagua': 'Marca d’água (centro, atrás do conteúdo)',
+  topo: 'Cabeçalho, ao lado do título',
+  rodape: 'Rodapé, no fim da folha',
+}
+
+/**
+ * A opacidade natural de cada posicao. A marca d'agua nasce bem apagada
+ * (ela passa POR BAIXO do texto e nao pode disputar com o numero que o
+ * cliente esta lendo); no cabecalho e no rodape a logo aparece inteira.
+ */
+const OPACIDADE_NATURAL: Record<PosicaoLogo, number> = {
+  'marca-dagua': 0.08,
+  topo: 1,
+  rodape: 1,
+}
+
+interface ConfigDaLogo {
+  posicao: PosicaoLogo
+  tamanho: number
+  opacidade: number
+}
+
+/**
+ * A marca da imobiliaria nas exportacoes em PDF.
+ *
+ * So o dono mexe aqui — e a identidade da empresa no material que TODA a
+ * equipe entrega ao cliente. Sem logo enviada nada aparece no papel e a folha
+ * continua exatamente como sempre foi.
+ */
+function LogoDaContaForm({
+  dados,
+  sessao,
+  aoMudarSessao,
+  avisar,
+}: {
+  dados: DadosDaConta
+  sessao: Sessao
+  aoMudarSessao: (sessao: Sessao) => void
+  avisar: Props['avisar']
+}) {
+  const podeEditar = usePodeEditar()
+  const entrada = useRef<HTMLInputElement>(null)
+
+  const [logo, setLogo] = useState<LogoDaConta>(dados.logo)
+  const [config, setConfig] = useState<ConfigDaLogo>({
+    posicao: dados.logo.posicao,
+    tamanho: dados.logo.tamanho,
+    opacidade: dados.logo.opacidade,
+  })
+  const [ocupado, setOcupado] = useState(false)
+  const [confirmandoRemocao, setConfirmandoRemocao] = useState(false)
+
+  const travado = ocupado || dados.somenteLeitura || !podeEditar
+  const mudou =
+    config.posicao !== logo.posicao || config.tamanho !== logo.tamanho || config.opacidade !== logo.opacidade
+
+  /** A sessão carrega a logo para as exportações — ela precisa saber na hora. */
+  function aplicar(nova: LogoDaConta) {
+    setLogo(nova)
+    setConfig({ posicao: nova.posicao, tamanho: nova.tamanho, opacidade: nova.opacidade })
+    aoMudarSessao({ ...sessao, conta: sessao.conta ? { ...sessao.conta, logo: nova } : sessao.conta })
+  }
+
+  async function enviar(arquivo: File) {
+    if (!TIPOS_LOGO.includes(arquivo.type)) {
+      avisar(`${arquivo.name}: a logo precisa ser PNG, JPG ou WEBP`, 'erro')
+      return
+    }
+    if (arquivo.size > TAMANHO_MAX_LOGO) {
+      avisar(`${arquivo.name}: a logo precisa ter até 2 MB`, 'erro')
+      return
+    }
+
+    setOcupado(true)
+    try {
+      const resposta = await acesso.enviarLogo(arquivo)
+      aplicar(resposta.logo)
+      avisar('Logo atualizada')
+    } catch (falha) {
+      avisar(mensagemDoErro(falha, 'Não foi possível enviar a logo'), 'erro')
+    } finally {
+      setOcupado(false)
+    }
+  }
+
+  async function remover() {
+    setConfirmandoRemocao(false)
+    setOcupado(true)
+    try {
+      aplicar((await acesso.removerLogo()).logo)
+      avisar('Logo removida')
+    } catch (falha) {
+      avisar(mensagemDoErro(falha, 'Não foi possível remover a logo'), 'erro')
+    } finally {
+      setOcupado(false)
+    }
+  }
+
+  async function salvarAjustes() {
+    setOcupado(true)
+    try {
+      const conta = await acesso.salvarConta({
+        logo_posicao: config.posicao,
+        logo_tamanho: config.tamanho,
+        logo_opacidade: config.opacidade,
+      })
+      aplicar(conta.logo)
+      avisar('Ajustes da logo salvos')
+    } catch (falha) {
+      avisar(mensagemDoErro(falha), 'erro')
+    } finally {
+      setOcupado(false)
+    }
+  }
+
+  return (
+    <section className="conta__bloco">
+      <div className="conta__titulo-linha">
+        <h3 className="conta__titulo">Logo no material impresso</h3>
+        {!travado && (
+          <div className="conta__acoes">
+            <button
+              type="button"
+              className="btn btn--secundario btn--pequeno"
+              onClick={() => entrada.current?.click()}
+            >
+              <Icone nome={ocupado ? 'spinner' : 'imagem'} tamanho={14} className={ocupado ? 'girando' : undefined} />
+              {logo.url ? 'Trocar logo' : 'Enviar logo'}
+            </button>
+            {logo.url && !confirmandoRemocao && (
+              <button type="button" className="btn btn--fantasma btn--pequeno" onClick={() => setConfirmandoRemocao(true)}>
+                Remover
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      <input
+        ref={entrada}
+        type="file"
+        accept={TIPOS_LOGO.join(',')}
+        hidden
+        onChange={(evento) => {
+          const arquivo = evento.target.files?.[0]
+          // Permite escolher o mesmo arquivo de novo depois de remover.
+          evento.target.value = ''
+          if (arquivo) void enviar(arquivo)
+        }}
+      />
+
+      {confirmandoRemocao && (
+        <div className="aviso-faixa aviso-faixa--acao" role="status">
+          <Icone nome="alerta" tamanho={15} />
+          <span>Remover a logo? As próximas exportações saem sem marca nenhuma.</span>
+          <button type="button" className="btn btn--perigo btn--pequeno" onClick={() => void remover()}>
+            Remover
+          </button>
+          <button type="button" className="btn btn--fantasma btn--pequeno" onClick={() => setConfirmandoRemocao(false)}>
+            Cancelar
+          </button>
+        </div>
+      )}
+
+      {!logo.url ? (
+        <p className="conta__aviso">
+          Nenhuma logo enviada — as exportações em PDF saem sem marca. PNG, JPG ou WEBP, até 2 MB. Fundo transparente
+          (PNG) fica melhor como marca d’água.
+        </p>
+      ) : (
+        <>
+          <div className="logo-conta">
+            {/* Como a folha vai sair: a marca d’água é apagada de propósito, e
+                ver isso aqui evita o susto de imprimir e achar que falhou. */}
+            <div className="logo-conta__papel">
+              <div className="logo-conta__previa" aria-hidden="true">
+                {config.posicao === 'marca-dagua' && (
+                  <img
+                    className="logo-conta__marca"
+                    src={logo.url}
+                    alt=""
+                    style={{ width: `${config.tamanho}%`, opacity: config.opacidade }}
+                  />
+                )}
+                <div className="logo-conta__folha">
+                  {config.posicao === 'topo' && (
+                    <img
+                      className="logo-conta__no-topo"
+                      src={logo.url}
+                      alt=""
+                      style={{ width: `${config.tamanho}%`, opacity: config.opacidade }}
+                    />
+                  )}
+                  <span className="logo-conta__titulo-falso" />
+                  <span className="logo-conta__linha-falsa" />
+                  <span className="logo-conta__linha-falsa" />
+                  <span className="logo-conta__linha-falsa logo-conta__linha-falsa--curta" />
+                  {config.posicao === 'rodape' && (
+                    <img
+                      className="logo-conta__no-rodape"
+                      src={logo.url}
+                      alt=""
+                      style={{ width: `${config.tamanho}%`, opacity: config.opacidade }}
+                    />
+                  )}
+                </div>
+              </div>
+              <span className="campo__dica">prévia da folha impressa</span>
+            </div>
+
+            <div className="logo-conta__ajustes">
+              <Campo rotulo="Posição na folha">
+                <select
+                  className="entrada"
+                  value={config.posicao}
+                  disabled={travado}
+                  onChange={(evento) => {
+                    const posicao = evento.target.value as PosicaoLogo
+                    // Trocar de posição leva junto a opacidade natural dela —
+                    // uma logo de cabeçalho com opacidade de marca d’água some.
+                    setConfig((atual) => ({ ...atual, posicao, opacidade: OPACIDADE_NATURAL[posicao] }))
+                  }}
+                >
+                  {(Object.keys(NOME_DA_POSICAO) as PosicaoLogo[]).map((posicao) => (
+                    <option key={posicao} value={posicao}>
+                      {NOME_DA_POSICAO[posicao]}
+                    </option>
+                  ))}
+                </select>
+              </Campo>
+
+              <Campo rotulo="Tamanho" dica={`${config.tamanho}% da largura`}>
+                <input
+                  className="controle-faixa"
+                  type="range"
+                  min={10}
+                  max={60}
+                  step={1}
+                  value={config.tamanho}
+                  disabled={travado}
+                  onChange={(evento) => setConfig((atual) => ({ ...atual, tamanho: Number(evento.target.value) }))}
+                />
+              </Campo>
+
+              <Campo rotulo="Opacidade" dica={`${Math.round(config.opacidade * 100)}%`}>
+                <input
+                  className="controle-faixa"
+                  type="range"
+                  min={2}
+                  max={100}
+                  step={1}
+                  value={Math.round(config.opacidade * 100)}
+                  disabled={travado}
+                  onChange={(evento) =>
+                    setConfig((atual) => ({ ...atual, opacidade: Number(evento.target.value) / 100 }))
+                  }
+                />
+              </Campo>
+
+              {mudou && (
+                <button
+                  type="button"
+                  className="btn btn--primario btn--pequeno"
+                  disabled={travado}
+                  onClick={() => void salvarAjustes()}
+                >
+                  Salvar ajustes
+                </button>
+              )}
+            </div>
+          </div>
+
+          <p className="conta__aviso">
+            A marca d’água passa por baixo do conteúdo e nunca cobre o que o cliente está lendo. Vale para todas as
+            exportações em PDF da conta.
+          </p>
+        </>
+      )}
+    </section>
+  )
+}
+
 /* --- Formulario de convite -------------------------------------------- */
 
 function FormConvite({
@@ -628,6 +921,8 @@ function AbaSeguranca({
         </div>
       )}
 
+      <BlocoPerfil sessao={sessao} aoMudarSessao={aoMudarSessao} avisar={avisar} />
+
       <Bloco2fa sessao={sessao} aoMudarSessao={aoMudarSessao} avisar={avisar} aoMudar={carregarSessoes} codigosRestantes={codigosRestantes} />
 
       <BlocoSenha avisar={avisar} aoTrocar={carregarSessoes} />
@@ -708,6 +1003,79 @@ function descreverAgente(agente: string | null) {
 function formatarDataHora(iso: string) {
   const data = new Date(`${iso.replace(' ', 'T')}Z`)
   return Number.isNaN(data.getTime()) ? iso : data.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+}
+
+/* --- Meu perfil (o que vai impresso ao lado do nome) ------------------- */
+
+/**
+ * O cadastro do proprio usuario.
+ *
+ * O CRECI mora aqui — e nao na equipe — porque quem responde pelo registro e
+ * o corretor, nao quem administra a conta. Ele sai no PDF entregue ao cliente
+ * EXATAMENTE como digitado: cada conselho regional escreve o numero de um
+ * jeito, e "arrumar" o formato deixaria a folha diferente do carimbo.
+ */
+function BlocoPerfil({
+  sessao,
+  aoMudarSessao,
+  avisar,
+}: {
+  sessao: Sessao
+  aoMudarSessao: (sessao: Sessao) => void
+  avisar: Props['avisar']
+}) {
+  const podeEditar = usePodeEditar()
+  const gravado = sessao.usuario.creci ?? ''
+  const [creci, setCreci] = useState(gravado)
+  const [salvando, setSalvando] = useState(false)
+
+  const mudou = creci.trim() !== gravado
+
+  async function salvar() {
+    setSalvando(true)
+    try {
+      const usuario = await acesso.salvarPerfil({ creci })
+      setCreci(usuario.creci ?? '')
+      aoMudarSessao({ ...sessao, usuario })
+      avisar('Perfil atualizado')
+    } catch (falha) {
+      avisar(mensagemDoErro(falha), 'erro')
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  return (
+    <section className="conta__bloco">
+      <h3 className="conta__titulo">Meu perfil</h3>
+
+      <div className="conta__linha-form">
+        <Campo rotulo="Nome">
+          <input className="entrada" value={sessao.usuario.nome} readOnly disabled />
+        </Campo>
+        <Campo rotulo="CRECI" dica="opcional, vai impresso nas exportações">
+          <input
+            className="entrada"
+            value={creci}
+            disabled={salvando || !podeEditar}
+            onChange={(evento) => setCreci(evento.target.value)}
+            placeholder="CRECI/RS 00000-F"
+            maxLength={60}
+          />
+        </Campo>
+        {mudou && podeEditar && (
+          <button type="button" className="btn btn--primario btn--pequeno" disabled={salvando} onClick={() => void salvar()}>
+            Salvar CRECI
+          </button>
+        )}
+      </div>
+
+      <p className="conta__aviso">
+        O CRECI aparece no cabeçalho dos PDFs, ao lado do seu nome, exatamente como você digitar. Deixe em branco para
+        não citá-lo.
+      </p>
+    </section>
+  )
 }
 
 /* --- 2FA -------------------------------------------------------------- */

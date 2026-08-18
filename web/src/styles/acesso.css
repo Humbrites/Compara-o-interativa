@@ -464,6 +464,120 @@
   flex: 1;
 }
 
+/* --- Logo da conta no material impresso ----------------------------------- */
+
+.logo-conta {
+  display: grid;
+  grid-template-columns: 190px 1fr;
+  gap: var(--e4);
+  align-items: start;
+  margin-bottom: var(--e3);
+}
+
+@media (max-width: 720px) {
+  .logo-conta {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Miniatura de uma folha impressa — o bastante para ver onde a marca cai. */
+.logo-conta__papel {
+  display: grid;
+  gap: var(--e1);
+  justify-items: center;
+}
+
+.logo-conta__previa {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1 / 1.41;
+  padding: var(--e3);
+  overflow: hidden;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-sm);
+  background: #ffffff;
+}
+
+.logo-conta__marca {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-height: 62%;
+  object-fit: contain;
+}
+
+/* Acima da marca d'agua, como no papel: ela nunca cobre a leitura. */
+.logo-conta__folha {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--e2);
+  width: 100%;
+}
+
+.logo-conta__no-topo,
+.logo-conta__no-rodape {
+  max-height: 34px;
+  object-fit: contain;
+}
+
+.logo-conta__no-rodape {
+  align-self: center;
+  margin-top: var(--e3);
+}
+
+.logo-conta__titulo-falso {
+  width: 62%;
+  height: 9px;
+  border-radius: 3px;
+  background: var(--texto-3);
+}
+
+.logo-conta__linha-falsa {
+  width: 100%;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--borda-forte);
+}
+
+.logo-conta__linha-falsa--curta {
+  width: 64%;
+}
+
+.logo-conta__ajustes {
+  display: grid;
+  gap: var(--e3);
+  justify-items: start;
+}
+
+.logo-conta__ajustes .campo {
+  width: 100%;
+}
+
+.controle-faixa {
+  width: 100%;
+  accent-color: var(--marca-500);
+  cursor: pointer;
+}
+
+.controle-faixa:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* A faixa que pede confirmacao leva botoes: eles alinham pelo meio do texto. */
+.aviso-faixa--acao {
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: var(--e3);
+}
+
 /* --- Plano ---------------------------------------------------------------- */
 
 .plano {

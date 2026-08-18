@@ -1,4 +1,5 @@
 import { request } from './http'
+import type { LogoDaConta, PosicaoLogo } from '../types'
 import type { BaseM2 } from './unidades'
 
 export type Papel = 'dono' | 'admin' | 'membro'
@@ -10,6 +11,11 @@ export interface UsuarioSessao {
   email: string
   usuario: string | null
   papel: Papel
+  /**
+   * O registro do corretor, como ele cadastrou. Vai impresso no material
+   * entregue ao cliente — sem mascara e sem normalizacao.
+   */
+  creci: string | null
   totpAtivo: boolean
   /** Operador da plataforma (quem vende): enxerga TODAS as contas. */
   operador: boolean
@@ -42,6 +48,8 @@ export interface ContaSessao {
   exigir2fa: boolean
   /** Metragem que divide o preço no valor do m²: privativa (padrão) ou total. */
   base_m2: BaseM2
+  /** A marca da imobiliária no PDF — `url` nula quando ninguém enviou logo. */
+  logo: LogoDaConta
   plano: PlanoResumo
   assentos: AssentosResumo
 }
@@ -186,8 +194,23 @@ export const acesso = {
 
   conta: () => request<DadosDaConta>('/api/conta'),
 
-  salvarConta: (dados: { nome?: string; exigir2fa?: boolean; base_m2?: BaseM2 }) =>
-    request<ContaSessao>('/api/conta', { method: 'PUT', body: JSON.stringify(dados) }),
+  salvarConta: (dados: {
+    nome?: string
+    exigir2fa?: boolean
+    base_m2?: BaseM2
+    logo_posicao?: PosicaoLogo
+    logo_tamanho?: number
+    logo_opacidade?: number
+  }) => request<ContaSessao>('/api/conta', { method: 'PUT', body: JSON.stringify(dados) }),
+
+  /** A logo sobe como arquivo; a resposta traz a configuração já normalizada. */
+  enviarLogo: (arquivo: File) => {
+    const corpo = new FormData()
+    corpo.append('arquivo', arquivo)
+    return request<{ logo: LogoDaConta }>('/api/conta/logo', { method: 'POST', body: corpo })
+  },
+
+  removerLogo: () => request<{ logo: LogoDaConta }>('/api/conta/logo', { method: 'DELETE' }),
 
   convidar: (dados: { email: string; nome?: string; papel: Papel }) =>
     request<{ convite: { id: number; email: string }; link: string; assentos: AssentosResumo }>('/api/conta/convites', {
@@ -207,7 +230,11 @@ export const acesso = {
   linkDeSenha: (id: number) =>
     request<{ link: string; expiraEmHoras: number }>(`/api/conta/usuarios/${id}/link-senha`, { method: 'POST' }),
 
-  /* --- Seguranca do proprio usuario ------------------------------------- */
+  /* --- Perfil e seguranca do proprio usuario ---------------------------- */
+
+  /** O CRECI vai como foi digitado — a API grava sem mascara e sem corrigir. */
+  salvarPerfil: (dados: { creci: string }) =>
+    request<UsuarioSessao>('/api/seguranca/perfil', { method: 'PUT', body: JSON.stringify(dados) }),
 
   trocarSenha: (senhaAtual: string, novaSenha: string) =>
     request<{ ok: true; aviso: string }>('/api/seguranca/senha', {

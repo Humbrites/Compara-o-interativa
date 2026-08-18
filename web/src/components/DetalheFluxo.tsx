@@ -4,6 +4,7 @@ import { fmtMoeda, fmtPct, TRACO } from '../lib/format'
 import { fmtPercentual } from '../lib/cub'
 import { detalharFluxo, nomeDoFluxo, ROTULO_TIPO_FLUXO, type ParteDoFluxo } from '../lib/fluxos'
 import { exportarCsv, exportarPdf } from '../lib/exportarSimulacao'
+import { usePedirApresentacao } from './DadosApresentacao'
 import { Icone, type NomeIcone } from './Icones'
 import { GraficoLinha } from './GraficoSvg'
 import { Modal } from './ui'
@@ -62,6 +63,7 @@ export function DetalheFluxo({
   onPersonalizar,
   onFechar,
 }: Props) {
+  const { pedir, modal } = usePedirApresentacao()
   const detalhe = useMemo(() => detalharFluxo(fluxo, valorDaUnidade), [fluxo, valorDaUnidade])
   const nome = nomeDoFluxo(fluxo, indice)
   const { base, partes, durante, posChaves, alocado, diferenca, simulacao } = detalhe
@@ -115,7 +117,12 @@ export function DetalheFluxo({
                 <Icone nome="grafico" tamanho={15} />
                 Exportar Excel
               </button>
-              <button type="button" className="btn btn--secundario" onClick={() => exportarPdf(simulacao, nomeDoArquivo)}>
+              {/* Quem assina e para quem: o cabeçalho sai igual em toda exportação. */}
+              <button
+                type="button"
+                className="btn btn--secundario"
+                onClick={() => pedir((apresentacao) => exportarPdf(simulacao, nomeDoArquivo, apresentacao))}
+              >
                 <Icone nome="lista" tamanho={15} />
                 Exportar PDF
               </button>
@@ -342,6 +349,8 @@ export function DetalheFluxo({
           )}
         </section>
       )}
+
+      {modal}
     </Modal>
   )
 }

@@ -368,6 +368,41 @@ if (contaIdObrigatorio) {
 }
 
 /**
+ * A identidade que vai impressa no material entregue ao cliente.
+ *
+ * O CRECI e do CORRETOR: sai no papel EXATAMENTE como foi cadastrado, porque
+ * cada conselho regional escreve o numero de um jeito ("CRECI/RS 12345-F",
+ * "12.345-J") e normalizar aqui deixaria a folha diferente do carimbo. A logo
+ * e da CONTA, junto de COMO ela aparece na folha — marca d'agua central atras
+ * do conteudo, cabecalho ou rodape. Sem logo gravada nada aparece e a folha
+ * continua exatamente como era.
+ *
+ * Roda DEPOIS da reconstrucao de `usuarios` acima: aquela receita recria a
+ * tabela por lista de colunas, e uma coluna acrescentada antes dela sumiria.
+ */
+const colunasUsuarioCreci = db.prepare('PRAGMA table_info(usuarios)').all()
+if (!colunasUsuarioCreci.some((coluna) => coluna.name === 'creci')) {
+  db.exec('ALTER TABLE usuarios ADD COLUMN creci TEXT;')
+}
+
+// Tamanho em % da largura da folha e opacidade nascem no ponto em que a marca
+// d'agua nao atrapalha a leitura — quem quiser a logo forte no cabecalho sobe
+// a opacidade pela tela da conta.
+const COLUNAS_LOGO = [
+  ['logo_arquivo', 'TEXT'],
+  ['logo_posicao', "TEXT NOT NULL DEFAULT 'marca-dagua'"],
+  ['logo_tamanho', 'INTEGER NOT NULL DEFAULT 30'],
+  ['logo_opacidade', 'REAL NOT NULL DEFAULT 0.08'],
+]
+
+for (const [coluna, tipo] of COLUNAS_LOGO) {
+  const existentes = db.prepare('PRAGMA table_info(contas)').all()
+  if (!existentes.some((c) => c.name === coluna)) {
+    db.exec(`ALTER TABLE contas ADD COLUMN ${coluna} ${tipo};`)
+  }
+}
+
+/**
  * Base que ja existia (o dashboard rodou meses sem login) fica sem dono no
  * momento em que a coluna nasce. Em vez de exigir um comando manual antes de o
  * sistema voltar a subir, adotamos os orfaos numa conta e registramos no log —

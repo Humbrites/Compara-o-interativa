@@ -1,3 +1,4 @@
+import type { PosicaoLogo } from '../types'
 import type { Simulacao } from './cub'
 import { fmtPercentual } from './cub'
 import { fmtMoeda, fmtNumero, TRACO } from './format'
@@ -96,8 +97,6 @@ const ESTILO_IMPRESSAO = `
   * { box-sizing: border-box; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
          color: #161d2e; margin: 28px; font-size: 12px; }
-  h1 { font-size: 19px; margin: 0 0 2px; }
-  .sub { color: #4d5871; font-size: 12.5px; margin-bottom: 18px; }
   .resumo { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; }
   .item { border: 1px solid #e3e8f0; border-radius: 8px; padding: 8px 10px; }
   .rotulo { font-size: 9px; text-transform: uppercase; letter-spacing: .04em; color: #7b8599; }
@@ -148,25 +147,13 @@ const ESTILO_IMPRESSAO = `
   .conclusao--cub .conclusao__frase { border-top-color: #d97706; }
 `
 
-export function exportarPdf(simulacao: Simulacao, titulo: string) {
+export function exportarPdf(simulacao: Simulacao, titulo: string, apresentacao: Apresentacao | null = null) {
   const { linhas, resumo } = simulacao
 
   const item = (rotulo: string, valor: string) =>
     `<div class="item"><div class="rotulo">${rotulo}</div><div class="valor">${valor}</div></div>`
 
-  const html = `<!doctype html>
-<html lang="pt-BR">
-<head>
-  <meta charset="utf-8">
-  <title>${esc(titulo)} — simulação CUB</title>
-  <style>${ESTILO_IMPRESSAO}</style>
-</head>
-<body>
-  <h1>Simulação de reajuste pelo CUB</h1>
-  <div class="sub">${esc(titulo)} · ${resumo.fonte} · ${resumo.meses} meses de obra${
-    resumo.entrada > 0 ? ` · entrada de ${fmtMoeda(resumo.entrada)}` : ''
-  }</div>
-
+  const corpo = `
   <div class="resumo">
     ${item('Valor do imóvel', resumo.valorImovel === null ? '—' : fmtMoeda(resumo.valorImovel))}
     ${item('Entrada', resumo.entrada > 0 ? fmtMoeda(resumo.entrada) : '—')}
@@ -210,11 +197,22 @@ export function exportarPdf(simulacao: Simulacao, titulo: string) {
         <td>${fmtMoeda(resumo.totalPago, true)}</td>
       </tr>
     </tfoot>
-  </table>
-</body>
-</html>`
+  </table>`
 
-  return imprimir(html)
+  return montarFolha({
+    documento: `${titulo} — simulação CUB`,
+    estilo: ESTILO_IMPRESSAO,
+    cabecalho: {
+      chapeu: 'Condição de pagamento',
+      titulo: 'Simulação de reajuste pelo CUB',
+      empreendimento: titulo,
+      subtitulo: `${resumo.fonte} · ${resumo.meses} meses de obra${
+        resumo.entrada > 0 ? ` · entrada de ${fmtMoeda(resumo.entrada)}` : ''
+      }`,
+      apresentacao,
+    },
+    corpo,
+  })
 }
 
 /** Abre a folha em outra aba e chama a impressao. false = pop-up bloqueado. */
@@ -230,6 +228,214 @@ export function imprimir(html: string): boolean {
     janela.print()
   })
   return true
+}
+
+/* ------------------------------------------------------------------ */
+/* Cabecalho comum a TODAS as folhas                                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A identidade da folha impressa: para quem ela foi feita e quem a assina.
+ *
+ * Tudo e opcional — o corretor pode imprimir sem preencher nada, e nesse caso
+ * a linha simplesmente nao aparece. Nenhum destes campos entra em conta
+ * nenhuma: eles sao a apresentacao, e o corpo da folha continua vindo pronto
+ * das telas.
+ */
+export interface Apresentacao {
+  cliente?: string | null
+  corretor?: string | null
+  creci?: string | null
+  /** A marca da conta; `null` quando ninguem enviou logo. */
+  logo?: LogoDaApresentacao | null
+}
+
+export interface LogoDaApresentacao {
+  /** Endereco do arquivo — a folha abre na MESMA origem do sistema. */
+  url: string
+  posicao: PosicaoLogo
+  /** % da largura da folha. */
+  tamanho: number
+  opacidade: number
+}
+
+export interface CabecalhoPdf {
+  /** O que este documento e ("Comparativo de unidades"). */
+  titulo: string
+  /** Quando a folha e um duelo: o outro lado, com o simbolo entre os dois. */
+  contra?: string | null
+  /** Sobrelinha curta acima do titulo. */
+  chapeu?: string | null
+  /** Uma linha dizendo o que a folha mostra. */
+  subtitulo?: string | null
+  /** A que empreendimento e unidade a folha se refere, quando houver. */
+  empreendimento?: string | null
+  unidade?: string | null
+  apresentacao?: Apresentacao | null
+}
+
+/** dd/mm/aaaa — relatorio sem data envelhece sem avisar. */
+function dataDaAnalise(): string {
+  return new Date().toLocaleDateString('pt-BR')
+}
+
+/** Numero que veio da configuracao, com o padrao de volta se vier estragado. */
+function numeroValido(valor: number | undefined, padrao: number): number {
+  return typeof valor === 'number' && Number.isFinite(valor) ? valor : padrao
+}
+
+/**
+ * Estilo do cabecalho, da marca d'agua e da assinatura. Entra em todas as
+ * folhas, antes do estilo proprio de cada uma — cores fechadas aqui, porque a
+ * janela de impressao nao herda uma linha do CSS do aplicativo.
+ *
+ * `print-color-adjust: exact` e o que impede o navegador de "economizar tinta"
+ * e jogar fora justamente o fundo e a marca da imobiliaria.
+ */
+export const ESTILO_CABECALHO = `
+  .pdf-cabecalho { break-inside: avoid; margin-bottom: 18px; padding-bottom: 9px;
+                   border-bottom: 2px solid #143a4e;
+                   -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .pdf-cabecalho__topo { display: flex; align-items: flex-start; gap: 14px; }
+  /* A largura vem da configuracao (% da folha); a altura e o teto do
+     cabecalho. A marca encosta na esquerda da caixa, senao
+     uma logo larga e baixa flutua no meio de um espaco vazio. */
+  .pdf-cabecalho__logo { flex: none; max-height: 62px; object-fit: contain; object-position: left center; }
+  .pdf-cabecalho__identidade { flex: 1; min-width: 0; }
+  .pdf-cabecalho__chapeu { font-size: 8.5px; text-transform: uppercase; letter-spacing: .18em;
+                           font-weight: 700; color: #7b8599; }
+  .pdf-cabecalho__titulo { font-size: 21px; font-weight: 700; letter-spacing: -.01em;
+                           line-height: 1.15; margin: 3px 0 0; color: #12212e; }
+  .pdf-cabecalho__x { color: #b08333; font-weight: 400; margin: 0 5px; }
+  .pdf-cabecalho__imovel { font-size: 11.5px; font-weight: 600; color: #143a4e; margin-top: 4px; }
+  .pdf-cabecalho__sub { font-size: 10.5px; color: #4d5871; margin-top: 3px; }
+  .pdf-cabecalho__linha { display: flex; justify-content: space-between; align-items: baseline;
+                          gap: 16px; margin-top: 10px; padding-top: 8px;
+                          border-top: 1px solid #e2e0da; font-size: 10.5px; color: #46586a; }
+  .pdf-cabecalho__pessoas b { color: #12212e; font-weight: 700; }
+  .pdf-cabecalho__data { white-space: nowrap; font-size: 8.5px; text-transform: uppercase;
+                         letter-spacing: .1em; color: #8b9aa8; }
+
+  /* Marca d'agua: FIXA (o navegador repete em toda pagina impressa) e com
+     z-index negativo — ela e pintada depois do fundo da folha e ANTES do
+     conteudo, entao passa por baixo das tabelas e nunca disputa a leitura. */
+  .pdf-marca { position: fixed; inset: 0; z-index: -1; display: flex;
+               align-items: center; justify-content: center; pointer-events: none;
+               -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .pdf-marca img { object-fit: contain; }
+
+  /* Assinatura discreta no fim do documento. */
+  .pdf-assinatura { break-inside: avoid; margin-top: 22px; padding-top: 10px;
+                    border-top: 1px solid #e2e0da; text-align: center;
+                    -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .pdf-assinatura img { max-height: 56px; object-fit: contain; }
+`
+
+/**
+ * O cabecalho de toda folha impressa: identidade, do que se trata, para quem
+ * e quando. Uma parte sem dado nao aparece — campo vazio no papel nao informa
+ * nada, so ocupa a linha que o resto usaria melhor.
+ */
+export function cabecalhoPdf(dados: CabecalhoPdf): string {
+  const apresentacao = dados.apresentacao ?? null
+  const logo = apresentacao?.logo ?? null
+
+  const marca =
+    logo && logo.posicao === 'topo'
+      ? `<img class="pdf-cabecalho__logo" src="${esc(logo.url)}" alt=""
+             style="width:${numeroValido(logo.tamanho, 30)}%;opacity:${numeroValido(logo.opacidade, 1)}">`
+      : ''
+
+  const titulo = dados.contra
+    ? `${esc(dados.titulo)}<span class="pdf-cabecalho__x">×</span>${esc(dados.contra)}`
+    : esc(dados.titulo)
+
+  const imovel = [dados.empreendimento, dados.unidade].filter(Boolean).join(' · ')
+
+  // Só as partes preenchidas: "Cliente: —" no papel entregue ao cliente seria
+  // pior do que não citá-lo.
+  const pessoas = [
+    apresentacao?.cliente ? `Cliente: <b>${esc(apresentacao.cliente)}</b>` : null,
+    apresentacao?.corretor ? `Corretor: <b>${esc(apresentacao.corretor)}</b>` : null,
+    apresentacao?.creci ? `CRECI: <b>${esc(apresentacao.creci)}</b>` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+
+  return `<header class="pdf-cabecalho">
+    <div class="pdf-cabecalho__topo">
+      ${marca}
+      <div class="pdf-cabecalho__identidade">
+        ${dados.chapeu ? `<div class="pdf-cabecalho__chapeu">${esc(dados.chapeu)}</div>` : ''}
+        <h1 class="pdf-cabecalho__titulo">${titulo}</h1>
+        ${imovel ? `<div class="pdf-cabecalho__imovel">${esc(imovel)}</div>` : ''}
+        ${dados.subtitulo ? `<div class="pdf-cabecalho__sub">${esc(dados.subtitulo)}</div>` : ''}
+      </div>
+    </div>
+    <div class="pdf-cabecalho__linha">
+      <div class="pdf-cabecalho__pessoas">${pessoas}</div>
+      <div class="pdf-cabecalho__data">Data da análise: ${esc(dataDaAnalise())}</div>
+    </div>
+  </header>`
+}
+
+/** A marca d'agua central, atras de tudo. Vazio quando a logo mora em outro lugar. */
+function marcaDagua(apresentacao: Apresentacao | null): string {
+  const logo = apresentacao?.logo ?? null
+  if (!logo || logo.posicao !== 'marca-dagua') return ''
+
+  return `<div class="pdf-marca" aria-hidden="true">
+    <img src="${esc(logo.url)}" alt=""
+         style="width:${numeroValido(logo.tamanho, 30)}%;opacity:${numeroValido(logo.opacidade, 0.08)}">
+  </div>`
+}
+
+/** A logo como assinatura no fim da folha. */
+function assinaturaDaMarca(apresentacao: Apresentacao | null): string {
+  const logo = apresentacao?.logo ?? null
+  if (!logo || logo.posicao !== 'rodape') return ''
+
+  return `<div class="pdf-assinatura">
+    <img src="${esc(logo.url)}" alt=""
+         style="width:${numeroValido(logo.tamanho, 30)}%;opacity:${numeroValido(logo.opacidade, 1)}">
+  </div>`
+}
+
+/**
+ * O esqueleto de TODA folha impressa do sistema.
+ *
+ * Nada e recalculado aqui: `corpo` chega pronto da tela que exporta. O que
+ * este helper garante e que as tres familias de PDF (simulacao, comparativo e
+ * fluxos) abram com o MESMO cabecalho, a mesma marca e a mesma data — sem que
+ * cada arquivo tenha de lembrar de montar isso do seu jeito.
+ */
+export function montarFolha(dados: {
+  /** Nome da aba e do arquivo que o navegador sugere ao salvar. */
+  documento: string
+  /** O estilo proprio daquela familia de folha. */
+  estilo: string
+  cabecalho: CabecalhoPdf
+  corpo: string
+  /** Faixa fixa no pe de todas as paginas, quando a folha usa uma. */
+  rodapeFixo?: string | null
+}): boolean {
+  const apresentacao = dados.cabecalho.apresentacao ?? null
+
+  return imprimir(`<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>${esc(dados.documento)}</title>
+  <style>${ESTILO_CABECALHO}${dados.estilo}</style>
+</head>
+<body>
+  ${marcaDagua(apresentacao)}
+  ${cabecalhoPdf(dados.cabecalho)}
+${dados.corpo}
+  ${assinaturaDaMarca(apresentacao)}
+  ${dados.rodapeFixo ?? ''}
+</body>
+</html>`)
 }
 
 /**
@@ -507,6 +713,7 @@ function blocoDaObra(resultado: ResultadoInvestimento): string {
 export function exportarPdfInvestimento(
   resultado: ResultadoInvestimento,
   imovel: ImovelDaSimulacao | null = null,
+  apresentacao: Apresentacao | null = null,
 ): boolean {
   const titulo = imovel?.nome ?? 'Simulação de investimento'
 
@@ -545,19 +752,7 @@ export function exportarPdfInvestimento(
     })
     .join('')
 
-  const html = `<!doctype html>
-<html lang="pt-BR">
-<head>
-  <meta charset="utf-8">
-  <title>${esc(titulo)} — simulação de investimento</title>
-  <style>${ESTILO_IMPRESSAO}</style>
-</head>
-<body>
-  <h1>Simulação de investimento</h1>
-  <div class="sub">Projeção de valorização até a entrega${
-    resultado.meses > 0 ? ` · ${textoDoPrazo(resultado.meses)}` : ''
-  } · ${fmtPercentual(resultado.valorizacaoAnual, 2)} ao ano</div>
-
+  const corpo = `
   ${blocoDoImovel(imovel)}
 
   <div class="hero">
@@ -630,9 +825,21 @@ export function exportarPdfInvestimento(
           reavalia a taxa na assinatura do contrato.`
         : ''
     }
-  </div>
-</body>
-</html>`
+  </div>`
 
-  return imprimir(html)
+  return montarFolha({
+    documento: `${titulo} — simulação de investimento`,
+    estilo: ESTILO_IMPRESSAO,
+    cabecalho: {
+      chapeu: 'Estudo de investimento',
+      titulo: 'Simulação de investimento',
+      empreendimento: imovel?.nome ?? null,
+      unidade: imovel?.unidade ?? null,
+      subtitulo: `Projeção de valorização até a entrega${
+        resultado.meses > 0 ? ` · ${textoDoPrazo(resultado.meses)}` : ''
+      } · ${fmtPercentual(resultado.valorizacaoAnual, 2)} ao ano`,
+      apresentacao,
+    },
+    corpo,
+  })
 }

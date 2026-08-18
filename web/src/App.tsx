@@ -15,6 +15,7 @@ import { CalculadoraCub } from './components/CalculadoraCub'
 import { SimuladorInvestimento } from './components/SimuladorInvestimento'
 import { Icone } from './components/Icones'
 import { Carregando, Estado, Toasts, type Aviso } from './components/ui'
+import { ProvedorApresentacao } from './components/DadosApresentacao'
 import { MenuUsuario } from './components/MenuUsuario'
 import { PainelConta } from './components/PainelConta'
 import { PainelPlataforma } from './components/PainelPlataforma'
@@ -194,6 +195,14 @@ export default function App({ sessao, aoMudarSessao, aoSair }: AppProps) {
     {/* A base do m² vem da conta e vale para a tela inteira: lista, ficha,
         unidades e formulário precisam dividir o preço pela MESMA metragem. */}
     <ProvedorBaseM2 base={sessao.conta.base_m2 ?? BASE_M2_PADRAO}>
+    {/* Quem assina o material impresso e a marca que vai nele. Fica aqui em
+        cima porque TODA exportacao em PDF pergunta a mesma coisa antes de
+        gerar — e o que foi digitado vale para as proximas da sessão. */}
+    <ProvedorApresentacao
+      corretor={sessao.usuario.nome}
+      creci={sessao.usuario.creci}
+      logo={sessao.conta.logo ?? null}
+    >
     <div className="app">
       {/* Topo enxuto: a marca, o caminho para os empreendimentos, o cadastro
           e os indicadores de mercado. Comparar e simular investimento moram
@@ -523,6 +532,7 @@ export default function App({ sessao, aoMudarSessao, aoSair }: AppProps) {
 
       <Toasts avisos={avisos} />
     </div>
+    </ProvedorApresentacao>
     </ProvedorBaseM2>
     </ProvedorDeEdicao>
   )

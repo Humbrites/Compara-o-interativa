@@ -108,6 +108,86 @@ export function definirContaDeDemonstracao(contaId) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Logo da conta no material impresso                                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Onde a marca da imobiliaria entra na folha que o corretor entrega.
+ *
+ * Sao tres leituras diferentes do mesmo arquivo: 'marca-dagua' e a marca
+ * central, apagada, ATRAS do conteudo; 'topo' e a identidade do cabecalho, ao
+ * lado do titulo; 'rodape' e a assinatura discreta no fim. Um quarto texto
+ * gravado aqui deixaria a folha caindo no padrao sem ninguem entender por que
+ * a configuracao "nao pegou" — por isso o par validado.
+ */
+export const POSICOES_LOGO = ['marca-dagua', 'topo', 'rodape']
+export const POSICAO_LOGO_PADRAO = 'marca-dagua'
+
+/** % da largura da folha. Menos de 10% ninguem enxerga; mais de 60% cobre o texto. */
+export const LOGO_TAMANHO = { min: 10, max: 60, padrao: 30 }
+
+/**
+ * Opacidade. O padrao e o da marca d'agua (bem apagada, para nunca disputar
+ * com o numero que o cliente esta lendo); no topo e no rodape o natural e 1.
+ */
+export const LOGO_OPACIDADE = { min: 0.02, max: 1, padrao: 0.08 }
+
+function naFaixa(valor, { min, max }) {
+  return Number.isFinite(valor) && valor >= min && valor <= max
+}
+
+/** A configuracao da logo como o front a le — sempre completa, nunca nula. */
+export function logoDaConta(conta) {
+  const arquivo = conta?.logo_arquivo || null
+  const tamanho = Number(conta?.logo_tamanho)
+  const opacidade = Number(conta?.logo_opacidade)
+
+  return {
+    arquivo,
+    // Mesma rota das fotos: quem entrega confere de quem e o arquivo.
+    url: arquivo ? `/uploads/${arquivo}` : null,
+    posicao: POSICOES_LOGO.includes(conta?.logo_posicao) ? conta.logo_posicao : POSICAO_LOGO_PADRAO,
+    tamanho: naFaixa(tamanho, LOGO_TAMANHO) ? Math.round(tamanho) : LOGO_TAMANHO.padrao,
+    opacidade: naFaixa(opacidade, LOGO_OPACIDADE) ? opacidade : LOGO_OPACIDADE.padrao,
+  }
+}
+
+/**
+ * Le a configuracao enviada pela tela. Devolve `{ valores }` ou `{ erro }` —
+ * o que nao veio no corpo continua como esta gravado.
+ */
+export function lerConfigDaLogo(corpo, conta) {
+  const atual = logoDaConta(conta)
+  const valores = { posicao: atual.posicao, tamanho: atual.tamanho, opacidade: atual.opacidade }
+
+  if (corpo?.logo_posicao !== undefined) {
+    const posicao = String(corpo.logo_posicao)
+    if (!POSICOES_LOGO.includes(posicao)) {
+      return { erro: `A posição da logo só pode ser ${POSICOES_LOGO.join(', ')}` }
+    }
+    valores.posicao = posicao
+  }
+
+  if (corpo?.logo_tamanho !== undefined) {
+    const tamanho = Math.round(Number(corpo.logo_tamanho))
+    if (!naFaixa(tamanho, LOGO_TAMANHO)) {
+      return { erro: `O tamanho da logo vai de ${LOGO_TAMANHO.min}% a ${LOGO_TAMANHO.max}% da largura` }
+    }
+    valores.tamanho = tamanho
+  }
+
+  if (corpo?.logo_opacidade !== undefined) {
+    const opacidade = Number(corpo.logo_opacidade)
+    if (!naFaixa(opacidade, LOGO_OPACIDADE)) {
+      return { erro: `A opacidade da logo vai de ${LOGO_OPACIDADE.min} a ${LOGO_OPACIDADE.max}` }
+    }
+    valores.opacidade = opacidade
+  }
+
+  return { valores }
+}
+
+/* ------------------------------------------------------------------ */
 /* Assentos                                                            */
 /* ------------------------------------------------------------------ */
 

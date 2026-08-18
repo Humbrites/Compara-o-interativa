@@ -5,6 +5,23 @@
  */
 export type TipoFluxo = 'construtora' | 'personalizado'
 
+/**
+ * Onde a logo da imobiliaria entra na folha impressa: marca d'agua central
+ * (apagada, ATRAS do conteudo), identidade do cabecalho ou assinatura no pe.
+ */
+export type PosicaoLogo = 'marca-dagua' | 'topo' | 'rodape'
+
+/** A marca da conta e como ela deve aparecer no PDF. `url` nula = sem logo. */
+export interface LogoDaConta {
+  arquivo: string | null
+  url: string | null
+  posicao: PosicaoLogo
+  /** % da largura da folha (10 a 60). */
+  tamanho: number
+  /** 0,02 a 1 — o padrao apagado e o da marca d'agua. */
+  opacidade: number
+}
+
 export interface FluxoPagamento {
   id: number
   empreendimento_id: number

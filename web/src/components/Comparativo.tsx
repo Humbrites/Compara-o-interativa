@@ -16,6 +16,7 @@ import { useBaseM2 } from '../lib/baseM2'
 import { fmtMoeda, fmtTexto } from '../lib/format'
 import { capaDe } from '../lib/imagens'
 import { localizacaoUnidade, rotuloUnidade, ROTULO_BASE_M2 } from '../lib/unidades'
+import { usePedirApresentacao } from './DadosApresentacao'
 import { Icone } from './Icones'
 import { Modal, Estado } from './ui'
 
@@ -323,6 +324,7 @@ interface Props {
 
 export function Comparativo({ a, b, lista, onEscolherA, onEscolherB, onTrocarLados, avisar, onFechar }: Props) {
   const base = useBaseM2()
+  const { pedir, modal } = usePedirApresentacao()
   // Unidade escolhida de cada lado (null = comparar so o empreendimento).
   const [unidadeAId, setUnidadeAId] = useState<number | null>(null)
   const [unidadeBId, setUnidadeBId] = useState<number | null>(null)
@@ -412,13 +414,17 @@ export function Comparativo({ a, b, lista, onEscolherA, onEscolherB, onTrocarLad
       { nome: b.nome, ...textosB },
     ]
 
-    const abriu = exportarPdfComparativo({
-      a: { etiqueta: 'Empreendimento A', nome: a.nome, subtitulo: local(a), vitorias: placar.a },
-      b: { etiqueta: 'Empreendimento B', nome: b.nome, subtitulo: local(b), vitorias: placar.b },
-      secoes,
-      textos,
+    // Quem assina e para quem: o cabeçalho do PDF sai igual em toda exportação.
+    pedir((apresentacao) => {
+      const abriu = exportarPdfComparativo({
+        a: { etiqueta: 'Empreendimento A', nome: a.nome, subtitulo: local(a), vitorias: placar.a },
+        b: { etiqueta: 'Empreendimento B', nome: b.nome, subtitulo: local(b), vitorias: placar.b },
+        secoes,
+        textos,
+        apresentacao,
+      })
+      if (!abriu) avisar('O navegador bloqueou a janela de impressão — libere os pop-ups do site', 'erro')
     })
-    if (!abriu) avisar('O navegador bloqueou a janela de impressão — libere os pop-ups do site', 'erro')
   }
 
   return (
@@ -590,6 +596,8 @@ export function Comparativo({ a, b, lista, onEscolherA, onEscolherB, onTrocarLad
           </p>
         )}
       </div>
+
+      {modal}
     </Modal>
   )
 }

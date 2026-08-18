@@ -7,6 +7,7 @@ import { fmtArea, fmtInteiro, fmtMoeda, TRACO } from '../lib/format'
 import { fmtPercentual } from '../lib/cub'
 import { rotuloUnidade, ROTULO_BASE_M2 } from '../lib/unidades'
 import type { Empreendimento, Unidade } from '../types'
+import { usePedirApresentacao } from './DadosApresentacao'
 import { Icone } from './Icones'
 import { Estado, Modal } from './ui'
 
@@ -62,6 +63,7 @@ export function CompararUnidades({
   onFechar,
 }: Props) {
   const base = useBaseM2()
+  const { pedir, modal } = usePedirApresentacao()
   const [soEste, setSoEste] = useState(soDoEmpreendimento)
   /**
    * Abre com DUAS unidades marcadas, não com as quatro.
@@ -260,15 +262,19 @@ export function CompararUnidades({
       }
     })
 
-    const abriu = exportarPdfUnidades({
-      subtitulo,
-      colunas: analises.map((item, indice) => ({
-        unidade: rotuloUnidade(item.unidade, indice),
-        empreendimento: item.empreendimento.nome,
-      })),
-      linhas: linhasDoPdf,
+    // Quem assina e para quem: o cabeçalho do PDF sai igual em toda exportação.
+    pedir((apresentacao) => {
+      const abriu = exportarPdfUnidades({
+        subtitulo,
+        colunas: analises.map((item, indice) => ({
+          unidade: rotuloUnidade(item.unidade, indice),
+          empreendimento: item.empreendimento.nome,
+        })),
+        linhas: linhasDoPdf,
+        apresentacao,
+      })
+      if (!abriu) avisar('O navegador bloqueou a janela de impressão — libere os pop-ups do site', 'erro')
     })
-    if (!abriu) avisar('O navegador bloqueou a janela de impressão — libere os pop-ups do site', 'erro')
   }
 
   return (
@@ -459,6 +465,8 @@ export function CompararUnidades({
           </p>
         </section>
       )}
+
+      {modal}
     </Modal>
   )
 }

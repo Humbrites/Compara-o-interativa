@@ -34,6 +34,7 @@ import { useIndicesDeMercado, type TaxaDoIndice } from '../lib/indicadores'
 import { exportarPdfInvestimento, type ImovelDaSimulacao } from '../lib/exportarSimulacao'
 import { precoDaUnidade, resumoUnidades, rotuloUnidade, valorM2Da, valorNoFluxo, type BaseM2 } from '../lib/unidades'
 import { useBaseM2 } from '../lib/baseM2'
+import { usePedirApresentacao } from './DadosApresentacao'
 import { Campo, Modal } from './ui'
 import { Icone, type NomeIcone } from './Icones'
 import { GraficoLinha } from './GraficoSvg'
@@ -694,6 +695,7 @@ export function SimuladorInvestimento({
   )
   const [erros, setErros] = useState<Record<string, string>>({})
   const [resultado, setResultado] = useState<ResultadoInvestimento | null>(null)
+  const { pedir, modal } = usePedirApresentacao()
   const [empreendimentoId, setEmpreendimentoId] = useState<number | null>(empreendimentoInicial)
   const [unidadeId, setUnidadeId] = useState<number | null>(null)
   // O saldo devedor sai da conta sozinho ate alguem digitar outro valor ali.
@@ -879,8 +881,11 @@ export function SimuladorInvestimento({
 
   function aoExportarPdf() {
     if (!resultado) return
-    const abriu = exportarPdfInvestimento(resultado, imovelParaPdf(empreendimento, unidade, base))
-    if (!abriu) avisar('O navegador bloqueou a janela de impressão — libere os pop-ups do site', 'erro')
+    // Quem assina e para quem: o cabeçalho do PDF sai igual em toda exportação.
+    pedir((apresentacao) => {
+      const abriu = exportarPdfInvestimento(resultado, imovelParaPdf(empreendimento, unidade, base), apresentacao)
+      if (!abriu) avisar('O navegador bloqueou a janela de impressão — libere os pop-ups do site', 'erro')
+    })
   }
 
   const pontos = useMemo(
@@ -1609,6 +1614,8 @@ export function SimuladorInvestimento({
           </section>
         </>
       )}
+
+      {modal}
     </Modal>
   )
 }
