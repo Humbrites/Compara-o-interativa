@@ -10,6 +10,8 @@ import {
   type Sessao,
 } from '../lib/acesso'
 import { mensagemDoErro } from '../lib/http'
+import { usePodeEditar } from '../lib/permissao'
+import { BASE_M2_PADRAO, type BaseM2 } from '../lib/unidades'
 import { conferirSenha } from './TelaAcesso'
 import { Icone } from './Icones'
 import { Campo, Carregando, Estado, Modal, Selo } from './ui'
@@ -430,17 +432,20 @@ function DadosDaContaForm({
   aoMudarSessao: (sessao: Sessao) => void
   avisar: Props['avisar']
 }) {
+  const podeEditar = usePodeEditar()
   const [nome, setNome] = useState(dados.nome)
   const [salvando, setSalvando] = useState(false)
 
   const mudou = nome.trim() !== dados.nome
+  const baseAtual: BaseM2 = dados.base_m2 ?? BASE_M2_PADRAO
+  const travado = salvando || dados.somenteLeitura || !podeEditar
 
-  async function salvar(exigir2fa?: boolean) {
+  async function salvar(extra?: { exigir2fa?: boolean; base_m2?: BaseM2 }) {
     setSalvando(true)
     try {
       const conta = await acesso.salvarConta({
         nome: nome.trim() || dados.nome,
-        ...(exigir2fa === undefined ? {} : { exigir2fa }),
+        ...extra,
       })
       aoMudarSessao({ ...sessao, conta, precisaConfigurar2fa: conta.exigir2fa && !sessao.usuario.totpAtivo })
       await aoSalvar()
@@ -472,8 +477,8 @@ function DadosDaContaForm({
           <input
             type="checkbox"
             checked={dados.exigir2fa}
-            disabled={salvando || dados.somenteLeitura}
-            onChange={(e) => void salvar(e.target.checked)}
+            disabled={travado}
+            onChange={(e) => void salvar({ exigir2fa: e.target.checked })}
           />
           <span>Exigir verificação em duas etapas de todo mundo</span>
         </label>
@@ -481,6 +486,26 @@ function DadosDaContaForm({
           quem ainda não configurou entra, mas só consegue mexer na própria segurança até configurar
         </span>
       </div>
+
+      {/* A metodologia do m² é uma escolha da imobiliária, e ela vale para a
+          base inteira: comparar um prédio pela privativa e o vizinho pela
+          total elegeria vencedor pela metodologia, não pelo preço. */}
+      <div className="conta__linha-form">
+        <Campo rotulo="Cálculo do valor do m²" dica="vale para todos os empreendimentos">
+          <select
+            className="entrada"
+            value={baseAtual}
+            disabled={travado}
+            onChange={(e) => void salvar({ base_m2: e.target.value as BaseM2 })}
+          >
+            <option value="privativa">Área privativa (padrão)</option>
+            <option value="total">Área total</option>
+          </select>
+        </Campo>
+      </div>
+      <p className="conta__aviso">
+        Trocar refaz o valor do m² de todos os empreendimentos da conta. A área comum nunca entra nessa conta.
+      </p>
     </section>
   )
 }

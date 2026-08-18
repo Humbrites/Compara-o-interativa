@@ -25,10 +25,14 @@ export const CAMPOS_ACEITOS = [
   'tipologia',
   'metragem',
   'metragem_total',
+  'area_comum',
+  'area_terraco',
+  'espaco_complementar',
   'dormitorios',
   'suites',
   'banheiros',
   'vagas',
+  'vagas_detalhe',
   'valor',
   'status',
   'observacoes',
@@ -38,6 +42,8 @@ const NUMERICOS = new Set([
   'andar',
   'metragem',
   'metragem_total',
+  'area_comum',
+  'area_terraco',
   'dormitorios',
   'suites',
   'banheiros',
@@ -47,7 +53,15 @@ const NUMERICOS = new Set([
 
 const INTEIROS = new Set(['andar', 'dormitorios', 'suites', 'banheiros', 'vagas'])
 
-const TEXTOS = new Set(['identificacao', 'torre', 'numero', 'tipologia', 'observacoes'])
+const TEXTOS = new Set([
+  'identificacao',
+  'torre',
+  'numero',
+  'tipologia',
+  'espaco_complementar',
+  'vagas_detalhe',
+  'observacoes',
+])
 
 export const STATUS_ACEITOS: StatusUnidade[] = ['disponivel', 'reservada', 'vendida', 'indisponivel']
 
@@ -124,6 +138,8 @@ export interface ResultadoValidacao {
   unidades: (CamposImportados & { fluxo?: FluxoDaConstrutora | null })[]
   duvidas: DuvidaImportacao[]
   fluxo_construtora: FluxoDaConstrutora | null
+  /** Torres do PRÉDIO: vem no topo do JSON, não dentro da unidade. */
+  torres: number | null
 }
 
 const ehObjeto = (valor: unknown): valor is Record<string, unknown> =>
@@ -135,7 +151,47 @@ const recusar = (...problemas: string[]): ResultadoValidacao => ({
   unidades: [],
   duvidas: [],
   fluxo_construtora: null,
+  torres: null,
 })
+
+/**
+ * Suíte É dormitório. A tabela que descreve a tipologia como "2 suítes" não
+ * repete a contagem de dormitórios — sem esta regra a unidade entraria com
+ * dormitórios em branco e sumiria do filtro de quem procura 2 dormitórios.
+ *
+ * Determinística de propósito: não depende de a IA ter obedecido ao prompt. Só
+ * preenche o que veio VAZIO — "3 dormitórios sendo 1 suíte" continua 3.
+ */
+export function derivarDormitorios<T extends { dormitorios: number | null; suites: number | null }>(unidade: T): T {
+  if (unidade.dormitorios === null && unidade.suites !== null) {
+    return { ...unidade, dormitorios: unidade.suites }
+  }
+  return unidade
+}
+
+/** Torres: inteiro ≥ 1 ou null. "0 torres" não existe. */
+export function lerTorres(bruto: unknown, problemas: string[]): number | null {
+  if (bruto === undefined || bruto === null || bruto === '') return null
+
+  if (typeof bruto !== 'number' && typeof bruto !== 'string') {
+    problemas.push('O campo "torres" precisa ser um número inteiro (ou null).')
+    return null
+  }
+
+  const numero = lerNumeroBr(bruto)
+  if (numero === null) {
+    problemas.push(`O campo "torres" não é um número válido ("${String(bruto)}").`)
+    return null
+  }
+
+  const inteiro = Math.round(numero)
+  if (inteiro < 1) {
+    problemas.push('O campo "torres" precisa ser pelo menos 1 (ou null quando a tabela não diz).')
+    return null
+  }
+
+  return inteiro
+}
 
 /**
  * Os campos NUMERICOS de uma condicao de pagamento — os mesmos na condicao
@@ -379,10 +435,12 @@ export function validarRespostaDaIa(texto: string): ResultadoValidacao {
       )
     }
 
-    const proprio = lerFluxoDaConstrutora(cru.fluxo, `da ${onde}`, problemas)
-    if (proprio) (unidade as CamposImportados & { fluxo?: FluxoDaConstrutora | null }).fluxo = proprio
+    const completa = derivarDormitorios(unidade)
 
-    unidades.push(unidade)
+    const proprio = lerFluxoDaConstrutora(cru.fluxo, `da ${onde}`, problemas)
+    if (proprio) (completa as CamposImportados & { fluxo?: FluxoDaConstrutora | null }).fluxo = proprio
+
+    unidades.push(completa)
   })
 
   // As dúvidas vêm como lista de frases (é o que o prompt pede), mas um chat
@@ -406,6 +464,7 @@ export function validarRespostaDaIa(texto: string): ResultadoValidacao {
   }
 
   const fluxo = lerFluxoDaConstrutora(bruto.fluxo_construtora, 'da tabela', problemas)
+  const torres = lerTorres(bruto.torres, problemas)
 
-  return { ok: problemas.length === 0, problemas, unidades, duvidas, fluxo_construtora: fluxo }
+  return { ok: problemas.length === 0, problemas, unidades, duvidas, fluxo_construtora: fluxo, torres }
 }

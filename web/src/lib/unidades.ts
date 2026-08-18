@@ -33,9 +33,28 @@ export function posicaoUnidade(unidade: Unidade): string {
 }
 
 /**
- * Valor do m²: preco dividido pela metragem. A base e a metragem TOTAL, que e
- * a area que o cliente compra; a privativa so entra quando a total nao foi
- * informada — melhor um m² pela privativa do que campo vazio.
+ * Qual metragem divide o preco para dar o valor do m².
+ *
+ * 'privativa' = a area que o comprador usa (o padrao); 'total' = a area
+ * total/global anunciada. A escolha e da CONTA (`contas.base_m2`) — as duas
+ * leituras existem no mercado, e misturar as duas na mesma base faria um
+ * predio parecer mais barato que o outro so pela metodologia.
+ *
+ * A area COMUM nao entra em nenhuma das duas: ela nao e area da unidade.
+ */
+export type BaseM2 = 'privativa' | 'total'
+
+export const BASE_M2_PADRAO: BaseM2 = 'privativa'
+
+/** Como a base aparece na tela, quando vale explicar de onde saiu o numero. */
+export const ROTULO_BASE_M2: Record<BaseM2, string> = {
+  privativa: 'área privativa',
+  total: 'área total',
+}
+
+/**
+ * Valor do m²: preco dividido pela metragem da base escolhida — com a outra
+ * metragem como reserva, porque unidade com uma so nao pode ficar sem m².
  *
  * A mesma regra vale no formulario (que preenche o campo enquanto se digita) e
  * aqui, para uma unidade gravada antes disso mostrar o mesmo numero.
@@ -44,13 +63,23 @@ export function calcularValorM2(
   valor: number | null,
   metragemTotal: number | null,
   metragemPrivativa: number | null = null,
+  base: BaseM2 = BASE_M2_PADRAO,
 ): number | null {
   if (valor === null || !Number.isFinite(valor) || valor <= 0) return null
 
-  const base = [metragemTotal, metragemPrivativa].find(
-    (m): m is number => m !== null && Number.isFinite(m) && m > 0,
-  )
-  return base === undefined ? null : valor / base
+  const ordem = base === 'total' ? [metragemTotal, metragemPrivativa] : [metragemPrivativa, metragemTotal]
+  const metragem = ordem.find((m): m is number => m !== null && Number.isFinite(m) && m > 0)
+  return metragem === undefined ? null : valor / metragem
+}
+
+/** A metragem que a conta do m² usou — a mesma ordem de `calcularValorM2`. */
+export function metragemDoM2(
+  metragemTotal: number | null,
+  metragemPrivativa: number | null,
+  base: BaseM2 = BASE_M2_PADRAO,
+): number | null {
+  const ordem = base === 'total' ? [metragemTotal, metragemPrivativa] : [metragemPrivativa, metragemTotal]
+  return ordem.find((m): m is number => m !== null && Number.isFinite(m) && m > 0) ?? null
 }
 
 /**
@@ -78,10 +107,10 @@ export function precoDaUnidade(unidade: Unidade): number | null {
  * Valor do m² da unidade: o informado a mao vence; sem ele, deriva do preco
  * (o da unidade ou o da tabela de pagamento) pela metragem.
  */
-export function valorM2Da(unidade: Unidade): number | null {
+export function valorM2Da(unidade: Unidade, base: BaseM2 = BASE_M2_PADRAO): number | null {
   if (unidade.valor_m2 !== null && Number.isFinite(unidade.valor_m2)) return unidade.valor_m2
 
-  return calcularValorM2(precoDaUnidade(unidade), unidade.metragem_total, unidade.metragem)
+  return calcularValorM2(precoDaUnidade(unidade), unidade.metragem_total, unidade.metragem, base)
 }
 
 interface Faixa {
@@ -99,7 +128,7 @@ function faixa(valores: (number | null)[]): Faixa {
  * Resumo do conjunto de unidades — e o que o painel mostra no lugar dos
  * campos gerais quando o empreendimento ja tem unidades cadastradas.
  */
-export function resumoUnidades(unidades: Unidade[]) {
+export function resumoUnidades(unidades: Unidade[], base: BaseM2 = BASE_M2_PADRAO) {
   return {
     total: unidades.length,
     // A base tem os dois formatos de status (o digitado no cadastro e o que a
@@ -107,7 +136,7 @@ export function resumoUnidades(unidades: Unidade[]) {
     disponiveis: unidades.filter((u) => normalizarStatusUnidade(u.status) === 'disponivel').length,
     metragem: faixa(unidades.map((u) => u.metragem)),
     valor: faixa(unidades.map(precoDaUnidade)),
-    valorM2: faixa(unidades.map(valorM2Da)),
+    valorM2: faixa(unidades.map((u) => valorM2Da(u, base))),
     dormitorios: faixa(unidades.map((u) => u.dormitorios)),
     vagas: faixa(unidades.map((u) => u.vagas)),
   }
@@ -123,13 +152,13 @@ export function resumoUnidades(unidades: Unidade[]) {
  * (`api/src/resumo.js`) — duas contas diferentes dariam dois numeros para o
  * mesmo predio.
  */
-export function valorM2MedioDe(unidades: Unidade[]): number | null {
+export function valorM2MedioDe(unidades: Unidade[], base: BaseM2 = BASE_M2_PADRAO): number | null {
   let somaPreco = 0
   let somaMetragem = 0
 
   for (const unidade of unidades) {
     const preco = precoDaUnidade(unidade)
-    const metragem = unidade.metragem_total ?? unidade.metragem
+    const metragem = metragemDoM2(unidade.metragem_total, unidade.metragem, base)
     if (preco !== null && metragem !== null && metragem > 0) {
       somaPreco += preco
       somaMetragem += metragem

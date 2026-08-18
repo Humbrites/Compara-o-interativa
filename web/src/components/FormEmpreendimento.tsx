@@ -3,7 +3,8 @@ import type { Empreendimento, EmpreendimentoInput, ImagemEmpreendimento, Unidade
 import { STATUS_OBRA, TIPOS } from '../lib/opcoes'
 import { api } from '../lib/api'
 import { fmtArea, fmtMoeda, TRACO } from '../lib/format'
-import { resumoUnidades, valorM2MedioDe } from '../lib/unidades'
+import { resumoUnidades, ROTULO_BASE_M2, valorM2MedioDe } from '../lib/unidades'
+import { useBaseM2 } from '../lib/baseM2'
 import { Campo, Modal } from './ui'
 import { Icone, type NomeIcone } from './Icones'
 import { UnidadesDoEmpreendimento } from './FormUnidades'
@@ -17,7 +18,7 @@ type Formulario = Record<string, string>
 const CAMPOS: string[] = [
   'nome', 'construtora', 'cidade', 'bairro', 'endereco',
   'latitude', 'longitude', 'valor_m2', 'metragem_min', 'metragem_max',
-  'dormitorios', 'suites', 'banheiros', 'vagas',
+  'dormitorios', 'suites', 'banheiros', 'vagas', 'torres',
   'status_obra', 'entrega', 'tipo', 'imagem_url', 'observacoes',
 ]
 
@@ -80,8 +81,9 @@ function validarProduto(form: Formulario): Record<string, string> {
  * que acabou de ser criada, antes de qualquer recarga.
  */
 function ResumoDasUnidades({ unidades }: { unidades: Unidade[] }) {
-  const resumo = useMemo(() => resumoUnidades(unidades), [unidades])
-  const m2 = useMemo(() => valorM2MedioDe(unidades), [unidades])
+  const base = useBaseM2()
+  const resumo = useMemo(() => resumoUnidades(unidades, base), [unidades, base])
+  const m2 = useMemo(() => valorM2MedioDe(unidades, base), [unidades, base])
 
   if (unidades.length === 0) {
     return (
@@ -117,7 +119,7 @@ function ResumoDasUnidades({ unidades }: { unidades: Unidade[] }) {
           icone="grafico"
           rotulo="Valor médio do m²"
           valor={m2 === null ? TRACO : fmtMoeda(m2)}
-          dica="soma dos preços ÷ soma das metragens"
+          dica={`soma dos preços ÷ soma das áreas (${ROTULO_BASE_M2[base]})`}
         />
         <Indicador
           icone="predio"
@@ -446,6 +448,11 @@ export function FormEmpreendimento({
                     </option>
                   ))}
                 </select>
+              </Campo>
+              {/* Quantas torres o prédio tem — a unidade já diz em QUAL delas
+                  ela está. Em branco fica "não informado", nunca 0. */}
+              <Campo rotulo="Torres" dica="quantos blocos">
+                {entrada('torres', { placeholder: '2', inputMode: 'numeric' })}
               </Campo>
             </div>
           </section>

@@ -280,6 +280,15 @@ if (!colunasConta.some((coluna) => coluna.name === 'demonstracao')) {
   if (contas.length === 1) db.prepare('UPDATE contas SET demonstracao = 1 WHERE id = ?').run(contas[0].id)
 }
 
+// Qual metragem divide o preco para dar o valor do m². A escolha e da conta
+// porque as duas leituras existem no mercado: a area PRIVATIVA e a que o
+// comprador usa, a TOTAL e a que a construtora anuncia. Nasce 'privativa' —
+// comparar predios pela area total premia quem tem mais area comum.
+const colunasContaBase = db.prepare('PRAGMA table_info(contas)').all()
+if (!colunasContaBase.some((coluna) => coluna.name === 'base_m2')) {
+  db.exec("ALTER TABLE contas ADD COLUMN base_m2 TEXT NOT NULL DEFAULT 'privativa';")
+}
+
 const colunasUsuario = db.prepare('PRAGMA table_info(usuarios)').all()
 if (!colunasUsuario.some((coluna) => coluna.name === 'operador')) {
   db.exec('ALTER TABLE usuarios ADD COLUMN operador INTEGER NOT NULL DEFAULT 0;')
@@ -394,6 +403,35 @@ if (!colunasUnidade.some((coluna) => coluna.name === 'tipologia')) {
   db.exec('ALTER TABLE unidades ADD COLUMN tipologia TEXT;')
 }
 
+/**
+ * A tabela da construtora separa TIPOS de area, e somar um com o outro muda o
+ * preco do m² sem ninguem perceber: `metragem` continua sendo a privativa e
+ * `metragem_total` a total/global; a area COMUM e a de terraco ganham coluna
+ * propria, e o espaco complementar (hobby box, deposito) fica como o texto que
+ * a tabela trouxe. As vagas seguem contadas em `vagas` — `vagas_detalhe` guarda
+ * o que a coluna dizia ("Vagas 84 e 27, simples"), que nenhum numero resume.
+ */
+const COLUNAS_AREA_UNIDADE = [
+  ['area_comum', 'REAL'],
+  ['area_terraco', 'REAL'],
+  ['espaco_complementar', 'TEXT'],
+  ['vagas_detalhe', 'TEXT'],
+]
+
+for (const [coluna, tipo] of COLUNAS_AREA_UNIDADE) {
+  const existentes = db.prepare('PRAGMA table_info(unidades)').all()
+  if (!existentes.some((c) => c.name === coluna)) {
+    db.exec(`ALTER TABLE unidades ADD COLUMN ${coluna} ${tipo};`)
+  }
+}
+
+// Quantas torres o empreendimento tem. Fica no predio, e nao na unidade: a
+// unidade ja diz em QUAL torre ela esta (`unidades.torre`).
+const colunasEmpreendimentoTorres = db.prepare('PRAGMA table_info(empreendimentos)').all()
+if (!colunasEmpreendimentoTorres.some((coluna) => coluna.name === 'torres')) {
+  db.exec('ALTER TABLE empreendimentos ADD COLUMN torres INTEGER;')
+}
+
 const colunasFluxo = db.prepare('PRAGMA table_info(fluxos_pagamento)').all()
 if (!colunasFluxo.some((coluna) => coluna.name === 'unidade_id')) {
   db.exec(`
@@ -447,7 +485,7 @@ db.exec(`
 export const CAMPOS_EMPREENDIMENTO = [
   'nome', 'construtora', 'cidade', 'bairro', 'endereco',
   'latitude', 'longitude', 'valor_m2', 'metragem_min', 'metragem_max',
-  'dormitorios', 'suites', 'banheiros', 'vagas',
+  'dormitorios', 'suites', 'banheiros', 'vagas', 'torres',
   'status_obra', 'entrega', 'tipo', 'imagem_url', 'observacoes',
 ]
 
@@ -464,14 +502,15 @@ export const CAMPOS_FLUXO = [
 
 export const CAMPOS_UNIDADE = [
   'empreendimento_id', 'identificacao', 'tipologia', 'torre', 'andar', 'numero',
-  'metragem', 'metragem_total',
-  'dormitorios', 'suites', 'banheiros', 'vagas',
+  'metragem', 'metragem_total', 'area_comum', 'area_terraco', 'espaco_complementar',
+  'dormitorios', 'suites', 'banheiros', 'vagas', 'vagas_detalhe',
   'posicao_solar', 'face', 'valor', 'valor_m2', 'status', 'observacoes',
 ]
 
 const NUMERICOS = new Set([
   'latitude', 'longitude', 'valor_m2', 'metragem_min', 'metragem_max',
-  'dormitorios', 'suites', 'banheiros', 'vagas',
+  'dormitorios', 'suites', 'banheiros', 'vagas', 'torres',
+  'area_comum', 'area_terraco',
   'empreendimento_id', 'unidade_id', 'entrada_pct', 'entrada_valor', 'parcelas',
   'parcela_valor', 'reforcos_qtd', 'reforco_valor', 'chaves_pct',
   'financiamento_pct', 'financiamento_valor',

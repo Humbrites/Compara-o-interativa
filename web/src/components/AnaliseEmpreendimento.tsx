@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 
 import { analisarEmpreendimento } from '../lib/analise'
+import { useBaseM2 } from '../lib/baseM2'
 import { fmtArea, fmtMoeda, fmtMoedaCurta, TRACO } from '../lib/format'
 import { fmtPercentual } from '../lib/cub'
 import type { Unidade } from '../types'
@@ -23,7 +24,8 @@ interface Props {
 const ASSIMETRIA_QUE_IMPORTA = 15
 
 export function AnaliseEmpreendimento({ unidades }: Props) {
-  const a = useMemo(() => analisarEmpreendimento(unidades), [unidades])
+  const base = useBaseM2()
+  const a = useMemo(() => analisarEmpreendimento(unidades, base), [unidades, base])
 
   if (a.comPreco === 0) {
     return (

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 
 import { analisarUnidade, textoDoParcelamento } from '../lib/analise'
+import { useBaseM2 } from '../lib/baseM2'
 import { exportarPdfUnidades, type LinhaDeUnidades } from '../lib/exportarComparativo'
 import { fmtArea, fmtInteiro, fmtMoeda, TRACO } from '../lib/format'
 import { fmtPercentual } from '../lib/cub'
@@ -60,6 +61,7 @@ export function CompararUnidades({
   avisar,
   onFechar,
 }: Props) {
+  const base = useBaseM2()
   const [soEste, setSoEste] = useState(soDoEmpreendimento)
   /**
    * Abre com DUAS unidades marcadas, não com as quatro.
@@ -117,9 +119,9 @@ export function CompararUnidades({
     () =>
       selecionadas.map((item) => ({
         ...item,
-        analise: analisarUnidade(item.unidade, item.empreendimento.unidades),
+        analise: analisarUnidade(item.unidade, item.empreendimento.unidades, base),
       })),
-    [selecionadas],
+    [selecionadas, base],
   )
 
   function alternar(id: number) {

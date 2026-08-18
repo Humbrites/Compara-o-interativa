@@ -14,7 +14,8 @@ import {
 import { corDoStatus } from '../lib/opcoes'
 import { fotosDe } from '../lib/imagens'
 import { usePodeEditar } from '../lib/permissao'
-import { precoDaUnidade, resumoUnidades, rotuloUnidade } from '../lib/unidades'
+import { useBaseM2 } from '../lib/baseM2'
+import { precoDaUnidade, resumoUnidades, rotuloUnidade, ROTULO_BASE_M2 } from '../lib/unidades'
 import { Icone, type NomeIcone } from './Icones'
 import { CartaoFluxo } from './CartaoFluxo'
 import { LinhaUnidade } from './LinhaUnidade'
@@ -136,10 +137,11 @@ export function PainelDetalhe({
   // Só leitura (conta suspensa, ou o master vendo a base de um cliente): o
   // painel continua inteiro, o que some é o que gravaria.
   const podeEditar = usePodeEditar()
+  const base = useBaseM2()
   const local = [e.bairro, e.cidade].filter(Boolean).join(', ')
 
   const fotos = useMemo(() => fotosDe(e), [e])
-  const resumo = useMemo(() => resumoUnidades(e.unidades), [e.unidades])
+  const resumo = useMemo(() => resumoUnidades(e.unidades, base), [e.unidades, base])
   const temUnidades = e.unidades.length > 0
   // A galeria some quando todo link quebra; ai a capa vazia entra no lugar.
   const [galeriaVazia, setGaleriaVazia] = useState(false)
@@ -284,7 +286,9 @@ export function PainelDetalhe({
               <div className="preco__bloco preco__bloco--secundario">
                 <span className="preco__rotulo">Valor do m²</span>
                 <span className="preco__valor preco__valor--menor">{m2Principal}</span>
-                <span className="preco__dica">{temUnidades ? 'entre as unidades' : 'cadastrado no empreendimento'}</span>
+                <span className="preco__dica">
+                  {temUnidades ? `entre as unidades · pela ${ROTULO_BASE_M2[base]}` : 'cadastrado no empreendimento'}
+                </span>
               </div>
             )}
           </div>
@@ -365,6 +369,9 @@ export function PainelDetalhe({
                     : fmtFaixaMetragem(e.metragem_min, e.metragem_max)
                 }
               />
+              {/* Só entra na ficha quando o cadastro informou: prédio sem
+                  torres cadastradas não pode aparecer com "0". */}
+              {e.torres !== null && <ItemFicha icone="predio" rotulo="Torres" valor={fmtInteiro(e.torres)} />}
             </div>
 
             {temUnidades && (

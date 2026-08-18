@@ -2,7 +2,8 @@ import type { ReactNode } from 'react'
 import type { Unidade } from '../types'
 import { fmtArea, fmtInteiro, fmtMoeda, TRACO } from '../lib/format'
 import { corDoStatusUnidade } from '../lib/opcoes'
-import { localizacaoUnidade, posicaoUnidade, precoDaUnidade, rotuloUnidade, valorM2Da } from '../lib/unidades'
+import { useBaseM2 } from '../lib/baseM2'
+import { localizacaoUnidade, posicaoUnidade, precoDaUnidade, rotuloUnidade, ROTULO_BASE_M2, valorM2Da } from '../lib/unidades'
 import { Icone, type NomeIcone } from './Icones'
 import { Selo } from './ui'
 
@@ -28,9 +29,10 @@ interface Props {
 }
 
 export function CartaoUnidade({ unidade, indice, onEditar, onExcluir, rodape }: Props) {
+  const base = useBaseM2()
   const local = localizacaoUnidade(unidade)
   const posicao = posicaoUnidade(unidade)
-  const valorM2 = valorM2Da(unidade)
+  const valorM2 = valorM2Da(unidade, base)
   // `precoDaUnidade` e a unica definicao de preco: ler `unidade.valor` cru
   // deixava sem preco a unidade cujo valor so existe na tabela de pagamento —
   // e o m² dela, que sai do mesmo numero, aparecia do lado.
@@ -83,7 +85,11 @@ export function CartaoUnidade({ unidade, indice, onEditar, onExcluir, rodape }: 
       {(preco !== null || valorM2 !== null) && (
         <div className="unidade__preco">
           <span className="unidade__preco-valor">{fmtMoeda(preco)}</span>
-          {valorM2 !== null && <span className="unidade__preco-m2">{fmtMoeda(valorM2)}/m²</span>}
+          {valorM2 !== null && (
+            <span className="unidade__preco-m2" title={`Calculado pela ${ROTULO_BASE_M2[base]}`}>
+              {fmtMoeda(valorM2)}/m²
+            </span>
+          )}
         </div>
       )}
 

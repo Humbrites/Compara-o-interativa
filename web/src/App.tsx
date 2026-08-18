@@ -20,6 +20,8 @@ import { PainelConta } from './components/PainelConta'
 import { PainelPlataforma } from './components/PainelPlataforma'
 import { mensagemDoErro } from './lib/http'
 import { ProvedorDeEdicao } from './lib/permissao'
+import { ProvedorBaseM2 } from './lib/baseM2'
+import { BASE_M2_PADRAO } from './lib/unidades'
 import { plataforma } from './lib/plataforma'
 import { ehSessaoDeCliente, type Sessao, type SessaoDoDashboard } from './lib/acesso'
 
@@ -189,6 +191,9 @@ export default function App({ sessao, aoMudarSessao, aoSair }: AppProps) {
   /* --- Render ------------------------------------------------------------ */
   return (
     <ProvedorDeEdicao pode={podeEditar}>
+    {/* A base do m² vem da conta e vale para a tela inteira: lista, ficha,
+        unidades e formulário precisam dividir o preço pela MESMA metragem. */}
+    <ProvedorBaseM2 base={sessao.conta.base_m2 ?? BASE_M2_PADRAO}>
     <div className="app">
       {/* Topo enxuto: a marca, o caminho para os empreendimentos, o cadastro
           e os indicadores de mercado. Comparar e simular investimento moram
@@ -518,6 +523,7 @@ export default function App({ sessao, aoMudarSessao, aoSair }: AppProps) {
 
       <Toasts avisos={avisos} />
     </div>
+    </ProvedorBaseM2>
     </ProvedorDeEdicao>
   )
 }

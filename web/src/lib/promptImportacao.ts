@@ -27,6 +27,7 @@ export const STATUS_ACEITOS = ['disponivel', 'reservada', 'vendida', 'indisponiv
 
 /** O modelo de JSON que vai dentro do prompt — e o mesmo que a validacao espera. */
 const EXEMPLO = `{
+  "torres": 2,
   "unidades": [
     {
       "identificacao": "Apto 1204",
@@ -36,10 +37,14 @@ const EXEMPLO = `{
       "tipologia": "3 dormitórios",
       "metragem": 82.5,
       "metragem_total": 105.3,
+      "area_comum": 22.8,
+      "area_terraco": null,
+      "espaco_complementar": null,
       "dormitorios": 3,
       "suites": 1,
       "banheiros": 2,
       "vagas": 2,
+      "vagas_detalhe": "Vagas 84 e 27, simples",
       "valor": 845000,
       "status": "disponivel",
       "observacoes": null
@@ -49,13 +54,17 @@ const EXEMPLO = `{
       "torre": "A",
       "andar": 13,
       "numero": "1301",
-      "tipologia": "3 dormitórios",
+      "tipologia": "2 suítes",
       "metragem": 82.5,
       "metragem_total": 105.3,
-      "dormitorios": 3,
-      "suites": 1,
+      "area_comum": 22.8,
+      "area_terraco": 9.4,
+      "espaco_complementar": "Hobby box 4,5 m²",
+      "dormitorios": 2,
+      "suites": 2,
       "banheiros": 2,
-      "vagas": 2,
+      "vagas": 1,
+      "vagas_detalhe": "Vaga 46, dupla",
       "valor": 870000,
       "status": "reservada",
       "observacoes": null,
@@ -90,7 +99,8 @@ const EXEMPLO = `{
     "descricao": "Entrada em 4x, mensais durante a obra, semestrais em junho e dezembro."
   },
   "duvidas": [
-    "A coluna \\"G\\" pode ser vagas de garagem — deixei vagas como null nas unidades da torre B."
+    "A coluna \\"G\\" pode ser vagas de garagem — deixei vagas como null nas unidades da torre B.",
+    "A coluna \\"Parcela única\\" não diz quando é paga — registrei na descrição do fluxo em vez de escolher um bloco."
   ]
 }`
 
@@ -125,9 +135,32 @@ REGRAS QUE NÃO SE QUEBRAM
    - vendido → "vendida"
    - permutada, bloqueada, do proprietário, não comercializada → "indisponivel"
    - qualquer outra coisa → null, e registre em "duvidas".
-6. "metragem" é a área PRIVATIVA; "metragem_total" é a área total/global. Se a tabela traz uma metragem só e não diz qual é, ponha em "metragem" e registre a dúvida.
-7. "numero" vai como TEXTO (pode ter letra: "1204", "05A"). "torre" é só o identificador do bloco ("A", "Torre 2").
-8. Toda unidade precisa ter pelo menos um entre identificacao, torre e numero.
+6. "numero" vai como TEXTO (pode ter letra: "1204", "05A"). "torre" é só o identificador do bloco ("A", "Torre 2").
+7. Toda unidade precisa ter pelo menos um entre identificacao, torre e numero.
+
+OS TIPOS DE ÁREA — NUNCA SOME UM COM O OUTRO, NUNCA TROQUE UM PELO OUTRO
+Cada tipo de área tem o seu campo. Somar dois deles muda o preço do m² e ninguém percebe.
+- ÁREA PRIVATIVA → "metragem". Sinônimos de coluna: "Área Priv.", "A. Privativa", "Área privativa", "Metragem privativa", "Privativa", "Útil".
+- ÁREA TOTAL / GLOBAL → "metragem_total". Sinônimos: "Área total", "Total", "Área global", "Global".
+- ÁREA COMUM → "area_comum", campo PRÓPRIO. Sinônimos: "Área comum", "A. Comum", "Fração comum". Ela NUNCA vai em "metragem" e NUNCA é somada à privativa.
+- TERRAÇO / SACADA / VARANDA com área própria → "area_terraco".
+- ESPAÇO COMPLEMENTAR (hobby box, depósito, adega, box privativo) → "espaco_complementar", em TEXTO, preservando o que a tabela diz ("Hobby box 4,5 m²").
+- Se a tabela traz UMA metragem só e não diz qual é, ponha em "metragem" e registre a dúvida.
+
+TIPOLOGIA → DORMITÓRIOS E SUÍTES
+- Suíte É dormitório. "2 suítes", sem nenhuma informação independente de dormitórios, vira "suites": 2 E "dormitorios": 2 — não duplique (não vira 4) e não deixe dormitórios em branco.
+- "3 dormitórios sendo 1 suíte" → "dormitorios": 3 e "suites": 1.
+- A tipologia original vai SEMPRE em "tipologia", com as palavras da tabela.
+
+VAGAS
+- "vagas" é QUANTAS vagas a unidade tem — conte as vagas listadas. "Vaga 84 simples, Vaga 27 simples" → 2. "Vaga 46 dupla" → 1: dupla descreve o tamanho da vaga, não duas vagas.
+- "vagas_detalhe" guarda em TEXTO o que a tabela dizia (números e tipo): "Vagas 84 e 27, simples".
+- Nunca invente quantidade nem característica que a tabela não traz.
+
+TORRES
+- "torres" é um campo do TOPO do JSON (do prédio, não da unidade): quantas torres/blocos o empreendimento tem.
+- Preencha só quando a tabela deixa concluir com clareza — uma coluna de torre/bloco/edificação com dois valores distintos são 2 torres; uma tabela sem menção nenhuma a torre, com numeração contínua, é 1 torre.
+- Na dúvida, "torres": null e uma frase em "duvidas". Nunca chute.
 
 A CONDIÇÃO DE PAGAMENTO ("fluxo_construtora")
 Esta é a parte que mais se perde, então leia com atenção. A tabela descreve o pagamento em BLOCOS, e cada bloco tem QUANTIDADE e VALOR (ou percentual). Capture SEMPRE a quantidade de parcelas de cada bloco — "30x de R$ 3.500" são duas informações, não uma.
@@ -139,6 +172,8 @@ Os blocos e onde cada um entra:
 - CHAVES / entrega / habite-se: "chaves_pct" quando vier em %, "chaves_valor" quando vier em R$.
 - FINANCIAMENTO / SALDO NA ENTREGA: colunas chamadas "financiamento", "saldo", "saldo devedor", "restante", "na entrega", "quitação" são TODAS o mesmo componente — o que resta a pagar QUANDO A OBRA ENTREGA (financiado no banco ou quitado ali). Vai em "financiamento_pct" ou "financiamento_valor". Não é desembolso durante a obra: nunca some esse valor às mensais.
 - DEPOIS DAS CHAVES (financiamento direto com a construtora, pós-obra, pós-chaves): mensais em "pos_parcelas" + "pos_parcela_valor", e semestrais/balões em "pos_reforcos_qtd" + "pos_reforco_valor". Só entra aqui o que a tabela diz que é PAGO APÓS A ENTREGA.
+
+- PARCELA ÚNICA / "única" / "pagamento único": só entra num bloco quando a tabela diz QUANDO ela é paga (no ato → entrada; na entrega → chaves; depois das chaves → pós-chaves). Se a tabela não deixa claro, não escolha um bloco: descreva em "descricao" e registre em "duvidas".
 
 Regras do fluxo:
 - NEM TODA TABELA TEM TODOS OS BLOCOS. Uma traz entrada + mensais + balão semestral + financiamento; outra traz entrada parcelada + mensais + semestrais + pós-chaves. O bloco que NÃO EXISTE na tabela vai null — nunca 0, nunca um número inventado, nunca copiado do exemplo abaixo.
@@ -155,6 +190,8 @@ ${EXEMPLO}
 \`\`\`
 
 Não escreva nada fora do bloco JSON — nem introdução, nem comentários, nem explicação depois.
+
+Antes de responder, confira a regra-mãe: NADA INVENTADO. Todo campo de que você não tem certeza vai null e vira uma frase em "duvidas" — quem conferir a prévia corrige em segundos, mas um número chutado passa direto para o material de venda.
 
 TABELA DA CONSTRUTORA (cole abaixo desta linha):
 `

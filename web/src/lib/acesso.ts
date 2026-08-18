@@ -1,4 +1,5 @@
 import { request } from './http'
+import type { BaseM2 } from './unidades'
 
 export type Papel = 'dono' | 'admin' | 'membro'
 export type StatusConta = 'trial' | 'ativa' | 'suspensa' | 'cancelada'
@@ -39,6 +40,8 @@ export interface ContaSessao {
   somenteLeitura: boolean
   expiraEm: string | null
   exigir2fa: boolean
+  /** Metragem que divide o preço no valor do m²: privativa (padrão) ou total. */
+  base_m2: BaseM2
   plano: PlanoResumo
   assentos: AssentosResumo
 }
@@ -183,7 +186,7 @@ export const acesso = {
 
   conta: () => request<DadosDaConta>('/api/conta'),
 
-  salvarConta: (dados: { nome?: string; exigir2fa?: boolean }) =>
+  salvarConta: (dados: { nome?: string; exigir2fa?: boolean; base_m2?: BaseM2 }) =>
     request<ContaSessao>('/api/conta', { method: 'PUT', body: JSON.stringify(dados) }),
 
   convidar: (dados: { email: string; nome?: string; papel: Papel }) =>

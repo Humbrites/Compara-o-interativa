@@ -43,6 +43,7 @@ import {
   usarCodigoRecuperacao,
 } from './contas.js'
 import { descreverCobranca, descreverPlano, podeGerirEquipe, PAPEIS } from './planos.js'
+import { BASES_M2, normalizarBaseM2, recalcularResumosDaConta } from './resumo.js'
 import { conferirSenha, gerarToken, validarSenha } from './senhas.js'
 import { conferirCodigo, gerarSegredo, urlOtpauth } from './totp.js'
 
@@ -162,6 +163,10 @@ function contaPublica(conta) {
     somenteLeitura: !podeGravar(conta),
     expiraEm: conta.expira_em,
     exigir2fa: Boolean(conta.exigir_2fa),
+    // A base do valor do m² viaja na sessão porque TODA tela que mostra m²
+    // precisa dela — e buscá-la em cada uma daria números diferentes na mesma
+    // tela enquanto a resposta não chegasse.
+    base_m2: normalizarBaseM2(conta.base_m2),
     plano: descreverPlano(conta),
     cobranca: descreverCobranca(conta),
     assentos: resumoAssentos(conta),
@@ -613,11 +618,27 @@ export function registrarAutenticacao(app) {
 
     const exigir = req.body?.exigir2fa === undefined ? conta.exigir_2fa : req.body.exigir2fa ? 1 : 0
 
-    db.prepare("UPDATE contas SET nome = ?, exigir_2fa = ?, atualizado_em = datetime('now') WHERE id = ?").run(
-      nome,
-      exigir,
-      conta.id,
-    )
+    // A base do m² só aceita os dois valores do par: um terceiro texto gravado
+    // aqui deixaria toda conta de m² caindo no padrão sem ninguém entender por
+    // que a configuração "não pegou".
+    let base = normalizarBaseM2(conta.base_m2)
+    const escolheuBase = req.body?.base_m2 !== undefined
+    if (escolheuBase) {
+      base = String(req.body.base_m2)
+      if (!BASES_M2.includes(base)) {
+        return reply.code(400).send({ erro: `A base do valor do m² só pode ser ${BASES_M2.join(' ou ')}` })
+      }
+    }
+
+    db.prepare(
+      "UPDATE contas SET nome = ?, exigir_2fa = ?, base_m2 = ?, atualizado_em = datetime('now') WHERE id = ?",
+    ).run(nome, exigir, base, conta.id)
+
+    // A base muda o m² de TODO empreendimento da conta — e ele fica GRAVADO
+    // nas colunas que o filtro, o mapa e o comparativo leem. O recálculo roda
+    // sempre que a base é escolhida, e não só quando ela muda: é assim que
+    // uma base já correta realinha os números de quem foi cadastrado antes.
+    if (escolheuBase) recalcularResumosDaConta(conta.id)
 
     return contaPublica(buscarConta.get(conta.id))
   })

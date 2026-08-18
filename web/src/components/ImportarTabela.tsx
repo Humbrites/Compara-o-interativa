@@ -16,7 +16,7 @@ import { montarPromptDeImportacao } from '../lib/promptImportacao'
 import { descreverFluxoDaConstrutora, nomeDoFluxoImportado } from '../lib/fluxoImportado'
 import { validarRespostaDaIa } from '../lib/validarImportacao'
 import { Icone } from './Icones'
-import { Modal } from './ui'
+import { Campo, Modal } from './ui'
 
 /**
  * Importar a tabela de vendas da construtora, em quatro passos.
@@ -44,16 +44,20 @@ const ROTULO_CAMPO: Record<CampoImportado, string> = {
   tipologia: 'Tipologia',
   metragem: 'Metragem privativa',
   metragem_total: 'Metragem total',
+  area_comum: 'Área comum',
+  area_terraco: 'Área de terraço',
+  espaco_complementar: 'Espaço complementar',
   dormitorios: 'Dormitórios',
   suites: 'Suítes',
   banheiros: 'Banheiros',
   vagas: 'Vagas',
+  vagas_detalhe: 'Detalhe das vagas',
   valor: 'Valor',
   status: 'Status',
   observacoes: 'Observações',
 }
 
-const AREAS = new Set<CampoImportado>(['metragem', 'metragem_total'])
+const AREAS = new Set<CampoImportado>(['metragem', 'metragem_total', 'area_comum', 'area_terraco'])
 
 /** O valor de um campo como a prévia mostra — cada tipo na sua unidade. */
 function mostrar(campo: CampoImportado, valor: unknown): string {
@@ -152,6 +156,9 @@ export function ImportarTabela({ empreendimento, onImportou, avisar, onFechar }:
   // Nasce MARCADO quando a tabela traz condição de pagamento: quem importou
   // uma tabela com fluxo quer o fluxo. Quem só queria preços desmarca.
   const [gravarFluxo, setGravarFluxo] = useState(true)
+  // Torres é PROPOSTA da leitura: quem confirma ajusta antes de gravar. Texto
+  // (e não número) porque o campo em branco precisa continuar "não informado".
+  const [torres, setTorres] = useState('')
 
   const prompt = useMemo(
     () => montarPromptDeImportacao({ empreendimento: empreendimento.nome }),
@@ -165,6 +172,16 @@ export function ImportarTabela({ empreendimento, onImportou, avisar, onFechar }:
   // de quem reimporta a MESMA tabela só para o fluxo entrar nas unidades.
   const soOFluxo =
     gravarFluxo && !!previa?.fluxo_construtora && (previa?.inalteradas.length ?? 0) > 0 && totalMarcado === 0
+
+  /** As torres que o usuário deixou no campo; em branco = não informado. */
+  const torresInformadas = torres.trim() ? Number(torres.trim().replace(',', '.')) : null
+
+  // Ajustar só as torres já é motivo para confirmar: a tabela pode não ter
+  // mudado nenhuma unidade e ainda assim ter revelado quantas torres existem.
+  const soAsTorres =
+    torresInformadas !== null &&
+    Number.isFinite(torresInformadas) &&
+    torresInformadas !== (previa?.torresAtual ?? null)
 
   // Unidades que fogem da condição geral — a tabela varia de uma para a outra.
   const unidadesComFluxoProprio =
@@ -188,6 +205,7 @@ export function ImportarTabela({ empreendimento, onImportou, avisar, onFechar }:
       unidades: lido.unidades,
       duvidas: lido.duvidas,
       fluxo_construtora: lido.fluxo_construtora,
+      torres: lido.torres,
     }
 
     setOcupado(true)
@@ -199,6 +217,9 @@ export function ImportarTabela({ empreendimento, onImportou, avisar, onFechar }:
       setAtualizarMarcadas(new Set(resposta.alteradas.map((a) => a.id)))
       setAusentesMarcadas(new Set())
       setGravarFluxo(true)
+      // O que a tabela deixou concluir; sem conclusão, o que já está gravado —
+      // e nunca um número inventado para preencher o campo.
+      setTorres(String(resposta.torres ?? resposta.torresAtual ?? ''))
       setPasso(3)
     } catch (falha) {
       // O 400 da rota traz a lista de problemas: mostrar todos evita a viagem
@@ -212,7 +233,7 @@ export function ImportarTabela({ empreendimento, onImportou, avisar, onFechar }:
   }
 
   async function confirmar() {
-    if (!previa || (totalMarcado === 0 && !soOFluxo)) return
+    if (!previa || (totalMarcado === 0 && !soOFluxo && !soAsTorres)) return
     setErro(null)
     setOcupado(true)
     try {
@@ -235,6 +256,9 @@ export function ImportarTabela({ empreendimento, onImportou, avisar, onFechar }:
           .map((ausente) => ausente.id),
         fluxo_construtora: entrada?.fluxo_construtora ?? null,
         gravarFluxo,
+        // Campo em branco = "não informado": a confirmação não pode apagar as
+        // torres que já estavam no cadastro.
+        torres: torresInformadas,
       })
       setResultado(resposta)
       onImportou(resposta.unidades)
@@ -297,7 +321,7 @@ export function ImportarTabela({ empreendimento, onImportou, avisar, onFechar }:
             type="button"
             className="btn btn--primario"
             onClick={() => void confirmar()}
-            disabled={ocupado || (totalMarcado === 0 && !soOFluxo)}
+            disabled={ocupado || (totalMarcado === 0 && !soOFluxo && !soAsTorres)}
           >
             {ocupado ? <Icone nome="spinner" tamanho={14} className="girando" /> : <Icone nome="check" tamanho={14} />}
             {ocupado
@@ -305,7 +329,9 @@ export function ImportarTabela({ empreendimento, onImportou, avisar, onFechar }:
               : soOFluxo
                 ? 'Gravar a condição de pagamento'
                 : totalMarcado === 0
-                  ? 'Nada marcado'
+                  ? soAsTorres
+                    ? 'Gravar as torres'
+                    : 'Nada marcado'
                   : `Importar ${totalMarcado} ${totalMarcado === 1 ? 'unidade' : 'unidades'}`}
           </button>
         )}
@@ -433,6 +459,41 @@ export function ImportarTabela({ empreendimento, onImportou, avisar, onFechar }:
       {/* --- Passo 3: a prévia ---------------------------------------- */}
       {passo === 3 && previa && (
         <>
+          {/* O cabeçalho responde de relance "de que prédio é esta tabela e o
+              que ela tem": sem isso, a prévia começava numa lista de unidades
+              sem dizer quantas foram identificadas. */}
+          <section className="form-secao form-secao--resultado">
+            <h4 className="form-secao__titulo">
+              <Icone nome="predio" tamanho={16} />
+              {previa.empreendimento || empreendimento.nome}
+              <span className="form-secao__complemento">
+                {previa.totalRecebidas}{' '}
+                {previa.totalRecebidas === 1 ? 'unidade identificada' : 'unidades identificadas'}
+              </span>
+            </h4>
+
+            <div className="grade">
+              <Campo rotulo="Torres" dica={previa.torres === null ? 'a tabela não deixou claro' : 'lido da tabela'}>
+                <input
+                  className="entrada"
+                  value={torres}
+                  onChange={(evento) => setTorres(evento.target.value)}
+                  placeholder="2"
+                  inputMode="numeric"
+                  aria-label="Quantas torres o empreendimento tem"
+                />
+              </Campo>
+            </div>
+
+            <p className="importacao__nota">
+              {previa.novas.length} nova(s) · {previa.alteradas.length} alterada(s) · {previa.ausentes.length}{' '}
+              ausente(s) · {previa.duvidas.length} dúvida(s) da IA.
+              {torres.trim()
+                ? ' As torres serão gravadas no empreendimento ao confirmar.'
+                : ' Em branco, as torres do cadastro ficam como estão.'}
+            </p>
+          </section>
+
           {previa.duvidas.length > 0 && (
             <section className="form-secao form-secao--obra importacao__duvidas">
               <h4 className="form-secao__titulo">
@@ -651,6 +712,11 @@ export function ImportarTabela({ empreendimento, onImportou, avisar, onFechar }:
               <strong>{resultado.indisponiveis}</strong>{' '}
               {resultado.indisponiveis === 1 ? 'marcada indisponível' : 'marcadas indisponíveis'}
             </li>
+            {resultado.torres !== null && (
+              <li>
+                <strong>{resultado.torres}</strong> {resultado.torres === 1 ? 'torre gravada' : 'torres gravadas'}
+              </li>
+            )}
             {(resultado.fluxosCriados > 0 || resultado.fluxosAtualizados > 0) && (
               <li>
                 <strong>{resultado.fluxosCriados + resultado.fluxosAtualizados}</strong>{' '}

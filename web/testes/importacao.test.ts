@@ -271,3 +271,85 @@ test('o outro formato: entrada, mensais, balões semestrais e financiamento, com
   assert.equal(fluxo.pos_parcelas, null)
   assert.equal(fluxo.entrada_parcelas, null)
 })
+
+/* --- Tipos de área, suítes e vagas ---------------------------------- */
+
+test('os tipos de área têm cada um o seu campo — e nenhum é somado ao outro', () => {
+  const resultado = validarRespostaDaIa(`{
+    "unidades": [
+      { "identificacao": "Apto 1204", "numero": "1204",
+        "metragem": "82,5", "metragem_total": "105,3",
+        "area_comum": "22,8", "area_terraco": "9,4",
+        "espaco_complementar": "Hobby box 4,5 m²",
+        "vagas": 2, "vagas_detalhe": "Vagas 84 e 27, simples" }
+    ]
+  }`)
+
+  assert.ok(resultado.ok, resultado.problemas.join(' | '))
+  const unidade = resultado.unidades[0]
+  assert.equal(unidade.metragem, 82.5)
+  assert.equal(unidade.metragem_total, 105.3)
+  // A área comum fica no campo dela: nem soma à privativa, nem toma o lugar dela.
+  assert.equal(unidade.area_comum, 22.8)
+  assert.equal(unidade.area_terraco, 9.4)
+  assert.equal(unidade.espaco_complementar, 'Hobby box 4,5 m²')
+  assert.equal(unidade.vagas, 2)
+  assert.equal(unidade.vagas_detalhe, 'Vagas 84 e 27, simples')
+})
+
+test('suíte é dormitório: a contagem só é derivada quando a tabela não a traz', () => {
+  const so2Suites = validarRespostaDaIa('{"unidades":[{"identificacao":"Apto 1","tipologia":"2 suítes","suites":2}]}')
+  assert.ok(so2Suites.ok, so2Suites.problemas.join(' | '))
+  assert.equal(so2Suites.unidades[0].suites, 2)
+  assert.equal(so2Suites.unidades[0].dormitorios, 2)
+  assert.equal(so2Suites.unidades[0].tipologia, '2 suítes')
+
+  // Dormitórios informado MANDA: "3 dormitórios sendo 1 suíte" continua 3.
+  const tresComUma = validarRespostaDaIa('{"unidades":[{"identificacao":"Apto 2","dormitorios":3,"suites":1}]}')
+  assert.equal(tresComUma.unidades[0].dormitorios, 3)
+  assert.equal(tresComUma.unidades[0].suites, 1)
+
+  // Sem suítes não há o que derivar: continua "não informado", nunca 0.
+  const semNada = validarRespostaDaIa('{"unidades":[{"identificacao":"Apto 3","suites":null}]}')
+  assert.equal(semNada.unidades[0].dormitorios, null)
+  assert.equal(semNada.unidades[0].suites, null)
+})
+
+test('torres é campo do prédio, no topo do JSON, e recusa número impossível', () => {
+  const comTorres = validarRespostaDaIa('{"torres":2,"unidades":[{"identificacao":"Apto 1"}]}')
+  assert.ok(comTorres.ok, comTorres.problemas.join(' | '))
+  assert.equal(comTorres.torres, 2)
+
+  // Sem menção a torre a IA deixa null — e a prévia pergunta.
+  assert.equal(validarRespostaDaIa('{"unidades":[{"identificacao":"Apto 1"}]}').torres, null)
+
+  const zero = validarRespostaDaIa('{"torres":0,"unidades":[{"identificacao":"Apto 1"}]}')
+  assert.equal(zero.ok, false)
+  assert.match(zero.problemas.join(' | '), /"torres" precisa ser pelo menos 1/)
+
+  const texto = validarRespostaDaIa('{"torres":"duas","unidades":[{"identificacao":"Apto 1"}]}')
+  assert.equal(texto.ok, false)
+  assert.match(texto.problemas.join(' | '), /"torres" não é um número válido/)
+})
+
+test('o prompt ensina os tipos de área, a tipologia, as vagas e as torres', () => {
+  const prompt = montarPromptDeImportacao({ empreendimento: 'Residencial Vivatto' })
+
+  // Áreas: cada tipo no seu campo, com os sinônimos que as tabelas usam.
+  assert.match(prompt, /Área Priv\./)
+  assert.match(prompt, /area_comum/)
+  assert.match(prompt, /NUNCA é somada à privativa/)
+  assert.match(prompt, /area_terraco/)
+  assert.match(prompt, /espaco_complementar/)
+  // Tipologia: suíte é dormitório, sem duplicar.
+  assert.match(prompt, /Suíte É dormitório/)
+  assert.match(prompt, /3 dormitórios sendo 1 suíte/)
+  // Vagas: contar as listadas; "dupla" não vira 2.
+  assert.match(prompt, /vagas_detalhe/)
+  assert.match(prompt, /dupla descreve o tamanho da vaga, não duas vagas/)
+  // Torres: campo do topo, e null na dúvida.
+  assert.match(prompt, /"torres" é um campo do TOPO/)
+  assert.match(prompt, /"torres": null/)
+  // Parcela única sem lugar definido não escolhe bloco.
+  assert.match(prompt, /PARCELA ÚNICA/)
+})

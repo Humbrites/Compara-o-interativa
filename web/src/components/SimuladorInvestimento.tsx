@@ -32,7 +32,8 @@ import {
 } from '../lib/investimento'
 import { useIndicesDeMercado, type TaxaDoIndice } from '../lib/indicadores'
 import { exportarPdfInvestimento, type ImovelDaSimulacao } from '../lib/exportarSimulacao'
-import { precoDaUnidade, resumoUnidades, rotuloUnidade, valorM2Da, valorNoFluxo } from '../lib/unidades'
+import { precoDaUnidade, resumoUnidades, rotuloUnidade, valorM2Da, valorNoFluxo, type BaseM2 } from '../lib/unidades'
+import { useBaseM2 } from '../lib/baseM2'
 import { Campo, Modal } from './ui'
 import { Icone, type NomeIcone } from './Icones'
 import { GraficoLinha } from './GraficoSvg'
@@ -545,10 +546,14 @@ function textoDoValor(valor: number): string {
  * dela; sem unidade, valem as faixas das unidades cadastradas e, na falta
  * delas, os campos gerais do empreendimento — a mesma leitura do painel.
  */
-function imovelParaPdf(empreendimento: Empreendimento | null, unidade: Unidade | null): ImovelDaSimulacao | null {
+function imovelParaPdf(
+  empreendimento: Empreendimento | null,
+  unidade: Unidade | null,
+  base: BaseM2,
+): ImovelDaSimulacao | null {
   if (!empreendimento) return null
 
-  const resumo = resumoUnidades(empreendimento.unidades)
+  const resumo = resumoUnidades(empreendimento.unidades, base)
   const temUnidades = empreendimento.unidades.length > 0
   const localizacao = [empreendimento.bairro, empreendimento.cidade].filter((p) => p && p.trim()).join(', ')
 
@@ -574,7 +579,7 @@ function imovelParaPdf(empreendimento: Empreendimento | null, unidade: Unidade |
       : temUnidades
         ? fmtFaixaInteiro(resumo.vagas.min, resumo.vagas.max)
         : fmtInteiro(empreendimento.vagas),
-    valorM2: unidade ? fmtMoeda(valorM2Da(unidade)) : fmtMoeda(empreendimento.valor_m2),
+    valorM2: unidade ? fmtMoeda(valorM2Da(unidade, base)) : fmtMoeda(empreendimento.valor_m2),
     entrega: fmtEntrega(empreendimento.entrega),
     status: empreendimento.status_obra,
   }
@@ -682,6 +687,7 @@ export function SimuladorInvestimento({
   onFechar,
   avisar,
 }: Props) {
+  const base = useBaseM2()
   // Aberto pelo painel de um imovel: os campos ja nascem preenchidos com ele.
   const [form, setForm] = useState<Formulario>(() =>
     comImovel(VAZIO, lista.find((e) => e.id === empreendimentoInicial) ?? null, null),
@@ -873,7 +879,7 @@ export function SimuladorInvestimento({
 
   function aoExportarPdf() {
     if (!resultado) return
-    const abriu = exportarPdfInvestimento(resultado, imovelParaPdf(empreendimento, unidade))
+    const abriu = exportarPdfInvestimento(resultado, imovelParaPdf(empreendimento, unidade, base))
     if (!abriu) avisar('O navegador bloqueou a janela de impressão — libere os pop-ups do site', 'erro')
   }
 
@@ -1003,7 +1009,7 @@ export function SimuladorInvestimento({
                 <Icone nome="info" tamanho={12} /> Preenchi valor de compra
                 {unidade && precoDaUnidade(unidade) !== null
                   ? ` (${fmtMoeda(precoDaUnidade(unidade))} da unidade${
-                      valorM2Da(unidade) !== null ? `, ${fmtMoeda(valorM2Da(unidade))}/m²` : ''
+                      valorM2Da(unidade, base) !== null ? `, ${fmtMoeda(valorM2Da(unidade, base))}/m²` : ''
                     })`
                   : ''}
                 {mesesAteAEntrega(empreendimento.entrega) !== null ? ' e o prazo até a entrega prevista' : ''}, além da

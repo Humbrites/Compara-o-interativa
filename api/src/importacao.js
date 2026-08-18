@@ -35,10 +35,14 @@ export const CAMPOS_IMPORTAVEIS = [
   'tipologia',
   'metragem',
   'metragem_total',
+  'area_comum',
+  'area_terraco',
+  'espaco_complementar',
   'dormitorios',
   'suites',
   'banheiros',
   'vagas',
+  'vagas_detalhe',
   'valor',
   'status',
   'observacoes',
@@ -48,6 +52,8 @@ const NUMERICOS = new Set([
   'andar',
   'metragem',
   'metragem_total',
+  'area_comum',
+  'area_terraco',
   'dormitorios',
   'suites',
   'banheiros',
@@ -118,7 +124,50 @@ export function normalizarCampo(campo, bruto) {
 export function normalizarUnidade(bruta) {
   const saida = {}
   for (const campo of CAMPOS_IMPORTAVEIS) saida[campo] = normalizarCampo(campo, bruta?.[campo])
-  return saida
+  return derivarDormitorios(saida)
+}
+
+/**
+ * Suite E dormitorio. A tabela que descreve a tipologia como "2 suites" nao
+ * repete a contagem de dormitorios — e sem esta regra a unidade entrava com
+ * dormitorios null e sumia do filtro "3 dormitorios" de quem procura.
+ *
+ * Determinista de proposito: nao depende de a IA ter obedecido a instrucao do
+ * prompt. So preenche o que veio VAZIO — dormitorios informado manda sempre
+ * ("3 dormitorios sendo 1 suite" continua 3).
+ */
+export function derivarDormitorios(unidade) {
+  if (unidade.dormitorios === null && unidade.suites !== null) {
+    return { ...unidade, dormitorios: unidade.suites }
+  }
+  return unidade
+}
+
+/**
+ * Quantas torres a tabela deixou concluir. Inteiro >= 1 ou null — "0 torres"
+ * nao existe, e um numero quebrado e leitura errada de coluna.
+ */
+export function normalizarTorres(bruto, problemas) {
+  if (bruto === undefined || bruto === null || bruto === '') return null
+
+  if (typeof bruto !== 'number' && typeof bruto !== 'string') {
+    problemas.push('O campo "torres" precisa ser um número inteiro (ou null).')
+    return null
+  }
+
+  const numero = typeof bruto === 'number' ? (Number.isFinite(bruto) ? bruto : null) : lerNumero(bruto)
+  if (numero === null) {
+    problemas.push(`O campo "torres" não é um número válido ("${bruto}").`)
+    return null
+  }
+
+  const inteiro = Math.round(numero)
+  if (inteiro < 1) {
+    problemas.push('O campo "torres" precisa ser pelo menos 1 (ou null quando a tabela não diz).')
+    return null
+  }
+
+  return inteiro
 }
 
 /**
@@ -530,6 +579,8 @@ export function validarPayloadDaPrevia(corpo) {
     problemas.push('O campo "duvidas" precisa ser uma lista.')
   }
   const fluxoGeral = lerFluxoDaConstrutora(corpo.fluxo_construtora, 'da tabela', problemas)
+  // As torres sao do PREDIO, entao vem no topo do JSON — nao dentro da unidade.
+  const torres = normalizarTorres(corpo.torres, problemas)
 
   if (problemas.length > 0) throw new PayloadInvalido(problemas)
 
@@ -537,5 +588,6 @@ export function validarPayloadDaPrevia(corpo) {
     unidades,
     duvidas: (corpo.duvidas ?? []).map((duvida) => (typeof duvida === 'string' ? { texto: duvida } : duvida)),
     fluxo_construtora: fluxoGeral,
+    torres,
   }
 }

@@ -2,7 +2,8 @@ import type { ReactNode } from 'react'
 import type { Unidade } from '../types'
 import { fmtArea, fmtInteiro, fmtMoeda, TRACO } from '../lib/format'
 import { corDoStatusUnidade } from '../lib/opcoes'
-import { localizacaoUnidade, posicaoUnidade, precoDaUnidade, rotuloUnidade, valorM2Da } from '../lib/unidades'
+import { useBaseM2 } from '../lib/baseM2'
+import { localizacaoUnidade, posicaoUnidade, precoDaUnidade, rotuloUnidade, ROTULO_BASE_M2, valorM2Da } from '../lib/unidades'
 import { Icone } from './Icones'
 import { Selo } from './ui'
 
@@ -28,10 +29,11 @@ interface Props {
 }
 
 export function LinhaUnidade({ unidade, indice, aberta, onAlternar, detalhe }: Props) {
+  const base = useBaseM2()
   const local = localizacaoUnidade(unidade)
   const posicao = posicaoUnidade(unidade)
   const preco = precoDaUnidade(unidade)
-  const valorM2 = valorM2Da(unidade)
+  const valorM2 = valorM2Da(unidade, base)
 
   return (
     <div className={`linha-unidade${aberta ? ' linha-unidade--aberta' : ''}`}>
@@ -67,7 +69,11 @@ export function LinhaUnidade({ unidade, indice, aberta, onAlternar, detalhe }: P
 
         <span className="linha-unidade__preco">
           <span className="linha-unidade__valor">{preco !== null ? fmtMoeda(preco) : TRACO}</span>
-          {valorM2 !== null && <span className="linha-unidade__m2">{fmtMoeda(valorM2)}/m²</span>}
+          {valorM2 !== null && (
+            <span className="linha-unidade__m2" title={`Calculado pela ${ROTULO_BASE_M2[base]}`}>
+              {fmtMoeda(valorM2)}/m²
+            </span>
+          )}
         </span>
       </button>
 
@@ -87,6 +93,28 @@ export function LinhaUnidade({ unidade, indice, aberta, onAlternar, detalhe }: P
             {unidade.metragem_total !== null && (
               <span>
                 <Icone nome="regua" tamanho={12} /> {fmtArea(unidade.metragem_total)} total
+              </span>
+            )}
+            {/* Área comum, terraço e espaço complementar só aparecem quando a
+                tabela os trouxe: campo vazio é "não informado", nunca zero. */}
+            {unidade.area_comum !== null && (
+              <span>
+                <Icone nome="regua" tamanho={12} /> {fmtArea(unidade.area_comum)} de área comum
+              </span>
+            )}
+            {unidade.area_terraco !== null && (
+              <span>
+                <Icone nome="regua" tamanho={12} /> {fmtArea(unidade.area_terraco)} de terraço
+              </span>
+            )}
+            {unidade.espaco_complementar && (
+              <span>
+                <Icone nome="lista" tamanho={12} /> {unidade.espaco_complementar}
+              </span>
+            )}
+            {unidade.vagas_detalhe && (
+              <span>
+                <Icone nome="carro" tamanho={12} /> {unidade.vagas_detalhe}
               </span>
             )}
             {unidade.suites !== null && (

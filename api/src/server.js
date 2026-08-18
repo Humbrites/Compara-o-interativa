@@ -32,6 +32,7 @@ import {
   mesmoNomeDeFluxo,
   montarDiff,
   normalizarCampo,
+  normalizarTorres,
   normalizarUnidade,
   PayloadInvalido,
   validarPayloadDaPrevia,
@@ -353,7 +354,8 @@ app.delete('/api/unidades/:id', (req, reply) => {
  */
 app.post('/api/empreendimentos/:id/importacao/previa', (req, reply) => {
   const { id } = req.params
-  if (!buscarEmpreendimento.get(id, contaDe(req))) {
+  const empreendimento = buscarEmpreendimento.get(id, contaDe(req))
+  if (!empreendimento) {
     return reply.code(404).send({ erro: 'Empreendimento nao encontrado' })
   }
 
@@ -380,6 +382,12 @@ app.post('/api/empreendimentos/:id/importacao/previa', (req, reply) => {
     ...montarDiff(unidadesDoEmpreendimento.all(id), lido.unidades),
     duvidas: lido.duvidas,
     fluxo_construtora: lido.fluxo_construtora,
+    // O cabeçalho da prévia diz de que prédio se trata, quantas torres a
+    // tabela deixou concluir e quantas unidades foram identificadas. As torres
+    // são uma PROPOSTA: quem confirma ajusta antes de gravar.
+    empreendimento: empreendimento.nome,
+    torres: lido.torres,
+    torresAtual: empreendimento.torres ?? null,
     totalRecebidas: lido.unidades.length,
   }
 })
@@ -400,27 +408,27 @@ app.post('/api/empreendimentos/:id/importacao/confirmar', (req, reply) => {
   const atualizar_ = Array.isArray(corpo.atualizar) ? corpo.atualizar : []
   const marcarIndisponiveis = Array.isArray(corpo.marcarIndisponiveis) ? corpo.marcarIndisponiveis : []
 
-  if (criar.length === 0 && atualizar_.length === 0 && marcarIndisponiveis.length === 0) {
+  // A condição de pagamento e as torres são REVALIDADAS aqui, como todo o
+  // resto: a condição vira tabela de venda gravada em cada unidade, e um
+  // percentual lido errado é o tipo de número que ninguém desconfia depois.
+  const problemas = []
+  const fluxoGeral = lerFluxoDaConstrutora(corpo.fluxo_construtora, 'da tabela', problemas)
+  const fluxoDoItem = (item) => lerFluxoDaConstrutora(item?.fluxo, 'da unidade', problemas)
+  // Só grava quando veio informado: prévia sem conclusão sobre torres não pode
+  // apagar o número que já estava no cadastro.
+  const torres = normalizarTorres(corpo.torres, problemas)
+
+  if (criar.length === 0 && atualizar_.length === 0 && marcarIndisponiveis.length === 0 && torres === null) {
     return reply.code(400).send({ erro: 'Nada foi marcado para importar' })
   }
-
-  // A condição de pagamento é REVALIDADA aqui, como todo o resto: ela vai
-  // virar tabela de venda gravada em cada unidade, e um percentual lido errado
-  // é o tipo de número que ninguém desconfia depois.
-  const problemasDoFluxo = []
-  const fluxoGeral = lerFluxoDaConstrutora(corpo.fluxo_construtora, 'da tabela', problemasDoFluxo)
-  const fluxoDoItem = (item) => lerFluxoDaConstrutora(item?.fluxo, 'da unidade', problemasDoFluxo)
 
   const fluxosPorItem = new Map()
   for (const item of [...criar, ...atualizar_]) fluxosPorItem.set(item, fluxoDoItem(item))
 
-  if (problemasDoFluxo.length > 0) {
+  if (problemas.length > 0) {
     return reply.code(400).send({
-      erro:
-        problemasDoFluxo.length === 1
-          ? problemasDoFluxo[0]
-          : `A condição de pagamento tem ${problemasDoFluxo.length} problemas.`,
-      problemas: problemasDoFluxo,
+      erro: problemas.length === 1 ? problemas[0] : `A importação tem ${problemas.length} problemas.`,
+      problemas,
     })
   }
 
@@ -503,8 +511,12 @@ app.post('/api/empreendimentos/:id/importacao/confirmar', (req, reply) => {
       contagens.indisponiveis += 1
     }
 
+    // As torres são do empreendimento, não das unidades: entram uma vez só.
+    if (torres !== null) atualizar('empreendimentos', Number(id), { torres })
+
     const resumo = {
       contagens,
+      torres,
       criadas: criar.map(normalizarUnidade),
       atualizadas: atualizar_.filter((i) => daCasa.has(Number(i?.id))),
       indisponiveis: marcarIndisponiveis.map(Number).filter((i) => daCasa.has(i)),
@@ -526,6 +538,7 @@ app.post('/api/empreendimentos/:id/importacao/confirmar', (req, reply) => {
   return {
     importacaoId,
     ...contagens,
+    torres,
     unidades: unidadesDoEmpreendimento.all(id).map(comFluxos),
     // A condição de pagamento JÁ virou tabela de venda nas unidades (uma por
     // unidade); aqui ela volta só para a tela repetir o que foi lido.

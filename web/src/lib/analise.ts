@@ -3,7 +3,7 @@ import { detalharFluxo } from './fluxos'
 // O status gravado vem em formatos diferentes ("Disponível" do cadastro,
 // "disponivel" da importação): quem conta unidade disponível precisa dos dois.
 import { normalizarStatusUnidade } from './opcoes'
-import { precoDaUnidade, valorM2Da } from './unidades'
+import { BASE_M2_PADRAO, metragemDoM2, precoDaUnidade, valorM2Da, type BaseM2 } from './unidades'
 
 /**
  * A analise de uma oportunidade — o que o corretor responde ao cliente.
@@ -75,8 +75,11 @@ export function fluxoDaAnalise(unidade: Unidade): FluxoPagamento | null {
 }
 
 /** O m² medio do empreendimento e a faixa entre as unidades. */
-export function faixaDeM2(unidades: Unidade[]): { min: number | null; max: number | null; media: number | null } {
-  const valores = unidades.map(valorM2Da).filter((v): v is number => v !== null)
+export function faixaDeM2(
+  unidades: Unidade[],
+  baseM2: BaseM2 = BASE_M2_PADRAO,
+): { min: number | null; max: number | null; media: number | null } {
+  const valores = unidades.map((u) => valorM2Da(u, baseM2)).filter((v): v is number => v !== null)
   if (valores.length === 0) return { min: null, max: null, media: null }
 
   return {
@@ -97,10 +100,16 @@ export function faixaDeM2(unidades: Unidade[]): { min: number | null; max: numbe
  */
 const TOLERANCIA_DA_MEDIA = 3
 
-export function analisarUnidade(unidade: Unidade, unidadesDoEmpreendimento: Unidade[]): AnaliseDaUnidade {
+export function analisarUnidade(
+  unidade: Unidade,
+  unidadesDoEmpreendimento: Unidade[],
+  baseM2: BaseM2 = BASE_M2_PADRAO,
+): AnaliseDaUnidade {
   const valor = precoDaUnidade(unidade)
-  const valorM2 = valorM2Da(unidade)
-  const metragem = numero(unidade.metragem_total) ?? numero(unidade.metragem)
+  const valorM2 = valorM2Da(unidade, baseM2)
+  // A metragem que a analise mostra e a MESMA que dividiu o preco no m² —
+  // exibir a total ao lado de um m² calculado pela privativa nao fecharia conta.
+  const metragem = metragemDoM2(unidade.metragem_total, unidade.metragem, baseM2)
 
   const fluxo = fluxoDaAnalise(unidade)
   const detalhe = fluxo ? detalharFluxo(fluxo, valor) : null
@@ -116,7 +125,7 @@ export function analisarUnidade(unidade: Unidade, unidadesDoEmpreendimento: Unid
   const saldo = detalhe ? detalhe.naEntrega : null
   const base = detalhe?.base ?? valor
 
-  const faixaM2 = faixaDeM2(unidadesDoEmpreendimento)
+  const faixaM2 = faixaDeM2(unidadesDoEmpreendimento, baseM2)
   const diferencaParaMedia =
     valorM2 !== null && faixaM2.media !== null && faixaM2.media > 0
       ? ((valorM2 - faixaM2.media) / faixaM2.media) * 100
@@ -124,7 +133,7 @@ export function analisarUnidade(unidade: Unidade, unidadesDoEmpreendimento: Unid
 
   let posicao: PosicaoNaFaixa = 'sem-base'
   if (valorM2 === null || faixaM2.media === null) posicao = 'sem-base'
-  else if (unidadesDoEmpreendimento.filter((u) => valorM2Da(u) !== null).length < 2) posicao = 'unica'
+  else if (unidadesDoEmpreendimento.filter((u) => valorM2Da(u, baseM2) !== null).length < 2) posicao = 'unica'
   else if (diferencaParaMedia === null) posicao = 'sem-base'
   else if (diferencaParaMedia < -TOLERANCIA_DA_MEDIA) posicao = 'abaixo'
   else if (diferencaParaMedia > TOLERANCIA_DA_MEDIA) posicao = 'acima'
@@ -280,7 +289,10 @@ export function distribuirPrecos(precos: number[], faixas = 5): FatiaDePreco[] {
   return fatias
 }
 
-export function analisarEmpreendimento(unidades: Unidade[]): AnaliseDoEmpreendimento {
+export function analisarEmpreendimento(
+  unidades: Unidade[],
+  baseM2: BaseM2 = BASE_M2_PADRAO,
+): AnaliseDoEmpreendimento {
   const precos = unidades.map(precoDaUnidade).filter((v): v is number => v !== null)
   const metragens = unidades
     .map((u) => numero(u.metragem) ?? numero(u.metragem_total))
@@ -290,7 +302,7 @@ export function analisarEmpreendimento(unidades: Unidade[]): AnaliseDoEmpreendim
   let somaMetragem = 0
   for (const unidade of unidades) {
     const preco = precoDaUnidade(unidade)
-    const metragem = numero(unidade.metragem_total) ?? numero(unidade.metragem)
+    const metragem = metragemDoM2(unidade.metragem_total, unidade.metragem, baseM2)
     if (preco !== null && metragem !== null && metragem > 0) {
       somaPreco += preco
       somaMetragem += metragem
@@ -311,7 +323,7 @@ export function analisarEmpreendimento(unidades: Unidade[]): AnaliseDoEmpreendim
     metragemMin: metragens.length > 0 ? Math.min(...metragens) : null,
     metragemMax: metragens.length > 0 ? Math.max(...metragens) : null,
     m2Ponderado: somaMetragem > 0 ? somaPreco / somaMetragem : null,
-    faixaM2: faixaDeM2(unidades),
+    faixaM2: faixaDeM2(unidades, baseM2),
     distribuicao: distribuirPrecos(precos),
     assimetria:
       ticketMedio !== null && medianaDeValor !== null && medianaDeValor > 0

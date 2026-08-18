@@ -4,7 +4,8 @@ import { api } from '../lib/api'
 import { lerNumero } from '../lib/cub'
 import { fmtArea, fmtMoeda } from '../lib/format'
 import { FACES, POSICOES_SOLARES, STATUS_UNIDADE, TIPOLOGIAS } from '../lib/opcoes'
-import { calcularValorM2, precoDaUnidade, rotuloUnidade, valorNoFluxo } from '../lib/unidades'
+import { calcularValorM2, metragemDoM2, precoDaUnidade, ROTULO_BASE_M2, rotuloUnidade, valorNoFluxo } from '../lib/unidades'
+import { useBaseM2 } from '../lib/baseM2'
 import { Campo, Estado } from './ui'
 import { Icone } from './Icones'
 import { CartaoUnidade } from './CartaoUnidade'
@@ -25,8 +26,8 @@ type Formulario = Record<string, string>
 
 const CAMPOS = [
   'identificacao', 'tipologia', 'torre', 'andar', 'numero',
-  'metragem', 'metragem_total',
-  'dormitorios', 'suites', 'banheiros', 'vagas',
+  'metragem', 'metragem_total', 'area_comum', 'area_terraco', 'espaco_complementar',
+  'dormitorios', 'suites', 'banheiros', 'vagas', 'vagas_detalhe',
   'posicao_solar', 'face', 'valor', 'valor_m2', 'status', 'observacoes',
 ]
 
@@ -63,6 +64,9 @@ export function UnidadesDoEmpreendimento({
   avisar,
 }: Props) {
   const podeEditar = usePodeEditar()
+  // A conta decide qual metragem divide o preço; o m² automático deste
+  // formulário tem de sair pela MESMA base que a tela do imóvel mostra depois.
+  const base = useBaseM2()
   const [importando, setImportando] = useState(false)
   const [form, setForm] = useState<Formulario | null>(null)
   const [editandoId, setEditandoId] = useState<number | null>(null)
@@ -99,19 +103,19 @@ export function UnidadesDoEmpreendimento({
 
   /** A metragem que a conta usou — a mesma ordem de `calcularValorM2`. */
   const baseDoValorM2 = useMemo(
-    () => lerNumero(form?.metragem_total ?? '') ?? lerNumero(form?.metragem ?? ''),
-    [form?.metragem_total, form?.metragem],
+    () => metragemDoM2(lerNumero(form?.metragem_total ?? ''), lerNumero(form?.metragem ?? ''), base),
+    [form?.metragem_total, form?.metragem, base],
   )
 
   /**
-   * O m² que sai da conta: preco ÷ metragem total (privativa so na falta
-   * dela). Recalcula a cada tecla na metragem OU no valor do imovel — nao ha
-   * botao nenhum a apertar.
+   * O m² que sai da conta: preco ÷ metragem da base da conta (a outra so na
+   * falta dela). Recalcula a cada tecla na metragem OU no valor do imovel —
+   * nao ha botao nenhum a apertar.
    */
   const valorM2Automatico = useMemo(() => {
     if (!form) return null
-    return calcularValorM2(precoNoFormulario, lerNumero(form.metragem_total), lerNumero(form.metragem))
-  }, [form, precoNoFormulario])
+    return calcularValorM2(precoNoFormulario, lerNumero(form.metragem_total), lerNumero(form.metragem), base)
+  }, [form, precoNoFormulario, base])
 
   /** O que aparece no campo: o digitado a mao ou o calculado. */
   const valorM2NoCampo = valorM2Manual
@@ -139,6 +143,7 @@ export function UnidadesDoEmpreendimento({
       unidade.valor ?? valorNoFluxo(unidade.fluxos),
       unidade.metragem_total,
       unidade.metragem,
+      base,
     )
     setValorM2Manual(
       unidade.valor_m2 !== null && (daConta === null || Math.abs(unidade.valor_m2 - daConta) > 0.01),
@@ -459,10 +464,24 @@ export function UnidadesDoEmpreendimento({
             <Campo rotulo="Metragem total" dica="m²">
               {entrada('metragem_total', { placeholder: '96', inputMode: 'decimal' })}
             </Campo>
+            {/* Área comum e terraço têm campo próprio: somá-las à privativa
+                mudaria o valor do m² sem ninguém perceber. */}
+            <Campo rotulo="Área comum" dica="m² — não entra no m²">
+              {entrada('area_comum', { placeholder: '22,8', inputMode: 'decimal' })}
+            </Campo>
+            <Campo rotulo="Área de terraço" dica="m²">
+              {entrada('area_terraco', { placeholder: '9,4', inputMode: 'decimal' })}
+            </Campo>
+            <Campo rotulo="Espaço complementar" className="col-span-2" dica="hobby box, depósito">
+              {entrada('espaco_complementar', { placeholder: 'Ex.: Hobby box 4,5 m²' })}
+            </Campo>
             <Campo rotulo="Dormitórios">{entrada('dormitorios', { placeholder: '3', inputMode: 'numeric' })}</Campo>
             <Campo rotulo="Suítes">{entrada('suites', { placeholder: '1', inputMode: 'numeric' })}</Campo>
             <Campo rotulo="Banheiros">{entrada('banheiros', { placeholder: '2', inputMode: 'numeric' })}</Campo>
             <Campo rotulo="Vagas">{entrada('vagas', { placeholder: '2', inputMode: 'numeric' })}</Campo>
+            <Campo rotulo="Detalhe das vagas" className="col-span-2" dica="números e tipo">
+              {entrada('vagas_detalhe', { placeholder: 'Ex.: Vagas 84 e 27, simples' })}
+            </Campo>
 
           </div>
 
@@ -473,13 +492,7 @@ export function UnidadesDoEmpreendimento({
             </Campo>
             <Campo
               rotulo="Valor do m²"
-              dica={
-                valorM2Manual
-                  ? 'informado à mão'
-                  : lerNumero(form.metragem_total) !== null
-                    ? 'automático: valor ÷ metragem total'
-                    : 'automático: valor ÷ metragem'
-              }
+              dica={valorM2Manual ? 'informado à mão' : `automático: valor ÷ ${ROTULO_BASE_M2[base]}`}
             >
               <input
                 className={`entrada${valorM2Manual ? '' : ' entrada--calculada'}`}

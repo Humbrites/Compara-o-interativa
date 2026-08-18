@@ -589,3 +589,169 @@ test('a unidade que não mudou nada também recebe a condição de pagamento da 
   assert.equal(aplicado.corpo.unidades[0].fluxos.length, 1)
   assert.equal(aplicado.corpo.unidades[0].fluxos[0].parcelas, 30)
 })
+
+/* ------------------------------------------------------------------ */
+/* Tipos de área, tipologia e torres                                    */
+/* ------------------------------------------------------------------ */
+
+test('os tipos de área e o detalhe das vagas chegam inteiros ao cadastro', async () => {
+  const id = await novoEmpreendimento('Residencial Áreas')
+
+  const lida = await previa(id, {
+    unidades: [
+      {
+        identificacao: 'Apto 1204',
+        torre: 'A',
+        numero: '1204',
+        metragem: '82,5',
+        metragem_total: '105,3',
+        area_comum: '22,8',
+        area_terraco: '9,4',
+        espaco_complementar: 'Hobby box 4,5 m²',
+        vagas: 2,
+        vagas_detalhe: 'Vagas 84 e 27, simples',
+        valor: 'R$ 845.000,00',
+      },
+    ],
+  })
+
+  assert.equal(lida.status, 200, JSON.stringify(lida.corpo))
+  const nova = lida.corpo.novas[0].campos
+  assert.equal(nova.metragem, 82.5)
+  assert.equal(nova.area_comum, 22.8)
+  assert.equal(nova.area_terraco, 9.4)
+  assert.equal(nova.espaco_complementar, 'Hobby box 4,5 m²')
+  assert.equal(nova.vagas_detalhe, 'Vagas 84 e 27, simples')
+
+  await confirmar(id, { criar: lida.corpo.novas.map((n) => n.campos) })
+
+  const [gravada] = (await sessao.pedir(`/api/empreendimentos/${id}/unidades`)).corpo
+  assert.equal(gravada.area_comum, 22.8)
+  assert.equal(gravada.area_terraco, 9.4)
+  assert.equal(gravada.espaco_complementar, 'Hobby box 4,5 m²')
+  assert.equal(gravada.vagas, 2)
+  assert.equal(gravada.vagas_detalhe, 'Vagas 84 e 27, simples')
+
+  // A área comum NÃO é somada à privativa nem entra no m² do empreendimento:
+  // 845.000 ÷ 82,5 = 10.242,42… (com os 22,8 dentro, cairia para ~8.021).
+  const empreendimento = (await sessao.pedir(`/api/empreendimentos/${id}`)).corpo
+  assert.ok(Math.abs(empreendimento.valor_m2 - 845000 / 82.5) < 0.01, `m² veio ${empreendimento.valor_m2}`)
+})
+
+test('suíte é dormitório: a contagem é derivada só quando a tabela não a traz', async () => {
+  const id = await novoEmpreendimento('Residencial Tipologia')
+
+  const lida = await previa(id, {
+    unidades: [
+      { identificacao: 'Apto 1', numero: '1', tipologia: '2 suítes', suites: 2 },
+      { identificacao: 'Apto 2', numero: '2', dormitorios: 3, suites: 1 },
+      { identificacao: 'Apto 3', numero: '3', suites: null },
+    ],
+  })
+
+  assert.equal(lida.status, 200, JSON.stringify(lida.corpo))
+  const [um, dois, tres] = lida.corpo.novas.map((n) => n.campos)
+  assert.equal(um.dormitorios, 2, 'duas suítes são dois dormitórios')
+  assert.equal(um.suites, 2)
+  assert.equal(dois.dormitorios, 3, 'dormitórios informado manda')
+  assert.equal(tres.dormitorios, null, 'sem suíte não há o que derivar — e nunca vira 0')
+
+  await confirmar(id, { criar: lida.corpo.novas.map((n) => n.campos) })
+
+  const gravadas = Object.fromEntries(
+    (await sessao.pedir(`/api/empreendimentos/${id}/unidades`)).corpo.map((u) => [u.numero, u]),
+  )
+  assert.equal(gravadas['1'].dormitorios, 2)
+  assert.equal(gravadas['2'].dormitorios, 3)
+  assert.equal(gravadas['3'].dormitorios, null)
+})
+
+test('as torres vêm na prévia, são gravadas na confirmação e nunca são apagadas por engano', async () => {
+  const id = await novoEmpreendimento('Residencial Torres')
+
+  const unidades = [{ identificacao: 'Apto 101', torre: 'A', numero: '101', valor: 500000 }]
+
+  const lida = await previa(id, { torres: 2, unidades })
+  assert.equal(lida.status, 200, JSON.stringify(lida.corpo))
+  assert.equal(lida.corpo.torres, 2, 'a prévia devolve a proposta de torres')
+  assert.equal(lida.corpo.torresAtual, null, 'e o que já está gravado, para a tela comparar')
+  assert.equal(lida.corpo.empreendimento, 'Residencial Torres')
+  assert.equal(lida.corpo.totalRecebidas, 1)
+
+  // Nada foi gravado pela prévia.
+  assert.equal((await sessao.pedir(`/api/empreendimentos/${id}`)).corpo.torres, null)
+
+  // Quem confirma manda: a tela mandou 3 no lugar das 2 que a IA propôs.
+  const aplicado = await confirmar(id, { criar: lida.corpo.novas.map((n) => n.campos), torres: 3 })
+  assert.equal(aplicado.status, 200)
+  assert.equal(aplicado.corpo.torres, 3)
+  assert.equal((await sessao.pedir(`/api/empreendimentos/${id}`)).corpo.torres, 3)
+
+  // Segunda importação sem torres: o que está no cadastro fica como está.
+  const segunda = await previa(id, { unidades })
+  assert.equal(segunda.corpo.torres, null)
+  assert.equal(segunda.corpo.torresAtual, 3)
+  await confirmar(id, {
+    atualizar: segunda.corpo.inalteradas.map((u) => ({ id: u.id, campos: { valor: 520000 } })),
+  })
+  assert.equal((await sessao.pedir(`/api/empreendimentos/${id}`)).corpo.torres, 3)
+
+  // Ajustar SÓ as torres é motivo suficiente para confirmar.
+  const soTorres = await confirmar(id, { criar: [], atualizar: [], marcarIndisponiveis: [], torres: 4 })
+  assert.equal(soTorres.status, 200)
+  assert.equal((await sessao.pedir(`/api/empreendimentos/${id}`)).corpo.torres, 4)
+})
+
+test('torres impossível é recusado — na prévia e na confirmação', async () => {
+  const id = await novoEmpreendimento('Residencial Torres Inválidas')
+  const unidades = [{ identificacao: 'Apto 101', numero: '101' }]
+
+  for (const torres of [0, -2, 'duas']) {
+    const resposta = await previa(id, { torres, unidades })
+    assert.equal(resposta.status, 400, `torres = ${torres}`)
+    assert.match([resposta.corpo.erro, ...(resposta.corpo.problemas ?? [])].join(' | '), /"torres"/)
+  }
+
+  const confirmacao = await confirmar(id, { criar: unidades, torres: 0 })
+  assert.equal(confirmacao.status, 400)
+  assert.equal((await sessao.pedir(`/api/empreendimentos/${id}/unidades`)).corpo.length, 0, 'nada foi gravado')
+})
+
+/* ------------------------------------------------------------------ */
+/* A base do valor do m²                                                */
+/* ------------------------------------------------------------------ */
+
+test('trocar a base do m² na conta refaz o número de todos os empreendimentos', async () => {
+  const id = await novoEmpreendimento('Residencial Base do m²')
+
+  await sessao.pedir('/api/unidades', {
+    metodo: 'POST',
+    corpo: { empreendimento_id: id, identificacao: 'Apto 101', numero: '101', metragem: 80, metragem_total: 100, valor: 800000 },
+  })
+
+  // O padrão é a área PRIVATIVA: 800.000 ÷ 80.
+  assert.equal((await sessao.pedir('/api/conta')).corpo.base_m2, 'privativa')
+  assert.equal((await sessao.pedir(`/api/empreendimentos/${id}`)).corpo.valor_m2, 10000)
+
+  const trocada = await sessao.pedir('/api/conta', { metodo: 'PUT', corpo: { base_m2: 'total' } })
+  assert.equal(trocada.status, 200)
+  assert.equal(trocada.corpo.base_m2, 'total')
+  // O recálculo é imediato: o número fica gravado, e é ele que os filtros leem.
+  assert.equal((await sessao.pedir(`/api/empreendimentos/${id}`)).corpo.valor_m2, 8000)
+
+  // A unidade cadastrada DEPOIS da troca também sai pela base nova.
+  await sessao.pedir('/api/unidades', {
+    metodo: 'POST',
+    corpo: { empreendimento_id: id, identificacao: 'Apto 102', numero: '102', metragem: 120, metragem_total: 150, valor: 1200000 },
+  })
+  assert.equal((await sessao.pedir(`/api/empreendimentos/${id}`)).corpo.valor_m2, 8000)
+
+  // Base fora do par é recusada — senão todo m² cairia calado no padrão.
+  const invalida = await sessao.pedir('/api/conta', { metodo: 'PUT', corpo: { base_m2: 'area-util' } })
+  assert.equal(invalida.status, 400)
+  assert.match(invalida.corpo.erro, /privativa ou total/)
+
+  // Volta ao padrão para não contaminar os outros testes.
+  await sessao.pedir('/api/conta', { metodo: 'PUT', corpo: { base_m2: 'privativa' } })
+  assert.equal((await sessao.pedir(`/api/empreendimentos/${id}`)).corpo.valor_m2, 10000)
+})

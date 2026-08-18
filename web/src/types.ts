@@ -50,10 +50,17 @@ export interface Unidade {
   numero: string | null
   metragem: number | null
   metragem_total: number | null
+  /** Fracao de area comum que cabe a unidade — NUNCA somada a privativa. */
+  area_comum: number | null
+  area_terraco: number | null
+  /** Hobby box, deposito, adega: o que a tabela chamou de espaco complementar. */
+  espaco_complementar: string | null
   dormitorios: number | null
   suites: number | null
   banheiros: number | null
   vagas: number | null
+  /** O que a coluna de vagas dizia: "Vagas 84 e 27 (simples)". */
+  vagas_detalhe: string | null
   posicao_solar: string | null
   face: string | null
   valor: number | null
@@ -85,10 +92,14 @@ export interface CamposImportados {
   tipologia: string | null
   metragem: number | null
   metragem_total: number | null
+  area_comum: number | null
+  area_terraco: number | null
+  espaco_complementar: string | null
   dormitorios: number | null
   suites: number | null
   banheiros: number | null
   vagas: number | null
+  vagas_detalhe: string | null
   valor: number | null
   status: StatusUnidade | null
   observacoes: string | null
@@ -167,6 +178,8 @@ export interface EntradaImportacao {
   unidades: (CamposImportados & { fluxo?: FluxoDaConstrutora | null })[]
   duvidas: DuvidaImportacao[]
   fluxo_construtora: FluxoDaConstrutora | null
+  /** Quantas torres a tabela deixou concluir; null quando ela nao diz. */
+  torres: number | null
 }
 
 /** A previa: o que aconteceria se a importacao fosse confirmada. */
@@ -181,6 +194,11 @@ export interface PreviaImportacao {
   ausentes: UnidadeAusente[]
   duvidas: DuvidaImportacao[]
   fluxo_construtora: FluxoDaConstrutora | null
+  /** Nome do empreendimento, para o cabeçalho-resumo da prévia. */
+  empreendimento: string
+  /** Torres lidas da tabela (proposta) e as que ja estao gravadas. */
+  torres: number | null
+  torresAtual: number | null
   totalRecebidas: number
 }
 
@@ -189,6 +207,8 @@ export interface ConfirmacaoImportacao {
   atualizar: { id: number; campos: Partial<CamposImportados>; fluxo?: FluxoDaConstrutora | null }[]
   marcarIndisponiveis: number[]
   fluxo_construtora?: FluxoDaConstrutora | null
+  /** Grava `empreendimentos.torres`; ausente ou null nao mexe no que esta la. */
+  torres?: number | null
   /**
    * Gravar a condicao de pagamento como fluxo NAS UNIDADES importadas. Vem
    * marcado quando ha fluxo, mas e escolha de quem confirma: quem so quer
@@ -205,6 +225,8 @@ export interface ResultadoImportacao {
   /** Fluxos de pagamento criados e atualizados nas unidades desta importacao. */
   fluxosCriados: number
   fluxosAtualizados: number
+  /** Torres gravadas no empreendimento; null quando ninguem informou. */
+  torres: number | null
   unidades: Unidade[]
   fluxo_construtora: FluxoDaConstrutora | null
 }
@@ -238,6 +260,8 @@ export interface Empreendimento {
   suites: number | null
   banheiros: number | null
   vagas: number | null
+  /** Quantas torres/blocos o empreendimento tem. */
+  torres: number | null
   status_obra: string | null
   entrega: string | null
   tipo: string | null

@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 
 import { analisarUnidade, textoDaPosicao, textoDoParcelamento, type AnaliseDaUnidade } from '../lib/analise'
+import { useBaseM2 } from '../lib/baseM2'
 import { fmtArea, fmtMoeda, TRACO } from '../lib/format'
 import { fmtPercentual } from '../lib/cub'
 import { rotuloUnidade } from '../lib/unidades'
@@ -105,7 +106,8 @@ function BarraDoPagamento({ analise }: { analise: AnaliseDaUnidade }) {
 }
 
 export function AnaliseUnidade({ unidade, unidades, indice, nomeDoEmpreendimento, onFechar }: Props) {
-  const analise = useMemo(() => analisarUnidade(unidade, unidades), [unidade, unidades])
+  const base = useBaseM2()
+  const analise = useMemo(() => analisarUnidade(unidade, unidades, base), [unidade, unidades, base])
 
   const semTabela = analise.fluxo === null
   const pct = (valor: number | null) => (valor === null ? TRACO : fmtPercentual(valor, 1))
