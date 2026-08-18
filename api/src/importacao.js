@@ -283,7 +283,11 @@ export function montarDiff(existentes, recebidas) {
     // condição de pagamento própria: é uma mudança de verdade, e sem isso o
     // fluxo dela se perderia entre a prévia e a gravação.
     if (campos.length > 0 || fluxo) {
-      alteradas.push({ id: atual.id, identificacao: rotulo(atual), antes, depois, campos, fluxo })
+      // `proposto` é a LINHA INTEIRA como a tabela foi lida, e não só o que
+      // mudou: é dela que a prévia monta os campos para quem quer corrigir a
+      // leitura antes de gravar. O diff (antes/depois) continua sendo o que a
+      // tela destaca — corrigir é a exceção, ver o que muda é o caso normal.
+      alteradas.push({ id: atual.id, identificacao: rotulo(atual), antes, depois, campos, proposto: unidade, fluxo })
     } else {
       inalteradas.push({ id: atual.id, identificacao: rotulo(atual) })
     }

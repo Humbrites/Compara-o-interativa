@@ -11,6 +11,7 @@
  */
 import test, { after, before } from 'node:test'
 import assert from 'node:assert/strict'
+import Database from 'better-sqlite3'
 import { execFile, spawn } from 'node:child_process'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -229,6 +230,7 @@ test('confirmar cria, atualiza e marca indisponível — tudo numa transação, 
     criadas: 1,
     atualizadas: 1,
     indisponiveis: 1,
+    corrigidas: 0,
     fluxosCriados: 0,
     fluxosAtualizados: 0,
   })
@@ -715,6 +717,157 @@ test('torres impossível é recusado — na prévia e na confirmação', async (
   const confirmacao = await confirmar(id, { criar: unidades, torres: 0 })
   assert.equal(confirmacao.status, 400)
   assert.equal((await sessao.pedir(`/api/empreendimentos/${id}/unidades`)).corpo.length, 0, 'nada foi gravado')
+})
+
+/* ------------------------------------------------------------------ */
+/* Correção da leitura na prévia                                        */
+/* ------------------------------------------------------------------ */
+
+test('o que a pessoa corrigiu na prévia vence o que a IA leu — e o histórico registra', async () => {
+  const id = await novoEmpreendimento('Residencial Correção')
+
+  const gravada = await sessao.pedir('/api/unidades', {
+    metodo: 'POST',
+    corpo: {
+      empreendimento_id: id,
+      identificacao: 'Apto 101',
+      torre: 'A',
+      numero: '101',
+      metragem: 70,
+      valor: 500000,
+      status: 'Disponível',
+    },
+  })
+
+  const lida = await previa(id, {
+    unidades: [
+      // A coluna do preço foi lida errada: 54.500 no lugar de 545.000.
+      { identificacao: 'Apto 101', torre: 'A', numero: '101', metragem: 70, valor: 54500 },
+      { identificacao: 'Apto 201', torre: 'A', numero: '201', metragem: 95, valor: 780000, status: 'disponivel' },
+    ],
+  })
+
+  assert.equal(lida.status, 200)
+  const alterada = lida.corpo.alteradas[0]
+  assert.equal(alterada.id, gravada.corpo.id)
+  // A prévia devolve a LINHA INTEIRA lida, e não só o que mudou: é dela que a
+  // tela monta os campos para corrigir. A metragem não mudou e mesmo assim vem.
+  assert.equal(alterada.proposto.metragem, 70)
+  assert.equal(alterada.proposto.valor, 54500)
+  assert.equal(alterada.proposto.espaco_complementar, null, 'campo que a tabela não trouxe vem NULL, nunca vazio')
+
+  const aplicado = await confirmar(id, {
+    criar: [{ ...lida.corpo.novas[0].campos, valor: 760000, corrigida: true }],
+    // O corrigido entra por cima do proposto, no mesmo formato de sempre.
+    atualizar: [{ id: alterada.id, campos: { ...alterada.depois, valor: 545000 }, corrigida: true }],
+    marcarIndisponiveis: [],
+  })
+
+  assert.equal(aplicado.status, 200)
+  assert.equal(aplicado.corpo.corrigidas, 2)
+
+  const porNumero = Object.fromEntries(
+    (await sessao.pedir(`/api/empreendimentos/${id}/unidades`)).corpo.map((u) => [u.numero, u]),
+  )
+  assert.equal(porNumero['101'].valor, 545000, 'o valor corrigido vence o que a IA propôs')
+  assert.equal(porNumero['201'].valor, 760000)
+
+  const historico = (await sessao.pedir(`/api/empreendimentos/${id}/importacoes`)).corpo
+  assert.equal(historico[0].contagens.corrigidas, 2)
+  assert.equal(historico[0].contagens.atualizadas, 1)
+})
+
+test('o resumo gravado guarda os campos novos e de onde cada linha veio', async () => {
+  const id = await novoEmpreendimento('Residencial Resumo')
+
+  const aplicado = await confirmar(id, {
+    criar: [
+      {
+        identificacao: 'Apto 1204',
+        numero: '1204',
+        metragem: 62.5,
+        area_comum: 18.3,
+        area_terraco: 9.4,
+        espaco_complementar: 'Hobby box 4 m²',
+        suites: 2,
+        vagas: 2,
+        vagas_detalhe: 'Vaga 84 simples, Vaga 27 simples',
+        valor: 890000,
+        corrigida: true,
+      },
+    ],
+    atualizar: [],
+    marcarIndisponiveis: [],
+  })
+  assert.equal(aplicado.status, 200)
+
+  // O histórico é lido do banco: a rota do dashboard só devolve as contagens, e
+  // o resumo completo é o que responde "o que a importação de terça gravou".
+  const banco = new Database(join(pasta, 'teste.db'), { readonly: true })
+  const linha = banco
+    .prepare('SELECT resumo FROM importacoes WHERE empreendimento_id = ? ORDER BY id DESC LIMIT 1')
+    .get(id)
+  banco.close()
+
+  const resumo = JSON.parse(linha.resumo)
+  assert.equal(resumo.contagens.corrigidas, 1)
+
+  const criada = resumo.criadas[0]
+  assert.equal(criada.corrigida, true, 'o resumo diz que a linha foi corrigida à mão')
+  assert.equal(criada.area_comum, 18.3)
+  assert.equal(criada.area_terraco, 9.4)
+  assert.equal(criada.espaco_complementar, 'Hobby box 4 m²')
+  assert.equal(criada.vagas_detalhe, 'Vaga 84 simples, Vaga 27 simples')
+  // Suíte é dormitório: a derivação também fica registrada no histórico.
+  assert.equal(criada.dormitorios, 2)
+})
+
+test('reservada e vendida na tabela nova mudam o status da unidade casada', async () => {
+  const id = await novoEmpreendimento('Residencial Disponibilidade')
+
+  for (const numero of ['101', '102', '103']) {
+    await sessao.pedir('/api/unidades', {
+      metodo: 'POST',
+      corpo: {
+        empreendimento_id: id,
+        identificacao: `Apto ${numero}`,
+        torre: 'A',
+        numero,
+        valor: 500000,
+        status: 'Disponível',
+      },
+    })
+  }
+
+  const lida = await previa(id, {
+    unidades: [
+      { identificacao: 'Apto 101', torre: 'A', numero: '101', status: 'Reservada' },
+      { identificacao: 'Apto 102', torre: 'A', numero: '102', status: 'VENDIDO' },
+      { identificacao: 'Apto 103', torre: 'A', numero: '103', status: 'disponivel' },
+    ],
+  })
+
+  assert.equal(lida.status, 200)
+  // Só as duas que mudaram de fato entram no diff — a que segue disponível não.
+  assert.deepEqual(
+    lida.corpo.alteradas.map((a) => a.depois.status).sort(),
+    ['reservada', 'vendida'],
+  )
+
+  await confirmar(id, {
+    criar: [],
+    atualizar: lida.corpo.alteradas.map((a) => ({ id: a.id, campos: a.depois })),
+    marcarIndisponiveis: [],
+  })
+
+  const porNumero = Object.fromEntries(
+    (await sessao.pedir(`/api/empreendimentos/${id}/unidades`)).corpo.map((u) => [u.numero, u]),
+  )
+  assert.equal(porNumero['101'].status, 'reservada')
+  assert.equal(porNumero['102'].status, 'vendida')
+  assert.equal(porNumero['103'].status, 'Disponível', 'quem não mudou continua exatamente como estava')
+  // Status é mudança de disponibilidade, não de preço: nada mais foi tocado.
+  assert.equal(porNumero['101'].valor, 500000)
 })
 
 /* ------------------------------------------------------------------ */

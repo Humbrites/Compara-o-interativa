@@ -12,6 +12,33 @@ import assert from 'node:assert/strict'
 
 import { montarPromptDeImportacao, STATUS_ACEITOS } from '../src/lib/promptImportacao.ts'
 import { extrairJson, lerNumeroBr, validarRespostaDaIa } from '../src/lib/validarImportacao.ts'
+import { correcoesEfetivas, textoDoCampo, variacaoDePreco } from '../src/lib/correcaoImportacao.ts'
+import type { CamposImportados } from '../src/types.ts'
+
+/** Uma linha lida da tabela: o que não veio é NULL, como a API devolve. */
+function unidadeLida(parcial: Partial<CamposImportados>): CamposImportados {
+  return {
+    identificacao: null,
+    torre: null,
+    andar: null,
+    numero: null,
+    tipologia: null,
+    metragem: null,
+    metragem_total: null,
+    area_comum: null,
+    area_terraco: null,
+    espaco_complementar: null,
+    dormitorios: null,
+    suites: null,
+    banheiros: null,
+    vagas: null,
+    vagas_detalhe: null,
+    valor: null,
+    status: null,
+    observacoes: null,
+    ...parcial,
+  }
+}
 
 /* --- O prompt ------------------------------------------------------- */
 
@@ -352,4 +379,55 @@ test('o prompt ensina os tipos de área, a tipologia, as vagas e as torres', () 
   assert.match(prompt, /"torres": null/)
   // Parcela única sem lugar definido não escolhe bloco.
   assert.match(prompt, /PARCELA ÚNICA/)
+})
+
+/* --- Correção da leitura na prévia ---------------------------------- */
+
+test('o campo não tocado não vira correção — o número volta igual da tela', () => {
+  const proposto = unidadeLida({ metragem: 62.5, valor: 890000, dormitorios: 2 })
+
+  // É assim que o input mostra: pt-BR, do jeito que a pessoa lê e digita.
+  assert.equal(textoDoCampo('valor', proposto.valor), '890.000')
+  assert.equal(textoDoCampo('metragem', proposto.metragem), '62,5')
+  assert.equal(textoDoCampo('espaco_complementar', proposto.espaco_complementar), '')
+
+  // Digitar o mesmo texto que já estava lá NÃO é corrigir: sem isso, clicar no
+  // campo e sair marcaria a linha como corrigida à mão.
+  const iguais = correcoesEfetivas({ valor: '890.000', metragem: '62,5' }, proposto)
+  assert.deepEqual(iguais, {})
+})
+
+test('o valor corrigido vence o proposto, e campo em branco vira NULL', () => {
+  const proposto = unidadeLida({ metragem: 700, valor: 54500, status: 'disponivel', tipologia: '2 suítes' })
+
+  const corrigido = correcoesEfetivas(
+    {
+      // A coluna do preço foi lida errada: 54.500 no lugar de 545.000.
+      valor: '545.000',
+      metragem: '70',
+      // Campo esvaziado: "não informado", nunca 0 nem string vazia.
+      tipologia: '   ',
+      status: 'vendida',
+      // Inteiro continua inteiro mesmo digitado com casa decimal.
+      vagas: '2,4',
+    },
+    proposto,
+  )
+
+  assert.deepEqual(corrigido, {
+    valor: 545000,
+    metragem: 70,
+    tipologia: null,
+    status: 'vendida',
+    vagas: 2,
+  })
+})
+
+test('a variação de preço tem sinal e só existe quando os dois lados têm número', () => {
+  // O espaço depois de "R$" é o NÃO-SEPARÁVEL que o Intl pt-BR usa — comparar
+  // com um espaço comum daria falso negativo aqui e em qualquer teste de tela.
+  assert.deepEqual(variacaoDePreco(500000, 545000), { texto: '+R$\u00A045.000', subiu: true })
+  assert.deepEqual(variacaoDePreco(545000, 500000), { texto: '−R$\u00A045.000', subiu: false })
+  assert.equal(variacaoDePreco(500000, 500000), null)
+  assert.equal(variacaoDePreco(null, 500000), null, 'sem o lado de antes não há diferença a mostrar')
 })

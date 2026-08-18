@@ -1568,6 +1568,72 @@ select.entrada {
   text-transform: capitalize;
 }
 
+/* Preço e disponibilidade não são "mais um campo que mudou": são a mudança que
+   decide a conversa de venda da semana. Elas ganham peso na lista do diff. */
+.importacao__mudanca--chave .importacao__campo,
+.importacao__mudanca--chave .importacao__depois {
+  color: var(--texto);
+  font-weight: 700;
+}
+
+/* Quanto o preço subiu ou desceu. O verde do projeto é reservado ao "melhor
+   indicador" — preço que CAI é bom para quem compra, e é ele que fica verde. */
+.importacao__variacao {
+  padding: 1px 7px;
+  border-radius: var(--raio-pill);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.importacao__variacao--sobe {
+  background: var(--alerta-fundo);
+  color: var(--alerta);
+}
+
+.importacao__variacao--desce {
+  background: var(--vitoria-fundo);
+  color: var(--vitoria);
+}
+
+/* --- Correção da leitura, linha a linha --------------------------------- */
+
+/* A linha que a pessoa corrigiu à mão fica marcada até a confirmação: o que
+   vai ser gravado ali não é mais o que a IA leu. */
+.importacao__item--corrigida {
+  border-color: var(--marca-400);
+  background: var(--marca-50);
+}
+
+.importacao__selo--corrigida {
+  background: var(--marca-100);
+  color: var(--marca-700);
+}
+
+.importacao__corrigir {
+  margin-top: var(--e2);
+  /* Alinhado com o texto do rótulo, não com a caixinha de marcação. */
+  margin-left: calc(16px + var(--e2));
+}
+
+.importacao__editor {
+  margin: var(--e3) 0 0;
+  padding: var(--e4);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-sm);
+  background: var(--superficie);
+}
+
+.importacao__editor .importacao__nota {
+  margin-top: var(--e4);
+}
+
+/* O campo alterado precisa se distinguir dos vizinhos sem depender só da
+   palavra "corrigido" no rótulo. */
+.campo--corrigido .entrada {
+  border-color: var(--marca-400);
+  background: var(--marca-50);
+}
+
 .importacao__contagens {
   margin: 0;
   padding: 0;

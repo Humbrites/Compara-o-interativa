@@ -11,10 +11,19 @@ import type {
 import { api } from '../lib/api'
 import { mensagemDoErro } from '../lib/http'
 import { fmtMoeda, fmtNumero, TRACO } from '../lib/format'
-import { rotuloStatusUnidade } from '../lib/opcoes'
+import { rotuloStatusUnidade, STATUS_UNIDADE_SLUG } from '../lib/opcoes'
 import { montarPromptDeImportacao } from '../lib/promptImportacao'
 import { descreverFluxoDaConstrutora, nomeDoFluxoImportado } from '../lib/fluxoImportado'
 import { validarRespostaDaIa } from '../lib/validarImportacao'
+import {
+  CAMPOS_EDITAVEIS,
+  CAMPOS_NUMERICOS,
+  correcoesEfetivas,
+  ROTULO_CAMPO_IMPORTADO as ROTULO_CAMPO,
+  textoDoCampo,
+  variacaoDePreco,
+  type CorrecoesDaLinha,
+} from '../lib/correcaoImportacao'
 import { Icone } from './Icones'
 import { Campo, Modal } from './ui'
 
@@ -36,27 +45,6 @@ import { Campo, Modal } from './ui'
 /* Formatação dos valores da prévia                                    */
 /* ------------------------------------------------------------------ */
 
-const ROTULO_CAMPO: Record<CampoImportado, string> = {
-  identificacao: 'Identificação',
-  torre: 'Torre',
-  andar: 'Andar',
-  numero: 'Número',
-  tipologia: 'Tipologia',
-  metragem: 'Metragem privativa',
-  metragem_total: 'Metragem total',
-  area_comum: 'Área comum',
-  area_terraco: 'Área de terraço',
-  espaco_complementar: 'Espaço complementar',
-  dormitorios: 'Dormitórios',
-  suites: 'Suítes',
-  banheiros: 'Banheiros',
-  vagas: 'Vagas',
-  vagas_detalhe: 'Detalhe das vagas',
-  valor: 'Valor',
-  status: 'Status',
-  observacoes: 'Observações',
-}
-
 const AREAS = new Set<CampoImportado>(['metragem', 'metragem_total', 'area_comum', 'area_terraco'])
 
 /** O valor de um campo como a prévia mostra — cada tipo na sua unidade. */
@@ -73,6 +61,81 @@ function rotuloDaNova(campos: CamposImportados): string {
   if (campos.identificacao) return campos.identificacao
   const partes = [campos.torre, campos.numero ? `nº ${campos.numero}` : null].filter(Boolean)
   return partes.length > 0 ? partes.join(' · ') : 'Unidade sem identificação'
+}
+
+/* ------------------------------------------------------------------ */
+/* Correção da leitura, antes de gravar                                */
+/* ------------------------------------------------------------------ */
+
+/** Preço e disponibilidade: as duas mudanças que decidem uma conversa de venda. */
+const CAMPOS_CHAVE = new Set<CampoImportado>(['valor', 'status'])
+
+/**
+ * Como cada linha da prévia é identificada enquanto ela ainda não foi gravada:
+ * a nova só existe pela posição na lista; a alterada já tem id no banco.
+ */
+const chaveNova = (indice: number) => `n${indice}`
+const chaveAlterada = (id: number) => `a${id}`
+
+/**
+ * Os campos importáveis de uma linha, em inputs, para corrigir a leitura da IA
+ * antes de gravar.
+ *
+ * Existe porque a tabela da construtora não é padronizada: uma coluna lida como
+ * área comum quando era privativa vira preço do m² errado em trinta unidades, e
+ * hoje a única saída seria voltar ao chat e refazer a resposta inteira.
+ */
+function EditorDaLinha({
+  proposto,
+  digitado,
+  onMudar,
+  aviso,
+}: {
+  proposto: CamposImportados
+  digitado: CorrecoesDaLinha | undefined
+  onMudar: (campo: CampoImportado, texto: string) => void
+  aviso: string
+}) {
+  return (
+    <div className="importacao__editor">
+      <div className="grade grade--compacta">
+        {CAMPOS_EDITAVEIS.map((campo) => {
+          const proposta = textoDoCampo(campo, proposto[campo])
+          const texto = digitado?.[campo] ?? proposta
+          const mudou = texto !== proposta
+
+          return (
+            <Campo
+              key={campo}
+              rotulo={ROTULO_CAMPO[campo]}
+              dica={mudou ? 'corrigido' : undefined}
+              className={mudou ? 'campo--corrigido' : undefined}
+            >
+              {campo === 'status' ? (
+                <select className="entrada" value={texto} onChange={(evento) => onMudar(campo, evento.target.value)}>
+                  <option value="">Não informado</option>
+                  {STATUS_UNIDADE_SLUG.map((slug) => (
+                    <option key={slug} value={slug}>
+                      {rotuloStatusUnidade(slug)}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  className="entrada"
+                  value={texto}
+                  onChange={(evento) => onMudar(campo, evento.target.value)}
+                  inputMode={CAMPOS_NUMERICOS.has(campo) ? 'decimal' : undefined}
+                  placeholder={CAMPOS_NUMERICOS.has(campo) ? '—' : 'Não informado'}
+                />
+              )}
+            </Campo>
+          )
+        })}
+      </div>
+      <p className="importacao__nota">{aviso}</p>
+    </div>
+  )
 }
 
 /** O resumo de uma unidade nova, na linha: o que dela dá para dizer. */
@@ -128,8 +191,11 @@ async function copiarTexto(texto: string): Promise<boolean> {
 
 interface Props {
   empreendimento: Empreendimento
-  /** A lista da tela acompanha: a rota de confirmar devolve as unidades prontas. */
-  onImportou: (unidades: Unidade[]) => void
+  /**
+   * A lista da tela acompanha: a rota de confirmar devolve as unidades prontas
+   * e as torres gravadas no prédio (null quando ninguém informou nenhuma).
+   */
+  onImportou: (unidades: Unidade[], torres: number | null) => void
   avisar: (texto: string, tipo?: 'sucesso' | 'erro') => void
   onFechar: () => void
 }
@@ -159,6 +225,12 @@ export function ImportarTabela({ empreendimento, onImportou, avisar, onFechar }:
   // Torres é PROPOSTA da leitura: quem confirma ajusta antes de gravar. Texto
   // (e não número) porque o campo em branco precisa continuar "não informado".
   const [torres, setTorres] = useState('')
+  // O que a pessoa corrigiu na prévia, por linha. Guardado como TEXTO: é o que
+  // está no input, e a conversão para número/status acontece na confirmação.
+  const [correcoes, setCorrecoes] = useState<Record<string, CorrecoesDaLinha>>({})
+  // Quais linhas estão com os campos abertos. Fechadas por padrão: corrigir é a
+  // exceção, e a prévia existe primeiro para MOSTRAR o que vai acontecer.
+  const [editando, setEditando] = useState<Set<string>>(new Set())
 
   const prompt = useMemo(
     () => montarPromptDeImportacao({ empreendimento: empreendimento.nome }),
@@ -216,6 +288,10 @@ export function ImportarTabela({ empreendimento, onImportou, avisar, onFechar }:
       setCriarMarcadas(new Set(resposta.novas.map((_, indice) => indice)))
       setAtualizarMarcadas(new Set(resposta.alteradas.map((a) => a.id)))
       setAusentesMarcadas(new Set())
+      // Prévia nova, leitura nova: correção de uma tabela anterior não pode
+      // sobreviver a uma segunda colagem.
+      setCorrecoes({})
+      setEditando(new Set())
       setGravarFluxo(true)
       // O que a tabela deixou concluir; sem conclusão, o que já está gravado —
       // e nunca um número inventado para preencher o campo.
@@ -239,12 +315,40 @@ export function ImportarTabela({ empreendimento, onImportou, avisar, onFechar }:
     try {
       const resposta = await api.confirmarImportacao(empreendimento.id, {
         criar: previa.novas
-          .filter((_, indice) => criarMarcadas.has(indice))
-          .map((nova) => ({ ...nova.campos, fluxo: nova.fluxo ?? null })),
+          .map((nova, indice) => ({ nova, indice }))
+          .filter(({ indice }) => criarMarcadas.has(indice))
+          .map(({ nova, indice }) => {
+            // O corrigido VENCE o proposto. A API revalida os dois do mesmo
+            // jeito — para ela é tudo texto colado por uma pessoa.
+            const correcao = correcoesEfetivas(correcoes[chaveNova(indice)], nova.campos)
+            return {
+              ...nova.campos,
+              ...correcao,
+              fluxo: nova.fluxo ?? null,
+              corrigida: Object.keys(correcao).length > 0,
+            }
+          }),
         atualizar: [
           ...previa.alteradas
             .filter((alterada) => atualizarMarcadas.has(alterada.id))
-            .map((alterada) => ({ id: alterada.id, campos: alterada.depois, fluxo: alterada.fluxo ?? null })),
+            .map((alterada) => {
+              const correcao = correcoesEfetivas(correcoes[chaveAlterada(alterada.id)], alterada.proposto)
+              const campos: Record<string, unknown> = { ...alterada.depois }
+
+              for (const [campo, valor] of Object.entries(correcao)) {
+                // Campo esvaziado na correção NÃO apaga o que está gravado: a
+                // importação apenas deixa de mexer nele. Nada aqui zera unidade.
+                if (valor === null) delete campos[campo]
+                else campos[campo] = valor
+              }
+
+              return {
+                id: alterada.id,
+                campos: campos as Partial<CamposImportados>,
+                fluxo: alterada.fluxo ?? null,
+                corrigida: Object.keys(correcao).length > 0,
+              }
+            }),
           // Unidade que não mudou nada entra SÓ para receber a condição de
           // pagamento — sem campos, ela não é contada como atualizada.
           ...(gravarFluxo && previa.fluxo_construtora
@@ -261,7 +365,7 @@ export function ImportarTabela({ empreendimento, onImportou, avisar, onFechar }:
         torres: torresInformadas,
       })
       setResultado(resposta)
-      onImportou(resposta.unidades)
+      onImportou(resposta.unidades, resposta.torres)
       setPasso(4)
       avisar('Tabela importada', 'sucesso')
     } catch (falha) {
@@ -281,6 +385,31 @@ export function ImportarTabela({ empreendimento, onImportou, avisar, onFechar }:
     else proximo.add(chave)
     definir(proximo)
   }
+
+  /** O que a pessoa acabou de digitar num campo de uma linha da prévia. */
+  const corrigir = (chave: string, campo: CampoImportado, texto: string) =>
+    setCorrecoes((atual) => ({ ...atual, [chave]: { ...atual[chave], [campo]: texto } }))
+
+  const alternarEdicao = (chave: string) =>
+    setEditando((atual) => {
+      const proximo = new Set(atual)
+      if (proximo.has(chave)) proximo.delete(chave)
+      else proximo.add(chave)
+      return proximo
+    })
+
+  /** O botão que abre os campos de uma linha para correção. */
+  const botaoCorrigir = (chave: string) => (
+    <button
+      type="button"
+      className="btn btn--fantasma btn--pequeno importacao__corrigir"
+      onClick={() => alternarEdicao(chave)}
+      aria-expanded={editando.has(chave)}
+    >
+      <Icone nome="lapis" tamanho={12} />
+      {editando.has(chave) ? 'Fechar os campos' : 'Corrigir a leitura'}
+    </button>
+  )
 
   /* --- Rodapé: um único CTA primário por passo ---------------------- */
 
@@ -492,6 +621,10 @@ export function ImportarTabela({ empreendimento, onImportou, avisar, onFechar }:
                 ? ' As torres serão gravadas no empreendimento ao confirmar.'
                 : ' Em branco, as torres do cadastro ficam como estão.'}
             </p>
+            <p className="importacao__nota">
+              Leu algo errado? Use <strong>Corrigir a leitura</strong> na linha: o valor que você digitar entra no lugar
+              do que a IA propôs.
+            </p>
           </section>
 
           {previa.duvidas.length > 0 && (
@@ -524,24 +657,50 @@ export function ImportarTabela({ empreendimento, onImportou, avisar, onFechar }:
               <p className="importacao__vazio">Nenhuma unidade nova — todas as linhas da tabela já estão no cadastro.</p>
             ) : (
               <ul className="importacao__itens">
-                {previa.novas.map((nova, indice) => (
-                  <li key={indice} className="importacao__item">
-                    <label className="importacao__marca">
-                      <input
-                        type="checkbox"
-                        checked={criarMarcadas.has(indice)}
-                        onChange={() => alternar(criarMarcadas, setCriarMarcadas, indice)}
-                      />
-                      <span className="importacao__nome">{rotuloDaNova(nova.campos)}</span>
-                      {nova.fluxo && (
-                        <span className="importacao__selo" title="Esta unidade tem condição de pagamento própria">
-                          condição própria
-                        </span>
+                {previa.novas.map((nova, indice) => {
+                  const chave = chaveNova(indice)
+                  const correcao = correcoesEfetivas(correcoes[chave], nova.campos)
+                  const corrigida = Object.keys(correcao).length > 0
+                  // A linha mostra o que VAI ser gravado: com correção, o
+                  // corrigido; sem ela, o que a tabela trouxe.
+                  const campos = { ...nova.campos, ...correcao }
+
+                  return (
+                    <li key={indice} className={`importacao__item${corrigida ? ' importacao__item--corrigida' : ''}`}>
+                      <label className="importacao__marca">
+                        <input
+                          type="checkbox"
+                          checked={criarMarcadas.has(indice)}
+                          onChange={() => alternar(criarMarcadas, setCriarMarcadas, indice)}
+                        />
+                        <span className="importacao__nome">{rotuloDaNova(campos)}</span>
+                        {nova.fluxo && (
+                          <span className="importacao__selo" title="Esta unidade tem condição de pagamento própria">
+                            condição própria
+                          </span>
+                        )}
+                        {corrigida && (
+                          <span
+                            className="importacao__selo importacao__selo--corrigida"
+                            title="Você corrigiu a leitura desta linha"
+                          >
+                            corrigida
+                          </span>
+                        )}
+                      </label>
+                      <span className="importacao__resumo">{resumoDaNova(campos) || TRACO}</span>
+                      {botaoCorrigir(chave)}
+                      {editando.has(chave) && (
+                        <EditorDaLinha
+                          proposto={nova.campos}
+                          digitado={correcoes[chave]}
+                          onMudar={(campo, texto) => corrigir(chave, campo, texto)}
+                          aviso="O que você corrigir aqui vale mais do que a leitura da IA. Campo em branco entra como “não informado”, nunca como zero."
+                        />
                       )}
-                    </label>
-                    <span className="importacao__resumo">{resumoDaNova(nova.campos) || TRACO}</span>
-                  </li>
-                ))}
+                    </li>
+                  )
+                })}
               </ul>
             )}
           </section>
@@ -558,36 +717,80 @@ export function ImportarTabela({ empreendimento, onImportou, avisar, onFechar }:
               <p className="importacao__vazio">Nenhuma mudança: o que a tabela traz é igual ao que está gravado.</p>
             ) : (
               <ul className="importacao__itens">
-                {previa.alteradas.map((alterada) => (
-                  <li key={alterada.id} className="importacao__item">
-                    <label className="importacao__marca">
-                      <input
-                        type="checkbox"
-                        checked={atualizarMarcadas.has(alterada.id)}
-                        onChange={() => alternar(atualizarMarcadas, setAtualizarMarcadas, alterada.id)}
-                      />
-                      <span className="importacao__nome">{alterada.identificacao}</span>
-                      {alterada.fluxo && (
-                        <span className="importacao__selo" title="Esta unidade tem condição de pagamento própria">
-                          condição própria
-                        </span>
+                {previa.alteradas.map((alterada) => {
+                  const chave = chaveAlterada(alterada.id)
+                  const correcao = correcoesEfetivas(correcoes[chave], alterada.proposto)
+                  const corrigida = Object.keys(correcao).length > 0
+
+                  return (
+                    <li
+                      key={alterada.id}
+                      className={`importacao__item${corrigida ? ' importacao__item--corrigida' : ''}`}
+                    >
+                      <label className="importacao__marca">
+                        <input
+                          type="checkbox"
+                          checked={atualizarMarcadas.has(alterada.id)}
+                          onChange={() => alternar(atualizarMarcadas, setAtualizarMarcadas, alterada.id)}
+                        />
+                        <span className="importacao__nome">{alterada.identificacao}</span>
+                        {alterada.fluxo && (
+                          <span className="importacao__selo" title="Esta unidade tem condição de pagamento própria">
+                            condição própria
+                          </span>
+                        )}
+                        {corrigida && (
+                          <span
+                            className="importacao__selo importacao__selo--corrigida"
+                            title="Você corrigiu a leitura desta linha"
+                          >
+                            corrigida
+                          </span>
+                        )}
+                      </label>
+                      {alterada.campos.length === 0 && (
+                        <span className="importacao__resumo">só a condição de pagamento muda</span>
                       )}
-                    </label>
-                    {alterada.campos.length === 0 && (
-                      <span className="importacao__resumo">só a condição de pagamento muda</span>
-                    )}
-                    <ul className="importacao__mudancas">
-                      {alterada.campos.map((campo) => (
-                        <li key={campo}>
-                          <span className="importacao__campo">{ROTULO_CAMPO[campo]}</span>
-                          <span className="importacao__antes">{mostrar(campo, alterada.antes[campo])}</span>
-                          <Icone nome="seta_direita" tamanho={12} />
-                          <span className="importacao__depois">{mostrar(campo, alterada.depois[campo])}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </li>
-                ))}
+                      <ul className="importacao__mudancas">
+                        {alterada.campos.map((campo) => {
+                          // Preço e status não são "mais um campo que mudou":
+                          // são o que decide a conversa de venda da semana.
+                          const chaveDaVenda = CAMPOS_CHAVE.has(campo)
+                          const variacao = campo === 'valor'
+                            ? variacaoDePreco(alterada.antes[campo], alterada.depois[campo])
+                            : null
+
+                          return (
+                            <li key={campo} className={chaveDaVenda ? 'importacao__mudanca--chave' : undefined}>
+                              <span className="importacao__campo">{ROTULO_CAMPO[campo]}</span>
+                              <span className="importacao__antes">{mostrar(campo, alterada.antes[campo])}</span>
+                              <Icone nome="seta_direita" tamanho={12} />
+                              <span className="importacao__depois">{mostrar(campo, alterada.depois[campo])}</span>
+                              {variacao && (
+                                <span
+                                  className={`importacao__variacao importacao__variacao--${
+                                    variacao.subiu ? 'sobe' : 'desce'
+                                  }`}
+                                >
+                                  {variacao.texto}
+                                </span>
+                              )}
+                            </li>
+                          )
+                        })}
+                      </ul>
+                      {botaoCorrigir(chave)}
+                      {editando.has(chave) && (
+                        <EditorDaLinha
+                          proposto={alterada.proposto}
+                          digitado={correcoes[chave]}
+                          onMudar={(campo, texto) => corrigir(chave, campo, texto)}
+                          aviso="O que você corrigir aqui vale mais do que a leitura da IA. Campo deixado em branco não apaga o que já está gravado: a importação simplesmente não mexe nele."
+                        />
+                      )}
+                    </li>
+                  )
+                })}
               </ul>
             )}
           </section>
@@ -712,6 +915,12 @@ export function ImportarTabela({ empreendimento, onImportou, avisar, onFechar }:
               <strong>{resultado.indisponiveis}</strong>{' '}
               {resultado.indisponiveis === 1 ? 'marcada indisponível' : 'marcadas indisponíveis'}
             </li>
+            {resultado.corrigidas > 0 && (
+              <li>
+                <strong>{resultado.corrigidas}</strong>{' '}
+                {resultado.corrigidas === 1 ? 'corrigida à mão' : 'corrigidas à mão'}
+              </li>
+            )}
             {resultado.torres !== null && (
               <li>
                 <strong>{resultado.torres}</strong> {resultado.torres === 1 ? 'torre gravada' : 'torres gravadas'}

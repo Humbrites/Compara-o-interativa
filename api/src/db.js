@@ -467,6 +467,33 @@ if (!colunasEmpreendimentoTorres.some((coluna) => coluna.name === 'torres')) {
   db.exec('ALTER TABLE empreendimentos ADD COLUMN torres INTEGER;')
 }
 
+/**
+ * O folder de venda do empreendimento — o PDF que a construtora entrega.
+ *
+ * Fica no PREDIO e nao na galeria: a galeria e de imagens que o navegador
+ * mostra em sequencia, e um PDF de 15 MB no meio das fotos quebraria o carrossel.
+ * Sao tres colunas porque o arquivo no disco tem nome de UUID: `folder_nome`
+ * guarda como o arquivo se chamava para quem enviou (e o nome que a pessoa
+ * reconhece na tela e no download) e `folder_tamanho` evita ter de ir ao disco
+ * so para dizer "2,4 MB".
+ *
+ * De proposito FORA de CAMPOS_EMPREENDIMENTO: quem troca o folder e a rota de
+ * upload, que grava o arquivo antes. Um PUT no cadastro nao pode apontar a
+ * coluna para outro arquivo — nem apaga-la deixando o PDF perdido no disco.
+ */
+const COLUNAS_FOLDER = [
+  ['folder_arquivo', 'TEXT'],
+  ['folder_nome', 'TEXT'],
+  ['folder_tamanho', 'INTEGER'],
+]
+
+for (const [coluna, tipo] of COLUNAS_FOLDER) {
+  const existentes = db.prepare('PRAGMA table_info(empreendimentos)').all()
+  if (!existentes.some((c) => c.name === coluna)) {
+    db.exec(`ALTER TABLE empreendimentos ADD COLUMN ${coluna} ${tipo};`)
+  }
+}
+
 const colunasFluxo = db.prepare('PRAGMA table_info(fluxos_pagamento)').all()
 if (!colunasFluxo.some((coluna) => coluna.name === 'unidade_id')) {
   db.exec(`

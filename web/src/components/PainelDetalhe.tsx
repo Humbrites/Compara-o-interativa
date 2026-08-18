@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Empreendimento, FluxoPagamento, Unidade } from '../types'
-import { api } from '../lib/api'
+import { api, type FolderDoEmpreendimento } from '../lib/api'
+import { mensagemDoErro } from '../lib/http'
 import {
   fmtEntrega,
   fmtFaixaInteiro,
@@ -8,6 +9,7 @@ import {
   fmtFaixaMoeda,
   fmtInteiro,
   fmtMoeda,
+  fmtNumero,
   fmtTexto,
   TRACO,
 } from '../lib/format'
@@ -104,6 +106,173 @@ function Secao({
   )
 }
 
+/* ------------------------------------------------------------------ */
+/* Folder de venda (PDF)                                               */
+/* ------------------------------------------------------------------ */
+
+/** Espelha o que a API aceita — recusar aqui evita subir 15 MB para nada. */
+const TIPO_FOLDER = 'application/pdf'
+const TAMANHO_MAX_FOLDER = 15 * 1024 * 1024
+
+/** O tamanho do arquivo como quem enviou lê: "820 KB", "2,4 MB". */
+function fmtTamanhoArquivo(bytes: number | null): string {
+  if (bytes === null || !Number.isFinite(bytes)) return TRACO
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${fmtNumero(Math.round(bytes / 1024))} KB`
+  return `${fmtNumero(Number((bytes / (1024 * 1024)).toFixed(1)))} MB`
+}
+
+/**
+ * O folder que a construtora entregou, na coluna de consulta do imóvel.
+ *
+ * É material de VENDA: o corretor abre numa aba, na frente do cliente, sem sair
+ * da tela do imóvel. Um arquivo só por empreendimento — enviar de novo
+ * substitui, que é o que acontece quando a construtora manda a versão nova.
+ */
+function FolderDoImovel({
+  empreendimento,
+  onMudou,
+  avisar,
+}: {
+  empreendimento: Empreendimento
+  onMudou: (folder: FolderDoEmpreendimento) => void
+  avisar: (texto: string, tipo?: 'sucesso' | 'erro') => void
+}) {
+  const podeEditar = usePodeEditar()
+  const entrada = useRef<HTMLInputElement>(null)
+  const [ocupado, setOcupado] = useState(false)
+  const [confirmandoRemocao, setConfirmandoRemocao] = useState(false)
+
+  const tem = Boolean(empreendimento.folder_arquivo)
+
+  async function enviar(arquivo: File) {
+    if (arquivo.type !== TIPO_FOLDER) {
+      avisar(`${arquivo.name}: o folder precisa ser um arquivo PDF`, 'erro')
+      return
+    }
+    if (arquivo.size > TAMANHO_MAX_FOLDER) {
+      avisar(`${arquivo.name}: o folder precisa ter até 15 MB`, 'erro')
+      return
+    }
+
+    setOcupado(true)
+    try {
+      onMudou(await api.enviarFolder(empreendimento.id, arquivo))
+      avisar(tem ? 'Folder substituído' : 'Folder anexado')
+    } catch (falha) {
+      avisar(mensagemDoErro(falha, 'Não foi possível enviar o folder'), 'erro')
+    } finally {
+      setOcupado(false)
+    }
+  }
+
+  async function remover() {
+    setConfirmandoRemocao(false)
+    setOcupado(true)
+    try {
+      onMudou(await api.removerFolder(empreendimento.id))
+      avisar('Folder excluído')
+    } catch (falha) {
+      avisar(mensagemDoErro(falha, 'Não foi possível excluir o folder'), 'erro')
+    } finally {
+      setOcupado(false)
+    }
+  }
+
+  // Sem folder e sem poder enviar (conta em consulta), o bloco só ocuparia
+  // espaço dizendo que não há nada.
+  if (!tem && !podeEditar) return null
+
+  return (
+    <Secao
+      icone="lista"
+      titulo="Folder do empreendimento"
+      acao={
+        podeEditar && !ocupado ? (
+          <button
+            type="button"
+            className="btn btn--secundario btn--pequeno"
+            onClick={() => entrada.current?.click()}
+          >
+            <Icone nome="mais" tamanho={13} />
+            {tem ? 'Substituir' : 'Enviar folder'}
+          </button>
+        ) : undefined
+      }
+    >
+      <input
+        ref={entrada}
+        type="file"
+        accept="application/pdf,.pdf"
+        hidden
+        onChange={(evento) => {
+          const arquivo = evento.target.files?.[0]
+          // Permite escolher o MESMO arquivo de novo depois de excluir.
+          evento.target.value = ''
+          if (arquivo) void enviar(arquivo)
+        }}
+      />
+
+      {!tem ? (
+        <div className="observacao">
+          Nenhum folder anexado. Anexe o PDF que a construtora entregou (até 15 MB) para abri-lo aqui mesmo, na frente
+          do cliente.
+        </div>
+      ) : (
+        <div className="folder">
+          <div className="folder__arquivo">
+            <Icone nome="lista" tamanho={16} />
+            <span className="folder__nome" title={empreendimento.folder_nome ?? undefined}>
+              {empreendimento.folder_nome || 'Folder em PDF'}
+            </span>
+            <span className="folder__tamanho">{fmtTamanhoArquivo(empreendimento.folder_tamanho)}</span>
+          </div>
+
+          <div className="folder__acoes">
+            <a
+              className="btn btn--secundario btn--pequeno"
+              href={api.urlDoFolder(empreendimento.id)}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <Icone nome="seta_direita" tamanho={13} />
+              Ver
+            </a>
+            {podeEditar && !confirmandoRemocao && (
+              <button
+                type="button"
+                className="btn btn--fantasma btn--pequeno"
+                onClick={() => setConfirmandoRemocao(true)}
+                disabled={ocupado}
+              >
+                <Icone nome="lixeira" tamanho={13} />
+                Excluir
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {confirmandoRemocao && (
+        <div className="aviso-faixa aviso-faixa--acao" role="status">
+          <Icone nome="alerta" tamanho={15} />
+          <span>Excluir o folder? O arquivo sai do sistema e precisará ser enviado de novo.</span>
+          <button type="button" className="btn btn--perigo btn--pequeno" onClick={() => void remover()}>
+            Excluir
+          </button>
+          <button
+            type="button"
+            className="btn btn--fantasma btn--pequeno"
+            onClick={() => setConfirmandoRemocao(false)}
+          >
+            Cancelar
+          </button>
+        </div>
+      )}
+    </Secao>
+  )
+}
+
 interface Props {
   empreendimento: Empreendimento
   /** A base inteira: a comparação de unidades cruza empreendimentos. */
@@ -117,6 +286,12 @@ interface Props {
   onMudouUnidades: (unidades: Unidade[]) => void
   /** Sobra do formato antigo: fluxo sem unidade. */
   onMudouFluxosGerais: (fluxos: FluxoPagamento[]) => void
+  /**
+   * Campos do PRÉDIO que mudam de dentro do painel: o folder de venda e as
+   * torres que a importação gravou. Sem isso a ficha só mostraria o número novo
+   * depois de recarregar a página.
+   */
+  onMudouEmpreendimento: (dados: Partial<Empreendimento>) => void
   avisar: (texto: string, tipo?: 'sucesso' | 'erro') => void
   onFechar: () => void
 }
@@ -131,6 +306,7 @@ export function PainelDetalhe({
   onCompararCom,
   onMudouUnidades,
   onMudouFluxosGerais,
+  onMudouEmpreendimento,
   avisar,
   onFechar,
 }: Props) {
@@ -381,6 +557,10 @@ export function PainelDetalhe({
             )}
           </Secao>
 
+          {/* O material que o corretor abre na frente do cliente fica logo
+              abaixo da ficha: é o que se mostra depois de dizer o que o imóvel é. */}
+          <FolderDoImovel key={e.id} empreendimento={e} onMudou={onMudouEmpreendimento} avisar={avisar} />
+
           {(e.endereco || e.latitude !== null || e.longitude !== null) && (
             <Secao icone="pino" titulo="Localização">
               <div className="ficha">
@@ -585,7 +765,12 @@ export function PainelDetalhe({
       {importando && (
         <ImportarTabela
           empreendimento={e}
-          onImportou={onMudouUnidades}
+          onImportou={(unidades, torres) => {
+            onMudouUnidades(unidades)
+            // A importação pode ter concluído quantas torres o prédio tem — é
+            // um campo do empreendimento, e a ficha ao lado lê dele.
+            if (torres !== null) onMudouEmpreendimento({ torres })
+          }}
           avisar={avisar}
           onFechar={() => setImportando(false)}
         />

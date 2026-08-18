@@ -48,7 +48,17 @@ const TIPOS_IMAGEM = new Map([
   ['image/gif', '.gif'],
   ['image/avif', '.avif'],
 ])
-const TAMANHO_MAX = 12 * 1024 * 1024 // 12 MB por arquivo
+const TAMANHO_MAX = 12 * 1024 * 1024 // 12 MB por imagem
+
+/**
+ * O folder da construtora costuma vir com planta, mapa e render em alta — 15 MB
+ * cobre isso com folga e ainda barra o arquivo que alguem mandou por engano.
+ *
+ * E tambem o MAIOR arquivo que o sistema aceita, entao e ele que dimensiona o
+ * corte do multipart la embaixo: um teto menor truncaria o folder antes de a
+ * rota poder olhar para ele. Cada rota confere o proprio teto depois.
+ */
+const TAMANHO_MAX_FOLDER = 15 * 1024 * 1024
 
 /**
  * CORS fechado por padrão.
@@ -74,7 +84,7 @@ await app.register(cors, {
 // com um motivo em portugues.
 await app.register(multipart, {
   throwFileSizeLimit: false,
-  limits: { fileSize: TAMANHO_MAX, files: 20 },
+  limits: { fileSize: TAMANHO_MAX_FOLDER, files: 20 },
 })
 
 // `serve: false`: o plugin entra só pelo `reply.sendFile`. A foto de um
@@ -218,14 +228,17 @@ app.put('/api/empreendimentos/:id', (req, reply) => {
 
 app.delete('/api/empreendimentos/:id', async (req, reply) => {
   const { id } = req.params
-  if (!buscarEmpreendimento.get(id, contaDe(req))) {
+  const empreendimento = buscarEmpreendimento.get(id, contaDe(req))
+  if (!empreendimento) {
     return reply.code(404).send({ erro: 'Empreendimento nao encontrado' })
   }
 
-  // O CASCADE limpa as linhas, mas os arquivos precisam sair do disco na mão.
+  // O CASCADE limpa as linhas, mas os arquivos precisam sair do disco na mão —
+  // as fotos da galeria e o folder, que não é imagem e não está na tabela delas.
   const imagens = imagensDoEmpreendimento.all(id)
   db.prepare('DELETE FROM empreendimentos WHERE id = ?').run(id)
   await Promise.all(imagens.map((imagem) => apagarArquivo(imagem.arquivo)))
+  if (empreendimento.folder_arquivo) await apagarArquivo(empreendimento.folder_arquivo)
 
   return reply.code(204).send()
 })
@@ -458,8 +471,18 @@ app.post('/api/empreendimentos/:id/importacao/confirmar', (req, reply) => {
   // enviado à mão não pode alterar nada.
   const daCasa = new Set(unidadesDoEmpreendimento.all(id).map((u) => u.id))
 
+  /**
+   * A linha que a pessoa CORRIGIU na prévia antes de confirmar.
+   *
+   * A marca é só para o histórico: os valores corrigidos chegam misturados aos
+   * lidos e são revalidados igual — o que a marca responde depois é "de onde
+   * veio este número", quando alguém abrir a importação de terça e estranhar
+   * um preço que a tabela não tinha.
+   */
+  const foiCorrigida = (item) => item?.corrigida === true
+
   const aplicar = db.transaction(() => {
-    const contagens = { criadas: 0, atualizadas: 0, indisponiveis: 0, fluxosCriados: 0, fluxosAtualizados: 0 }
+    const contagens = { criadas: 0, atualizadas: 0, indisponiveis: 0, corrigidas: 0, fluxosCriados: 0, fluxosAtualizados: 0 }
 
     /**
      * A tabela de venda da unidade, criada ou ATUALIZADA.
@@ -500,6 +523,7 @@ app.post('/api/empreendimentos/:id/importacao/confirmar', (req, reply) => {
       const dados = sanitizar({ ...campos, empreendimento_id: Number(id) }, CAMPOS_UNIDADE)
       const novaId = Number(inserir('unidades', dados))
       contagens.criadas += 1
+      if (foiCorrigida(bruta)) contagens.corrigidas += 1
       gravarFluxoDaUnidade(novaId, fluxosPorItem.get(bruta) ?? fluxoGeral, dados.valor ?? null)
     }
 
@@ -516,6 +540,7 @@ app.post('/api/empreendimentos/:id/importacao/confirmar', (req, reply) => {
       if (Object.keys(dados).length > 0) {
         atualizar('unidades', alvo, dados)
         contagens.atualizadas += 1
+        if (foiCorrigida(item)) contagens.corrigidas += 1
       }
 
       // O preço que a tabela acabou de trazer manda na conta do fluxo; sem ele,
@@ -537,11 +562,17 @@ app.post('/api/empreendimentos/:id/importacao/confirmar', (req, reply) => {
     // As torres são do empreendimento, não das unidades: entram uma vez só.
     if (torres !== null) atualizar('empreendimentos', Number(id), { torres })
 
+    // O histórico guarda o que FOI gravado, campo a campo (as áreas separadas,
+    // o detalhe das vagas e o resto entram porque `normalizarUnidade` devolve
+    // todos os campos importáveis) e de onde cada linha veio: lida da tabela ou
+    // corrigida à mão na prévia.
     const resumo = {
       contagens,
       torres,
-      criadas: criar.map(normalizarUnidade),
-      atualizadas: atualizar_.filter((i) => daCasa.has(Number(i?.id))),
+      criadas: criar.map((bruta) => ({ ...normalizarUnidade(bruta), corrigida: foiCorrigida(bruta) })),
+      atualizadas: atualizar_
+        .filter((i) => daCasa.has(Number(i?.id)))
+        .map((item) => ({ ...item, corrigida: foiCorrigida(item) })),
       indisponiveis: marcarIndisponiveis.map(Number).filter((i) => daCasa.has(i)),
     }
 
@@ -752,8 +783,10 @@ app.post('/api/empreendimentos/:id/imagens', async (req, reply) => {
       continue
     }
 
-    // truncated fica true quando o arquivo estourou o limite de tamanho.
-    if (parte.file.truncated) {
+    // `truncated` fica true quando o arquivo estourou o corte do multipart —
+    // que é o teto do FOLDER, o maior do sistema. A foto tem teto próprio e
+    // menor, então o tamanho do que chegou também é conferido aqui.
+    if (parte.file.truncated || (parte.file.bytesRead ?? 0) > TAMANHO_MAX) {
       await apagarArquivo(arquivo)
       recusadas.push({ nome: parte.filename, motivo: 'arquivo acima de 12 MB' })
       continue
@@ -808,6 +841,122 @@ app.put('/api/empreendimentos/:id/imagens/ordem', (req, reply) => {
   reordenar()
 
   return { imagens: imagensDoEmpreendimento.all(id).map(comUrl) }
+})
+
+/* ------------------------------------------------------------------ */
+/* Folder do empreendimento (PDF)                                      */
+/* ------------------------------------------------------------------ */
+
+/** Todo PDF comeca com estes cinco bytes; e a unica prova que temos do formato. */
+const ASSINATURA_PDF = Buffer.from('%PDF-', 'ascii')
+
+/** O trio de colunas do folder, do jeito que a tela guarda no empreendimento. */
+const folderDo = (empreendimento) => ({
+  folder_arquivo: empreendimento?.folder_arquivo ?? null,
+  folder_nome: empreendimento?.folder_nome ?? null,
+  folder_tamanho: empreendimento?.folder_tamanho ?? null,
+})
+
+/**
+ * O folder entra pela mesma mecanica da galeria: o arquivo nasce com nome de
+ * UUID em data/uploads (o nome enviado pelo cliente NUNCA toca o disco) e quem
+ * entrega confere a dona.
+ *
+ * O `content-type` declarado pelo navegador nao basta: renomear .exe para .pdf
+ * muda o mimetype junto. Por isso o conteudo tambem e conferido — se nao
+ * comeca com %PDF-, nao e PDF, e o que a tela promete abrir numa aba e um PDF.
+ *
+ * Trocar o folder GRAVA O NOVO ANTES de apagar o antigo: uma falha no meio
+ * deixaria o empreendimento sem folder nenhum na frente do cliente.
+ */
+app.post('/api/empreendimentos/:id/folder', async (req, reply) => {
+  const { id } = req.params
+  const empreendimento = buscarEmpreendimento.get(id, contaDe(req))
+  if (!empreendimento) {
+    await descartarUpload(req)
+    return reply.code(404).send({ erro: 'Empreendimento nao encontrado' })
+  }
+  if (!req.isMultipart()) return reply.code(400).send({ erro: 'Envie o arquivo do folder' })
+
+  const parte = await req.file()
+  if (!parte) return reply.code(400).send({ erro: 'Envie o arquivo do folder' })
+
+  if (parte.mimetype !== 'application/pdf') {
+    // Precisa drenar o stream, senão a conexão fica pendurada.
+    await parte.toBuffer().catch(() => {})
+    return reply.code(400).send({ erro: 'O folder precisa ser um arquivo PDF' })
+  }
+
+  const conteudo = await parte.toBuffer()
+  // `throwFileSizeLimit: false` TRUNCA em vez de recusar — o tamanho do que
+  // chegou é o único número confiável aqui, e o arquivo só vai ao disco depois.
+  if (parte.file.truncated || conteudo.length > TAMANHO_MAX_FOLDER) {
+    return reply.code(400).send({ erro: 'O folder precisa ter até 15 MB' })
+  }
+  if (!conteudo.subarray(0, ASSINATURA_PDF.length).equals(ASSINATURA_PDF)) {
+    return reply.code(400).send({ erro: 'O arquivo enviado não é um PDF' })
+  }
+
+  const anterior = empreendimento.folder_arquivo ?? null
+  const arquivo = `${randomUUID()}.pdf`
+
+  try {
+    await writeFile(join(UPLOAD_DIR, arquivo), conteudo)
+  } catch (erro) {
+    app.log.error({ erro }, 'falha ao gravar o folder do empreendimento')
+    return reply.code(500).send({ erro: 'Não foi possível gravar o folder agora' })
+  }
+
+  atualizar('empreendimentos', Number(id), {
+    folder_arquivo: arquivo,
+    // O nome original é do usuário: entra limpo e com teto, e nunca vira caminho.
+    folder_nome: (parte.filename || 'folder.pdf').trim().slice(0, 160) || 'folder.pdf',
+    folder_tamanho: conteudo.length,
+  })
+  if (anterior && anterior !== arquivo) await apagarArquivo(anterior)
+
+  return reply.code(201).send(folderDo(buscarEmpreendimento.get(id, contaDe(req))))
+})
+
+/**
+ * Serve o folder para dentro da aba do navegador.
+ *
+ * `inline` (e não `attachment`) porque o corretor abre o folder na frente do
+ * cliente — baixar um arquivo para depois procurá-lo na pasta de downloads
+ * interrompe a conversa. O nome ORIGINAL vai no cabeçalho em duas formas: uma
+ * só com caracteres seguros (navegador antigo) e a `filename*` com o nome de
+ * verdade, acentos e tudo.
+ *
+ * A dona é conferida como em `/uploads`: o arquivo tem nome de UUID, mas link
+ * vazado por engano não pode virar acesso permanente ao material de um cliente.
+ */
+app.get('/api/empreendimentos/:id/folder', (req, reply) => {
+  const empreendimento = buscarEmpreendimento.get(req.params.id, contaDe(req))
+  if (!empreendimento?.folder_arquivo) {
+    return reply.code(404).send({ erro: 'Folder nao encontrado' })
+  }
+
+  const nome = empreendimento.folder_nome || 'folder.pdf'
+  const simples = nome.replace(/[^\w .-]/g, '_')
+
+  reply.header('content-type', 'application/pdf')
+  reply.header(
+    'content-disposition',
+    `inline; filename="${simples}"; filename*=UTF-8''${encodeURIComponent(nome)}`,
+  )
+  return reply.sendFile(empreendimento.folder_arquivo)
+})
+
+app.delete('/api/empreendimentos/:id/folder', async (req, reply) => {
+  const { id } = req.params
+  const empreendimento = buscarEmpreendimento.get(id, contaDe(req))
+  if (!empreendimento) return reply.code(404).send({ erro: 'Empreendimento nao encontrado' })
+
+  const atual = empreendimento.folder_arquivo ?? null
+  atualizar('empreendimentos', Number(id), { folder_arquivo: null, folder_nome: null, folder_tamanho: null })
+  if (atual) await apagarArquivo(atual)
+
+  return folderDo(buscarEmpreendimento.get(id, contaDe(req)))
 })
 
 /* ------------------------------------------------------------------ */

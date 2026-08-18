@@ -453,6 +453,9 @@ export default function App({ sessao, aoMudarSessao, aoSair }: AppProps) {
               onMudouFluxosGerais={(fluxos) =>
                 setLista((atual) => atual.map((e) => (e.id === empreendimentoA.id ? { ...e, fluxos } : e)))
               }
+              onMudouEmpreendimento={(dados) =>
+                setLista((atual) => atual.map((e) => (e.id === empreendimentoA.id ? { ...e, ...dados } : e)))
+              }
               avisar={avisar}
               onFechar={() => {
                 setSelecionadoA(null)

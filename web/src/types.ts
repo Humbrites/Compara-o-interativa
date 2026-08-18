@@ -148,6 +148,11 @@ export interface UnidadeAlterada {
   antes: Partial<CamposImportados>
   depois: Partial<CamposImportados>
   campos: CampoImportado[]
+  /**
+   * A linha INTEIRA como a tabela foi lida — nao so o que mudou. E dela que a
+   * previa monta os campos de quem quer corrigir a leitura antes de gravar.
+   */
+  proposto: CamposImportados
   fluxo?: FluxoDaConstrutora | null
 }
 
@@ -230,9 +235,20 @@ export interface PreviaImportacao {
   totalRecebidas: number
 }
 
+/**
+ * Marca de que a linha foi CORRIGIDA a mao na previa. So historico: os valores
+ * corrigidos viajam misturados aos lidos e a API revalida os dois do mesmo
+ * jeito — a marca responde depois "de onde veio este numero".
+ */
+type LinhaCorrigivel = { corrigida?: boolean }
+
 export interface ConfirmacaoImportacao {
-  criar: (Partial<CamposImportados> & { fluxo?: FluxoDaConstrutora | null })[]
-  atualizar: { id: number; campos: Partial<CamposImportados>; fluxo?: FluxoDaConstrutora | null }[]
+  criar: (Partial<CamposImportados> & { fluxo?: FluxoDaConstrutora | null } & LinhaCorrigivel)[]
+  atualizar: ({
+    id: number
+    campos: Partial<CamposImportados>
+    fluxo?: FluxoDaConstrutora | null
+  } & LinhaCorrigivel)[]
   marcarIndisponiveis: number[]
   fluxo_construtora?: FluxoDaConstrutora | null
   /** Grava `empreendimentos.torres`; ausente ou null nao mexe no que esta la. */
@@ -250,6 +266,8 @@ export interface ResultadoImportacao {
   criadas: number
   atualizadas: number
   indisponiveis: number
+  /** Quantas linhas foram corrigidas a mao na previa antes de gravar. */
+  corrigidas: number
   /** Fluxos de pagamento criados e atualizados nas unidades desta importacao. */
   fluxosCriados: number
   fluxosAtualizados: number
@@ -295,6 +313,14 @@ export interface Empreendimento {
   tipo: string | null
   imagem_url: string | null
   observacoes: string | null
+  /**
+   * O folder de venda em PDF. `folder_arquivo` e o nome no disco (UUID) e so
+   * diz SE existe folder — quem entrega o arquivo e a rota, que confere a dona.
+   * `folder_nome` e o nome original, que e o que a pessoa reconhece na tela.
+   */
+  folder_arquivo: string | null
+  folder_nome: string | null
+  folder_tamanho: number | null
   criado_em: string
   atualizado_em: string
   /** Fluxos gerais: os que valem para o empreendimento todo, sem unidade. */
@@ -304,7 +330,9 @@ export interface Empreendimento {
 }
 
 /** Payload de escrita: tudo opcional menos o nome, e numeros aceitam string vinda do input. */
-export type EmpreendimentoInput = Partial<Record<keyof Omit<Empreendimento, 'id' | 'criado_em' | 'atualizado_em' | 'fluxos' | 'unidades' | 'imagens'>, string | number | null>> & {
+// O folder fica de fora: quem o troca e a rota de upload, que grava o arquivo
+// antes de apontar a coluna. O cadastro nao mexe nele.
+export type EmpreendimentoInput = Partial<Record<keyof Omit<Empreendimento, 'id' | 'criado_em' | 'atualizado_em' | 'fluxos' | 'unidades' | 'imagens' | 'folder_arquivo' | 'folder_nome' | 'folder_tamanho'>, string | number | null>> & {
   nome: string
 }
 

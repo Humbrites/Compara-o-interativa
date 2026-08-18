@@ -25,6 +25,12 @@ export interface RespostaImagens {
   recusadas?: { nome: string; motivo: string }[]
 }
 
+/** As tres colunas do folder, como a API devolve depois de enviar ou remover. */
+export type FolderDoEmpreendimento = Pick<
+  Empreendimento,
+  'folder_arquivo' | 'folder_nome' | 'folder_tamanho'
+>
+
 /** Quantos arquivos a API aceita por requisicao (limite `files` do multipart). */
 const IMAGENS_POR_ENVIO = 20
 
@@ -114,6 +120,27 @@ export const api = {
   },
 
   excluirImagem: (id: number) => request<RespostaImagens>(`/api/imagens/${id}`, { method: 'DELETE' }),
+
+  /* --- Folder de venda (PDF) do empreendimento ------------------------- */
+
+  /**
+   * Onde o folder e aberto. Nao e `/uploads/...`: o arquivo tem nome de UUID,
+   * mas quem confere a dona e a rota — e e ela que devolve o PDF com o nome
+   * original, para abrir na aba em vez de cair na pasta de downloads.
+   */
+  urlDoFolder: (empreendimentoId: number) => `/api/empreendimentos/${empreendimentoId}/folder`,
+
+  enviarFolder: (empreendimentoId: number, arquivo: File) => {
+    const corpo = new FormData()
+    corpo.append('arquivo', arquivo)
+    return request<FolderDoEmpreendimento>(`/api/empreendimentos/${empreendimentoId}/folder`, {
+      method: 'POST',
+      body: corpo,
+    })
+  },
+
+  removerFolder: (empreendimentoId: number) =>
+    request<FolderDoEmpreendimento>(`/api/empreendimentos/${empreendimentoId}/folder`, { method: 'DELETE' }),
 
   /**
    * Indicadores de mercado. O cache mora na API (uma consulta ao Banco Central
