@@ -293,28 +293,61 @@ function numeroValido(valor: number | undefined, padrao: number): number {
  * e jogar fora justamente o fundo e a marca da imobiliaria.
  */
 export const ESTILO_CABECALHO = `
-  .pdf-cabecalho { break-inside: avoid; margin-bottom: 18px; padding-bottom: 9px;
-                   border-bottom: 2px solid #143a4e;
+  .pdf-cabecalho { position: relative; break-inside: avoid; margin-bottom: 20px;
+                   padding-bottom: 10px; border-bottom: 2px solid #143a4e;
                    -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  /* Regua dupla: a barra petroleo da borda e, um fio abaixo, o filete dourado.
+     Duas linhas de peso diferente fecham o cabecalho como a capa de um dossie —
+     uma so ficaria com cara de tabela. */
+  .pdf-cabecalho::after { content: ''; position: absolute; left: 0; right: 0; bottom: -4px;
+                          height: 1px; background: #b08333;
+                          -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .pdf-cabecalho__topo { display: flex; align-items: flex-start; gap: 14px; }
   /* A largura vem da configuracao (% da folha); a altura e o teto do
      cabecalho. A marca encosta na esquerda da caixa, senao
      uma logo larga e baixa flutua no meio de um espaco vazio. */
   .pdf-cabecalho__logo { flex: none; max-height: 62px; object-fit: contain; object-position: left center; }
+  /* Quando a conta reservou a logo para a marca d'agua ou para o rodape, ela
+     ainda assim assina o topo — em tamanho comedido, para nao disputar a
+     atencao com o titulo do documento. */
+  .pdf-cabecalho__logo--comedida { width: auto; max-width: 30%; max-height: 56px; }
   .pdf-cabecalho__identidade { flex: 1; min-width: 0; }
   .pdf-cabecalho__chapeu { font-size: 8.5px; text-transform: uppercase; letter-spacing: .18em;
-                           font-weight: 700; color: #7b8599; }
+                           font-weight: 700; color: #b08333;
+                           -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .pdf-cabecalho__titulo { font-size: 21px; font-weight: 700; letter-spacing: -.01em;
                            line-height: 1.15; margin: 3px 0 0; color: #12212e; }
   .pdf-cabecalho__x { color: #b08333; font-weight: 400; margin: 0 5px; }
   .pdf-cabecalho__imovel { font-size: 11.5px; font-weight: 600; color: #143a4e; margin-top: 4px; }
   .pdf-cabecalho__sub { font-size: 10.5px; color: #4d5871; margin-top: 3px; }
-  .pdf-cabecalho__linha { display: flex; justify-content: space-between; align-items: baseline;
-                          gap: 16px; margin-top: 10px; padding-top: 8px;
+
+  /* A faixa de apresentacao: para quem a folha foi feita, quem a assina e de
+     quando ela e. Sao os dados que o cliente procura primeiro, entao ganham
+     cartao proprio em vez de uma linha corrida de rodape. */
+  .pdf-cabecalho__apresentacao { display: flex; flex-wrap: wrap; align-items: flex-start;
+                                 gap: 10px 22px; margin-top: 12px; padding: 11px 14px;
+                                 background: #f8f6f1; border: 1px solid #e7e3d8; border-radius: 3px;
+                                 break-inside: avoid;
+                                 -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .pdf-cabecalho__celula { min-width: 0; }
+  .pdf-cabecalho__celula + .pdf-cabecalho__celula:not(.pdf-cabecalho__celula--data) {
+      border-left: 1px solid #e2e0da; padding-left: 22px; }
+  .pdf-cabecalho__celula--data { margin-left: auto; text-align: right; }
+  .pdf-cabecalho__rotulo { font-size: 7.5px; text-transform: uppercase; letter-spacing: .14em;
+                           font-weight: 700; color: #b08333;
+                           -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .pdf-cabecalho__valor { font-size: 13px; font-weight: 700; line-height: 1.25;
+                          color: #12212e; margin-top: 3px; }
+  .pdf-cabecalho__valor--corretor { font-size: 12.5px; }
+  .pdf-cabecalho__valor--data { font-size: 12px; font-variant-numeric: tabular-nums; }
+  .pdf-cabecalho__creci { font-size: 9.5px; color: #4d5871; margin-top: 2px; }
+
+  /* Sem ninguem para apresentar sobra a data, discreta e encostada a direita. */
+  .pdf-cabecalho__linha { display: flex; align-items: baseline; gap: 16px;
+                          margin-top: 10px; padding-top: 8px;
                           border-top: 1px solid #e2e0da; font-size: 10.5px; color: #46586a; }
-  .pdf-cabecalho__pessoas b { color: #12212e; font-weight: 700; }
-  .pdf-cabecalho__data { white-space: nowrap; font-size: 8.5px; text-transform: uppercase;
-                         letter-spacing: .1em; color: #8b9aa8; }
+  .pdf-cabecalho__data { white-space: nowrap; margin-left: auto; font-size: 8.5px;
+                         text-transform: uppercase; letter-spacing: .1em; color: #8b9aa8; }
 
   /* Marca d'agua: FIXA (o navegador repete em toda pagina impressa) e com
      z-index negativo — ela e pintada depois do fundo da folha e ANTES do
@@ -331,6 +364,29 @@ export const ESTILO_CABECALHO = `
   .pdf-assinatura img { max-height: 56px; object-fit: contain; }
 `
 
+/** O que a tela mandou, sem espaco solto — campo em branco conta como vazio. */
+function preenchido(valor: string | null | undefined): string | null {
+  const texto = (valor ?? '').trim()
+  return texto || null
+}
+
+/**
+ * Uma celula da faixa de apresentacao: o rotulo pequeno em caixa-alta e, logo
+ * abaixo, o dado em destaque. `complemento` e o que ainda pertence aquele
+ * dado, como o CRECI debaixo do nome do corretor.
+ */
+function celulaDaApresentacao(
+  variante: string,
+  rotulo: string,
+  valor: string,
+  complemento = '',
+): string {
+  return `<div class="pdf-cabecalho__celula pdf-cabecalho__celula--${variante}">
+        <div class="pdf-cabecalho__rotulo">${esc(rotulo)}</div>
+        <div class="pdf-cabecalho__valor pdf-cabecalho__valor--${variante}">${esc(valor)}</div>${complemento}
+      </div>`
+}
+
 /**
  * O cabecalho de toda folha impressa: identidade, do que se trata, para quem
  * e quando. Uma parte sem dado nao aparece — campo vazio no papel nao informa
@@ -340,11 +396,20 @@ export function cabecalhoPdf(dados: CabecalhoPdf): string {
   const apresentacao = dados.apresentacao ?? null
   const logo = apresentacao?.logo ?? null
 
-  const marca =
-    logo && logo.posicao === 'topo'
-      ? `<img class="pdf-cabecalho__logo" src="${esc(logo.url)}" alt=""
-             style="width:${numeroValido(logo.tamanho, 30)}%;opacity:${numeroValido(logo.opacidade, 1)}">`
-      : ''
+  // A logo assina o topo mesmo quando a conta a reservou para a marca d'agua
+  // ou para o rodape — a folha e da imobiliaria antes de ser nossa. Fora do
+  // 'topo' o tamanho vem comedido do CSS e a opacidade e cheia: a opacidade da
+  // configuracao e a da marca d'agua (0,08) e aqui apagaria a marca.
+  const noTopo = logo?.posicao === 'topo'
+  const marca = logo
+    ? `<img class="pdf-cabecalho__logo${noTopo ? '' : ' pdf-cabecalho__logo--comedida'}" src="${esc(
+        logo.url,
+      )}" alt="" style="${
+        noTopo
+          ? `width:${numeroValido(logo.tamanho, 30)}%;opacity:${numeroValido(logo.opacidade, 1)}`
+          : 'opacity:1'
+      }">`
+    : ''
 
   const titulo = dados.contra
     ? `${esc(dados.titulo)}<span class="pdf-cabecalho__x">×</span>${esc(dados.contra)}`
@@ -352,15 +417,36 @@ export function cabecalhoPdf(dados: CabecalhoPdf): string {
 
   const imovel = [dados.empreendimento, dados.unidade].filter(Boolean).join(' · ')
 
+  const cliente = preenchido(apresentacao?.cliente)
+  const corretor = preenchido(apresentacao?.corretor)
+  const creci = preenchido(apresentacao?.creci)
+
   // Só as partes preenchidas: "Cliente: —" no papel entregue ao cliente seria
-  // pior do que não citá-lo.
-  const pessoas = [
-    apresentacao?.cliente ? `Cliente: <b>${esc(apresentacao.cliente)}</b>` : null,
-    apresentacao?.corretor ? `Corretor: <b>${esc(apresentacao.corretor)}</b>` : null,
-    apresentacao?.creci ? `CRECI: <b>${esc(apresentacao.creci)}</b>` : null,
-  ]
-    .filter(Boolean)
-    .join(' · ')
+  // pior do que não citá-lo. Sem corretor, o CRECI vira a célula inteira.
+  const celulas = [
+    cliente ? celulaDaApresentacao('cliente', 'Preparado para', cliente) : '',
+    corretor
+      ? celulaDaApresentacao(
+          'corretor',
+          'Apresentado por',
+          corretor,
+          creci ? `\n        <div class="pdf-cabecalho__creci">${esc(creci)}</div>` : '',
+        )
+      : creci
+        ? celulaDaApresentacao('corretor', 'CRECI', creci)
+        : '',
+  ].filter(Boolean)
+
+  // Com alguém para apresentar, a data entra como mais uma célula da faixa;
+  // sem ninguém, ela sozinha não justifica um cartão e volta à linha discreta.
+  const apresentacaoImpressa = celulas.length
+    ? `<div class="pdf-cabecalho__apresentacao">
+      ${celulas.join('\n      ')}
+      ${celulaDaApresentacao('data', 'Data da análise', dataDaAnalise())}
+    </div>`
+    : `<div class="pdf-cabecalho__linha">
+      <div class="pdf-cabecalho__data">Data da análise: ${esc(dataDaAnalise())}</div>
+    </div>`
 
   return `<header class="pdf-cabecalho">
     <div class="pdf-cabecalho__topo">
@@ -372,10 +458,7 @@ export function cabecalhoPdf(dados: CabecalhoPdf): string {
         ${dados.subtitulo ? `<div class="pdf-cabecalho__sub">${esc(dados.subtitulo)}</div>` : ''}
       </div>
     </div>
-    <div class="pdf-cabecalho__linha">
-      <div class="pdf-cabecalho__pessoas">${pessoas}</div>
-      <div class="pdf-cabecalho__data">Data da análise: ${esc(dataDaAnalise())}</div>
-    </div>
+    ${apresentacaoImpressa}
   </header>`
 }
 

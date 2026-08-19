@@ -70,52 +70,84 @@ test('o cabeçalho escapa o que o corretor digitou e carimba a data da análise'
     apresentacao: APRESENTACAO,
   })
 
-  assert.match(html, /Cliente: <b>Família Souza &amp; Filhos<\/b>/)
-  assert.match(html, /Corretor: <b>Ana &lt;b&gt;Souza&lt;\/b&gt;<\/b>/)
+  // Cliente e corretor saem na faixa de apresentação, cada um com seu rótulo.
+  assert.match(html, /class="pdf-cabecalho__apresentacao"/)
+  assert.match(
+    html,
+    /Preparado para<\/div>\s*<div class="pdf-cabecalho__valor pdf-cabecalho__valor--cliente">Família Souza &amp; Filhos</,
+  )
+  assert.match(
+    html,
+    /Apresentado por<\/div>\s*<div class="pdf-cabecalho__valor pdf-cabecalho__valor--corretor">Ana &lt;b&gt;Souza&lt;\/b&gt;</,
+  )
   assert.doesNotMatch(html, /Ana <b>Souza<\/b>/, 'nome do corretor não pode virar marcação')
-  // O CRECI sai EXATAMENTE como cadastrado — sem máscara, sem normalização.
-  assert.match(html, /CRECI: <b>CRECI\/RS 12\.345-J<\/b>/)
-  assert.match(html, new RegExp(`Data da análise: ${HOJE.replace(/\//g, '\\/')}`))
+  // O CRECI sai EXATAMENTE como cadastrado — sem máscara, sem normalização —
+  // e logo abaixo do nome de quem assina.
+  assert.match(html, /<div class="pdf-cabecalho__creci">CRECI\/RS 12\.345-J<\/div>/)
+  assert.match(html, new RegExp(`Data da análise</div>\\s*<div[^>]*>${HOJE.replace(/\//g, '\\/')}<`))
   assert.match(html, /Residencial Alfa · Apto 101/)
 })
 
-test('parte não preenchida não aparece no papel', () => {
+test('célula sem dado não aparece no papel', () => {
   const html = cabecalhoPdf({
     titulo: 'Comparativo de unidades',
     apresentacao: { corretor: 'Bruno Lima', cliente: null, creci: '' },
   })
 
-  assert.match(html, /Corretor: <b>Bruno Lima<\/b>/)
-  assert.doesNotMatch(html, /Cliente:/)
-  assert.doesNotMatch(html, /CRECI:/)
+  assert.match(html, /Apresentado por/)
+  assert.match(html, /pdf-cabecalho__valor--corretor">Bruno Lima</)
+  assert.doesNotMatch(html, /Preparado para/, 'sem cliente a célula dele não existe')
+  assert.doesNotMatch(html, /pdf-cabecalho__creci/)
   // Sem imóvel e sem chapéu, as linhas nem existem — a data continua.
   assert.doesNotMatch(html, /pdf-cabecalho__imovel/)
   assert.match(html, /Data da análise/)
 })
 
-test('sem dados da apresentação o cabeçalho sai só com o documento e a data', () => {
+test('só o CRECI, sem corretor, vira a célula inteira', () => {
+  const html = cabecalhoPdf({
+    titulo: 'Comparativo de unidades',
+    apresentacao: { creci: 'CRECI/RS 12345-F' },
+  })
+
+  assert.match(html, /class="pdf-cabecalho__apresentacao"/)
+  assert.match(html, /pdf-cabecalho__rotulo">CRECI<\/div>/)
+  assert.match(html, /pdf-cabecalho__valor--corretor">CRECI\/RS 12345-F</)
+  assert.doesNotMatch(html, /Apresentado por/)
+})
+
+test('sem cliente, corretor nem CRECI a faixa some e sobra a linha da data', () => {
   const html = cabecalhoPdf({ titulo: 'Simulação de investimento' })
 
   assert.match(html, /Simulação de investimento/)
-  assert.match(html, /Data da análise/)
-  assert.doesNotMatch(html, /Cliente:|Corretor:|CRECI:/)
+  assert.doesNotMatch(html, /pdf-cabecalho__apresentacao/, 'faixa vazia não vai ao papel')
+  assert.match(html, /<div class="pdf-cabecalho__linha">/)
+  assert.match(html, new RegExp(`Data da análise: ${HOJE.replace(/\//g, '\\/')}`))
+  assert.doesNotMatch(html, /Preparado para|Apresentado por/)
   assert.doesNotMatch(html, /<img/, 'sem logo configurada nada de imagem entra na folha')
+
+  // Com só um espaço digitado o campo continua vazio.
+  const soEspaco = cabecalhoPdf({ titulo: 'X', apresentacao: { cliente: '  ', corretor: ' ' } })
+  assert.doesNotMatch(soEspaco, /pdf-cabecalho__apresentacao/)
 })
 
-test('a logo do cabeçalho entra só quando a conta escolheu o topo', () => {
+test('a logo da conta assina o cabeçalho em qualquer posição configurada', () => {
   const noTopo = cabecalhoPdf({
     titulo: 'Comparativo',
     apresentacao: { logo: { ...LOGO, posicao: 'topo', opacidade: 1 } },
   })
   assert.match(noTopo, /class="pdf-cabecalho__logo" src="http:\/\/localhost:3000\/uploads\/abc-123\.png"/)
-  assert.match(noTopo, /width:40%;opacity:1/)
+  assert.match(noTopo, /width:40%;opacity:1/, 'no topo valem o tamanho e a opacidade da configuração')
 
-  // Marca d'água e rodapé moram fora do cabeçalho.
-  assert.doesNotMatch(cabecalhoPdf({ titulo: 'X', apresentacao: { logo: LOGO } }), /<img/)
-  assert.doesNotMatch(
-    cabecalhoPdf({ titulo: 'X', apresentacao: { logo: { ...LOGO, posicao: 'rodape' } } }),
-    /<img/,
-  )
+  // Fora do topo a logo entra comedida e OPACA: a opacidade da configuração é
+  // a da marca d'água (0,06 aqui) e apagaria a marca no cabeçalho.
+  for (const posicao of ['marca-dagua', 'rodape'] as const) {
+    const html = cabecalhoPdf({ titulo: 'X', apresentacao: { logo: { ...LOGO, posicao } } })
+    assert.match(html, /class="pdf-cabecalho__logo pdf-cabecalho__logo--comedida"/)
+    assert.match(html, /src="http:\/\/localhost:3000\/uploads\/abc-123\.png"/)
+    assert.match(html, /style="opacity:1"/)
+    assert.doesNotMatch(html, /opacity:0\.06/)
+    assert.doesNotMatch(html, /width:40%/, 'o tamanho da marca d’água não manda no cabeçalho')
+  }
 })
 
 /* ------------------------------------------------------------------ */
@@ -159,8 +191,11 @@ test('a marca d’água entra fixa atrás do conteúdo, com o tamanho e a opacid
   assert.match(folha, /\.pdf-marca \{ position: fixed; inset: 0; z-index: -1;/)
   assert.match(folha, /print-color-adjust: exact/)
 
-  // O cabeçalho comum veio junto, com quem assina e para quem.
-  assert.match(folha, /Cliente: <b>Família Souza &amp; Filhos<\/b>/)
+  // O cabeçalho comum veio junto, com quem assina e para quem — e a mesma
+  // logo assina o topo, opaca, sem deixar de ser marca d'água no fundo.
+  assert.match(folha, /Preparado para/)
+  assert.match(folha, /pdf-cabecalho__valor--cliente">Família Souza &amp; Filhos</)
+  assert.match(folha, /class="pdf-cabecalho__logo pdf-cabecalho__logo--comedida"[^>]*style="opacity:1"/)
   assert.match(folha, /Data da análise/)
   // E o corpo continua vindo pronto da tela.
   assert.match(folha, /Valor do m² a partir de/)
@@ -175,7 +210,7 @@ test('sem logo configurada a folha não muda de forma', () => {
   assert.doesNotMatch(folha, /pdf-marca"/)
   assert.doesNotMatch(folha, /pdf-assinatura"/)
   assert.doesNotMatch(folha, /<img/)
-  assert.match(folha, /Cliente: <b>Joana<\/b>/)
+  assert.match(folha, /pdf-cabecalho__valor--cliente">Joana</)
 })
 
 test('no rodapé a marca vira uma assinatura no fim do documento', () => {
@@ -209,7 +244,7 @@ test('a folha da simulação usa o mesmo cabeçalho das demais', () => {
   assert.equal(abriu, true)
   const folha = html()
   assert.match(folha, /class="pdf-cabecalho"/)
-  assert.match(folha, /Cliente: <b>Joana &amp; Cia<\/b>/)
+  assert.match(folha, /pdf-cabecalho__valor--cliente">Joana &amp; Cia</)
   assert.match(folha, /Residencial Alfa — Tabela/)
   assert.match(folha, /<div class="pdf-marca"/)
   // O corpo da simulação continua igual: nada foi recalculado no papel.
